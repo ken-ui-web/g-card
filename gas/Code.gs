@@ -1,4 +1,4 @@
-// Gカード 段階5。学校アカウント所有のスプレッドシートに紐づけて使う。
+// Gカード。学校アカウント所有のスプレッドシートに紐づけて使う。
 // 秘密の値と名簿は、このソースではなくスクリプトプロパティとシートに保存する。
 const GC_TZ = 'Asia/Tokyo';
 const GC_HEADERS = {
@@ -22,13 +22,37 @@ const GC_HEADERS = {
 };
 
 const GC_CARDS = [
-  ['G001', 'パンチ', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G001-front.webp', '', true, true, 1, ''],
-  ['G002', 'キック', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G002-front.webp', '', true, true, 2, ''],
-  ['C008', '火縄銃', 'scissors', 'R', '50のダメージを与える', '[{"type":"damage","amount":50}]', 0, 'C008-front.webp', '', true, true, 3, ''],
-  ['P001', '手品', 'paper', 'N', '相手のカードを1枚選び、種類を【グー】に変える', '[{"type":"changeOpponentType","to":"rock"}]', 0, 'P001-front.webp', '', true, true, 4, ''],
-  ['P003', '救急箱', 'paper', 'N', 'ライフを30回復', '[{"type":"heal","amount":30}]', 0, 'P003-front.webp', '', true, true, 5, ''],
+  ['G001', 'パンチ', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G001-front.webp', 50, true, true, 1, ''],
+  ['G002', 'キック', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G002-front.webp', 50, true, true, 2, ''],
+  ['C008', '火縄銃', 'scissors', 'R', '50のダメージを与える', '[{"type":"damage","amount":50}]', 0, 'C008-front.webp', 150, true, true, 3, ''],
+  ['P001', '手品', 'paper', 'N', '相手のカードを1枚選び、種類を【グー】に変える', '[{"type":"changeOpponentType","to":"rock"}]', 0, 'P001-front.webp', 50, true, true, 4, ''],
+  ['P003', '救急箱', 'paper', 'N', 'ライフを30回復', '[{"type":"heal","amount":30}]', 0, 'P003-front.webp', 50, true, true, 5, ''],
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
+const GC_ECONOMY_SETTINGS = [
+  ['economyEnabled', '0', '生徒にGポイント機能を公開（0=停止、1=公開）'],
+  ['muscleCostBase', '20', '筋トレの基本価格'], ['muscleCostStep', '2', '筋トレ値ごとの価格上昇'],
+  ['runCostBase', '60', '走り込みの基本価格'], ['runCostStep', '6', '走り込み回数ごとの価格上昇'],
+  ['lifePerRun', '5', '走り込み1回の最大ライフ増加'], ['maxLifeCap', '', '最大ライフの上限。空欄なら無制限'],
+  ['cpuRewardLv1', '5', 'CPU Lv1勝利報酬'], ['cpuRewardLv2', '10', 'CPU Lv2勝利報酬'],
+  ['cpuRewardLv3', '20', 'CPU Lv3勝利報酬'], ['cpuRewardDailyCap', '3', 'CPU対戦報酬の1日上限'],
+  ['firstWinBonus', '20', '本日の初勝利報酬'], ['packDailyLimit', '10', 'パックの1日購入上限'],
+  ['sellN', '10', 'N売却価格'], ['sellR', '30', 'R売却価格'], ['sellSR', '100', 'SR売却価格'], ['sellUR', '300', 'UR売却価格'],
+];
+const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true];
+const GC_STARTER_DECKS = [
+  ['sample', 'サンプルカードセット', '["G001","G002","C008","P001","P003"]', 100, 0],
+  ['cpu-1', 'CPU Lv1の候補', '["G001","G002","C008","P001","P003"]', 100, 0],
+  ['cpu-2', 'CPU Lv2の候補', '["G001","G002","C008","P001","P003"]', 110, 5],
+  ['cpu-3', 'CPU Lv3の候補', '["G001","G002","C008","P001","P003"]', 130, 10],
+];
+const GC_STARTER_MISSIONS = [
+  ['daily-test', 'daily', 'submit_test', 1, 30, 'テストを1回受ける', true, 1],
+  ['daily-win', 'daily', 'win_battle', 1, 20, 'CPU対戦で1回勝つ', true, 2],
+  ['daily-train', 'daily', 'train', 1, 10, 'トレーニングを1回する', true, 3],
+  ['weekly-test', 'weekly', 'submit_test', 3, 100, '今週テストを3回受ける', true, 4],
+  ['weekly-reflection', 'weekly', 'submit_reflection', 2, 100, '今週振り返りを2回提出する', true, 5],
+];
 
 function setup() {
   const book = SpreadsheetApp.getActiveSpreadsheet();
@@ -49,6 +73,14 @@ function setup() {
   });
   const cards = gcSheet_('Cards');
   if (cards.getLastRow() === 1) cards.getRange(2, 1, GC_CARDS.length, GC_HEADERS.Cards.length).setValues(GC_CARDS);
+  // 既存の学校用シートでは、先生が変更した価格を上書きしない。
+  if (cards.getLastRow() > 1) {
+    const values = cards.getRange(2, 1, cards.getLastRow() - 1, GC_HEADERS.Cards.length).getValues();
+    values.forEach(function (row, index) {
+      const seed = GC_CARDS.find(function (card) { return card[0] === row[0]; });
+      if (seed && row[8] === '') cards.getRange(index + 2, 9).setValue(seed[8]);
+    });
+  }
   const settings = gcSheet_('Settings');
   if (settings.getLastRow() === 1) {
     settings.getRange(2, 1, 7, 3).setValues([
@@ -61,7 +93,7 @@ function setup() {
       ['initialLife', '100', '初期ライフ'],
     ]);
   }
-  // 公開用IDは一時的にSettings!A9:B9に置き、スクリプトプロパティへ移してから消す。
+  // 以前の設定手順で使った一時行を先に処理する。学校の値を公開ソースに残さない。
   const pending = settings.getRange(9, 1, 1, 2).getValues()[0];
   if (pending[0] === 'googleClientIdSetup') {
     const clientId = String(pending[1] || '').trim();
@@ -69,6 +101,15 @@ function setup() {
     properties.setProperty('GOOGLE_CLIENT_ID', clientId);
     settings.getRange(9, 1, 1, 3).clearContent();
   }
+  const existingSettings = settings.getDataRange().getValues().map(function (row) { return String(row[0]); });
+  const missingSettings = GC_ECONOMY_SETTINGS.filter(function (row) { return existingSettings.indexOf(row[0]) < 0; });
+  if (missingSettings.length) settings.getRange(settings.getLastRow() + 1, 1, missingSettings.length, 3).setValues(missingSettings);
+  const packs = gcSheet_('Packs');
+  if (packs.getLastRow() === 1) packs.appendRow(GC_STARTER_PACK);
+  const decks = gcSheet_('Decks');
+  if (decks.getLastRow() === 1) decks.getRange(2, 1, GC_STARTER_DECKS.length, GC_HEADERS.Decks.length).setValues(GC_STARTER_DECKS);
+  const missions = gcSheet_('Missions');
+  if (missions.getLastRow() === 1) missions.getRange(2, 1, GC_STARTER_MISSIONS.length, GC_HEADERS.Missions.length).setValues(GC_STARTER_MISSIONS);
   if (!properties.getProperty('SESSION_SECRET')) {
     properties.setProperty('SESSION_SECRET', [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('-'));
   }
@@ -106,6 +147,19 @@ function gcDispatch_(request) {
     case 'bootstrap': return gcBootstrap_(request.session);
     case 'setNickname': return gcSetNickname_(request.session, request.payload || {});
     case 'adminImportRoster': return gcImportRoster_(request.session, request.payload || {});
+    case 'buyCard': return gcBuyCard_(request.session, request.payload || {}, request.requestId);
+    case 'sellCard': return gcSellCard_(request.session, request.payload || {}, request.requestId);
+    case 'openPack': return gcOpenPack_(request.session, request.payload || {}, request.requestId);
+    case 'train': return gcTrain_(request.session, request.payload || {}, request.requestId);
+    case 'saveDeck': return gcSaveDeck_(request.session, request.payload || {});
+    case 'reportBattle': return gcReportBattle_(request.session, request.payload || {});
+    case 'adminSaveSettings': return gcAdminSaveSettings_(request.session, request.payload || {});
+    case 'adminSaveCard': return gcAdminSaveCard_(request.session, request.payload || {});
+    case 'adminSavePack': return gcAdminSavePack_(request.session, request.payload || {});
+    case 'adminSaveMission': return gcAdminSaveMission_(request.session, request.payload || {});
+    case 'adminGetEconomy': return gcAdminGetEconomy_(request.session);
+    case 'adminSaveDeck': return gcAdminSaveDeck_(request.session, request.payload || {});
+    case 'getBattleConfig': return gcBattleConfig_(request.session);
     default: gcError_('NOT_IMPLEMENTED', 'この機能はまだ利用できません');
   }
 }
@@ -286,13 +340,52 @@ function gcDayNumber_(dateText) { return Date.parse(dateText + 'T00:00:00Z') / 8
 
 function gcCardMaster_() {
   return gcSheet_('Cards').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) {
-    return { cardId: row[0], name: row[1], type: row[2], rarity: row[3], text: row[4], effects: JSON.parse(row[5] || '[]'), trainingMultiplier: Number(row[6] || 0), image: row[7] };
+    return { cardId: row[0], name: row[1], type: row[2], rarity: row[3], text: row[4], effects: JSON.parse(row[5] || '[]'), trainingMultiplier: Number(row[6] || 0), image: row[7], shopPrice: row[8] === '' ? null : Number(row[8]), inPack: row[9] === true, active: row[10] === true };
   });
 }
 
 function gcOwned_(email) {
   return gcSheet_('OwnedCards').getDataRange().getValues().slice(1).filter(function (row) { return String(row[1]).toLowerCase() === email && !row[6]; }).map(function (row) {
-    return { ownedId: row[0], cardId: row[2], trainLevel: Number(row[3] || 0) };
+    return { ownedId: row[0], cardId: row[2], trainLevel: Number(row[3] || 0), source: row[4] };
+  });
+}
+
+function gcPackMaster_() {
+  return gcSheet_('Packs').getDataRange().getValues().slice(1).filter(function (row) { return row[0] && row[9] === true; }).map(function (row) {
+    return { packId: String(row[0]), name: String(row[1]), price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), startAt: row[7] ? String(row[7]) : '', endAt: row[8] ? String(row[8]) : '' };
+  });
+}
+
+function gcCounter_(email, today) {
+  const sheet = gcSheet_('DailyCounters');
+  const rows = sheet.getDataRange().getValues();
+  const index = rows.findIndex(function (row, i) { return i > 0 && String(row[0]).toLowerCase() === email && String(row[1]) === today; });
+  if (index >= 0) return { sheet: sheet, rowNumber: index + 1, values: rows[index] };
+  const values = [email, today, 0, 0, false, 0];
+  sheet.appendRow(values);
+  return { sheet: sheet, rowNumber: sheet.getLastRow(), values: values };
+}
+
+function gcMissionPeriod_(period, today) {
+  if (period === 'daily') return today;
+  const date = new Date(today + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function gcMissionState_(email, today) {
+  const progress = gcSheet_('MissionProgress').getDataRange().getValues();
+  return gcSheet_('Missions').getDataRange().getValues().slice(1).filter(function (row) { return row[0] && row[6] === true; }).map(function (row) {
+    const periodKey = gcMissionPeriod_(String(row[1]), today);
+    const found = progress.find(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === email && entry[1] === row[0] && String(entry[2]) === periodKey; });
+    return { missionId: String(row[0]), period: String(row[1]), condition: String(row[2]), targetCount: Number(row[3]), reward: Number(row[4]), label: String(row[5]), progress: found ? Number(found[3] || 0) : 0, completed: Boolean(found && found[4]) };
+  });
+}
+
+function gcBattleConfig_(token) {
+  gcSession_(token, false);
+  return gcSheet_('Decks').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) {
+    return { deckId: String(row[0]), name: String(row[1]), cardIds: JSON.parse(row[2] || '[]'), maxLife: Number(row[3] || 100), rockTrainLevel: Number(row[4] || 0) };
   });
 }
 
@@ -316,18 +409,25 @@ function gcBootstrap_(token) {
       user.lastLoginDate = today;
       user.updatedAt = new Date().toISOString();
       gcWriteUser_(record, user);
+      gcAwardMissions_(identity, user, { login: 1 });
+      gcWriteUser_(record, user);
       bonus.awarded = !prior;
       bonus.amount = prior ? 0 : award;
       bonus.streak = streak;
     }
     return {
-      profile: { nickname: String(user.nickname || ''), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: Number(identity.settings.initialLife) || 100 },
+      profile: { nickname: String(user.nickname || ''), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: !user.nickname,
       loginBonus: bonus,
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
-      lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : GC_INITIAL_CARDS,
-      missions: [], unreadTests: 0, pendingReflections: 0,
+      lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
+      packs: gcPackMaster_(),
+      battleConfig: gcBattleConfig_(token),
+      missions: gcMissionState_(identity.email, today),
+      daily: (function () { const counter = gcCounter_(identity.email, today).values; return { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) }; })(),
+      economy: { enabled: identity.admin || identity.settings.economyEnabled === '1', muscleCostBase: gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000), muscleCostStep: gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000), runCostBase: gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000), runCostStep: gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000), lifePerRun: gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), cpuRewardDailyCap: gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100), packDailyLimit: gcNumber_(identity.settings, 'packDailyLimit', 10, 0, 1000), sellPrices: { N: gcNumber_(identity.settings, 'sellN', 10, 0, 100000), R: gcNumber_(identity.settings, 'sellR', 30, 0, 100000), SR: gcNumber_(identity.settings, 'sellSR', 100, 0, 100000), UR: gcNumber_(identity.settings, 'sellUR', 300, 0, 100000) } },
+      unreadTests: 0, pendingReflections: 0,
     };
   });
 }
@@ -368,5 +468,398 @@ function gcImportRoster_(token, payload) {
     });
     if (additions.length) sheet.getRange(sheet.getLastRow() + 1, 1, additions.length, GC_HEADERS.Users.length).setValues(additions);
     return { added: additions.length, updated: updated, total: entries.length };
+  });
+}
+
+function gcRequestId_(requestId) {
+  if (typeof requestId !== 'string' || !/^[a-f0-9-]{20,64}$/i.test(requestId)) gcError_('BAD_REQUEST', '操作をやり直してください');
+  return requestId;
+}
+
+function gcNumber_(settings, key, fallback, min, max) {
+  const value = settings[key] === '' || settings[key] === undefined ? fallback : Number(settings[key]);
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+}
+
+function gcEconomyAccess_(identity) {
+  if (!identity.admin && identity.settings.economyEnabled !== '1') gcError_('NOT_READY', 'この機能は準備中です');
+}
+
+function gcState_(identity, extra) {
+  const user = gcUserObject_(gcFindUser_(identity.email));
+  const counter = gcCounter_(identity.email, gcToday_()).values;
+  return Object.assign({
+    gPoint: Number(user.gPoint || 0), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0),
+    maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
+    ownedCards: gcOwned_(identity.email), lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
+    missions: gcMissionState_(identity.email, gcToday_()),
+    daily: { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) },
+  }, extra || {});
+}
+
+function gcCachedResult_(email, action, requestId) {
+  const key = 'gc:' + action + ':' + email + ':' + requestId;
+  try {
+    const value = CacheService.getScriptCache().get(Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, key)).slice(0, 160));
+    return value ? JSON.parse(value) : null;
+  } catch (_) { return null; }
+}
+
+function gcRememberResult_(email, action, requestId, result) {
+  const key = 'gc:' + action + ':' + email + ':' + requestId;
+  try { CacheService.getScriptCache().put(Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, key)).slice(0, 160), JSON.stringify(result), 21600); }
+  catch (_) { /* PointLogとBattleLogでも重複を防ぐ。 */ }
+  return result;
+}
+
+function gcAwardMissions_(identity, user, conditions) {
+  const today = gcToday_();
+  const sheet = gcSheet_('MissionProgress');
+  const rows = sheet.getDataRange().getValues();
+  const completed = [];
+  gcSheet_('Missions').getDataRange().getValues().slice(1).forEach(function (mission) {
+    if (!mission[0] || mission[6] !== true || !conditions[mission[2]]) return;
+    const periodKey = gcMissionPeriod_(String(mission[1]), today);
+    let rowNumber = rows.findIndex(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === identity.email && entry[1] === mission[0] && String(entry[2]) === periodKey; }) + 1;
+    const current = rowNumber ? Number(rows[rowNumber - 1][3] || 0) : 0;
+    const done = rowNumber && rows[rowNumber - 1][4];
+    if (done) return;
+    const next = Math.min(Number(mission[3]), current + Number(conditions[mission[2]]));
+    const nowComplete = next >= Number(mission[3]);
+    if (rowNumber) sheet.getRange(rowNumber, 4, 1, 2).setValues([[next, nowComplete ? new Date().toISOString() : '']]);
+    else {
+      sheet.appendRow([identity.email, mission[0], periodKey, next, nowComplete ? new Date().toISOString() : '']);
+      rowNumber = sheet.getLastRow();
+      rows.push([identity.email, mission[0], periodKey, next, nowComplete ? new Date().toISOString() : '']);
+    }
+    if (nowComplete) {
+      const reward = Number(mission[4] || 0);
+      user.gPoint = Number(user.gPoint || 0) + reward;
+      user.totalEarned = Number(user.totalEarned || 0) + reward;
+      gcPointLog_(identity.email, reward, 'mission', String(mission[0]) + ':' + periodKey, user.gPoint);
+      completed.push({ label: String(mission[5]), reward: reward });
+    }
+  });
+  return completed;
+}
+
+function gcBuyCard_(token, payload, requestId) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  gcRequestId_(requestId);
+  return gcWithLock_(function () {
+    if (gcPointLogEntry_(identity.email, 'buy_card', requestId)) return gcCachedResult_(identity.email, 'buy_card', requestId) || gcState_(identity);
+    const card = gcCardMaster_().find(function (item) { return item.cardId === payload.cardId; });
+    if (!card || !card.active || card.shopPrice === null || card.shopPrice < 0) gcError_('NOT_FOR_SALE', 'このカードは購入できません');
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    if (Number(user.gPoint || 0) < card.shopPrice) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りません');
+    const ownedId = Utilities.getUuid();
+    gcSheet_('OwnedCards').appendRow([ownedId, identity.email, card.cardId, 0, 'shop', new Date().toISOString(), '']);
+    user.gPoint = Number(user.gPoint || 0) - card.shopPrice;
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    gcPointLog_(identity.email, -card.shopPrice, 'buy_card', requestId, user.gPoint);
+    return gcRememberResult_(identity.email, 'buy_card', requestId, gcState_(identity, { acquired: [{ ownedId: ownedId, cardId: card.cardId, trainLevel: 0 }] }));
+  });
+}
+
+function gcSellCard_(token, payload, requestId) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  gcRequestId_(requestId);
+  return gcWithLock_(function () {
+    if (gcPointLogEntry_(identity.email, 'sell_card', requestId)) return gcCachedResult_(identity.email, 'sell_card', requestId) || gcState_(identity);
+    const owned = gcOwned_(identity.email);
+    if (owned.length <= 4) gcError_('MIN_CARDS', 'カードは4枚以上残してください');
+    const target = owned.find(function (item) { return item.ownedId === payload.ownedId; });
+    if (!target) gcError_('NOT_OWNED', 'このカードは所持していません');
+    const card = gcCardMaster_().find(function (item) { return item.cardId === target.cardId; });
+    const price = gcNumber_(identity.settings, 'sell' + card.rarity, 10, 0, 100000);
+    const sheet = gcSheet_('OwnedCards');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === target.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
+    if (index < 1) gcError_('NOT_OWNED', 'このカードは所持していません');
+    sheet.getRange(index + 1, 7).setValue(new Date().toISOString());
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    user.gPoint = Number(user.gPoint || 0) + price;
+    user.totalEarned = Number(user.totalEarned || 0) + price;
+    const deck = user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [];
+    if (deck.indexOf(target.ownedId) >= 0) user.lastDeckJson = '';
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    gcPointLog_(identity.email, price, 'sell_card', requestId, user.gPoint);
+    return gcRememberResult_(identity.email, 'sell_card', requestId, gcState_(identity));
+  });
+}
+
+function gcTrain_(token, payload, requestId) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  gcRequestId_(requestId);
+  if (!Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 20) gcError_('BAD_REQUEST', 'トレーニングを選んでください');
+  return gcWithLock_(function () {
+    if (gcPointLogEntry_(identity.email, 'train', requestId)) return gcCachedResult_(identity.email, 'train', requestId) || gcState_(identity);
+    const sheet = gcSheet_('OwnedCards');
+    const rows = sheet.getDataRange().getValues();
+    const cards = gcCardMaster_();
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    if (payload.items.reduce(function (sum, item) { return sum + Number(item.count || 0); }, 0) > 100) gcError_('BAD_REQUEST', '一度に100回までにしてください');
+    payload.items.forEach(function (item) {
+      if (!Number.isInteger(Number(item.count)) || Number(item.count) < 1 || Number(item.count) > 100) gcError_('BAD_REQUEST', '回数を確認してください');
+      if (item.kind !== 'muscle' && item.kind !== 'run') gcError_('BAD_REQUEST', 'トレーニングを選んでください');
+      if (item.kind === 'muscle' && !rows.some(function (row, i) { return i > 0 && row[0] === item.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6] && cards.some(function (card) { return card.cardId === row[2] && card.type === 'rock'; }); })) gcError_('BAD_REQUEST', '筋トレできるカードを選んでください');
+    });
+    let spent = 0;
+    let trained = 0;
+    payload.items.forEach(function (item) {
+      const count = Number(item.count);
+      if (!Number.isInteger(count) || count < 1 || count > 100) gcError_('BAD_REQUEST', '回数を確認してください');
+      if (item.kind === 'muscle') {
+        const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === item.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
+        if (index < 1 || !cards.some(function (card) { return card.cardId === rows[index][2] && card.type === 'rock'; })) gcError_('BAD_REQUEST', '筋トレできるカードを選んでください');
+        for (let n = 0; n < count; n++) {
+          const price = gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000) + gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000) * Number(rows[index][3] || 0);
+          if (Number(user.gPoint || 0) < price) break;
+          user.gPoint = Number(user.gPoint || 0) - price;
+          rows[index][3] = Number(rows[index][3] || 0) + 1;
+          spent += price; trained++;
+        }
+        sheet.getRange(index + 1, 4).setValue(rows[index][3]);
+      } else if (item.kind === 'run') {
+        for (let n = 0; n < count; n++) {
+          const price = gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000) + gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000) * Number(user.runCount || 0);
+          const nextLife = gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + (Number(user.runCount || 0) + 1) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100);
+          if (Number(user.gPoint || 0) < price || (identity.settings.maxLifeCap && nextLife > Number(identity.settings.maxLifeCap))) break;
+          user.gPoint = Number(user.gPoint || 0) - price;
+          user.runCount = Number(user.runCount || 0) + 1;
+          spent += price; trained++;
+        }
+      } else gcError_('BAD_REQUEST', 'トレーニングを選んでください');
+    });
+    if (!trained) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りないか、ライフの上限に達しています');
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    gcPointLog_(identity.email, -spent, 'train', requestId, user.gPoint);
+    const completedMissions = gcAwardMissions_(identity, user, { train: trained });
+    gcWriteUser_(record, user);
+    return gcRememberResult_(identity.email, 'train', requestId, gcState_(identity, { trained: trained, completedMissions: completedMissions }));
+  });
+}
+
+function gcSaveDeck_(token, payload) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  if (!Array.isArray(payload.ownedIds) || payload.ownedIds.length !== 4 || new Set(payload.ownedIds).size !== 4) gcError_('BAD_DECK', '異なる所持カードを4枚選んでください');
+  return gcWithLock_(function () {
+    const owned = gcOwned_(identity.email);
+    if (!payload.ownedIds.every(function (id) { return owned.some(function (card) { return card.ownedId === id; }); })) gcError_('BAD_DECK', '所持していないカードは使えません');
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    user.lastDeckJson = JSON.stringify(payload.ownedIds);
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    return gcState_(identity);
+  });
+}
+
+function gcOpenPack_(token, payload, requestId) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  gcRequestId_(requestId);
+  return gcWithLock_(function () {
+    if (gcPointLogEntry_(identity.email, 'open_pack', requestId)) {
+      const cached = gcCachedResult_(identity.email, 'open_pack', requestId);
+      if (cached) return cached;
+      const acquired = gcOwned_(identity.email).filter(function (card) { return card.source === 'pack:' + requestId; });
+      return gcState_(identity, { acquired: acquired });
+    }
+    const pack = gcPackMaster_().find(function (item) { return item.packId === payload.packId; });
+    const today = gcToday_();
+    if (!pack || pack.startAt && pack.startAt.slice(0, 10) > today || pack && pack.endAt && pack.endAt.slice(0, 10) < today) gcError_('NOT_FOR_SALE', 'このパックは購入できません');
+    const counter = gcCounter_(identity.email, today);
+    if (Number(counter.values[5] || 0) >= gcNumber_(identity.settings, 'packDailyLimit', 10, 0, 1000)) gcError_('DAILY_LIMIT', '今日のパック購入上限に達しました');
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    if (Number(user.gPoint || 0) < pack.price) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りません');
+    const master = gcCardMaster_();
+    const pool = master.filter(function (card) { return card.active && card.inPack && pack.cardPool.indexOf(card.cardId) >= 0; });
+    const rates = Object.keys(pack.rarityRates).map(function (rarity) { return { rarity: rarity, rate: Number(pack.rarityRates[rarity]), cards: pool.filter(function (card) { return card.rarity === rarity; }) }; });
+    if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 ||
+        !rates.length || rates.some(function (item) { return !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0; }) ||
+        Math.abs(rates.reduce(function (sum, item) { return sum + item.rate; }, 0) - 100) > .001 ||
+        pack.pityCount > 0 && !pool.some(function (card) { return card.rarity === 'SR' || card.rarity === 'UR'; })) gcError_('BAD_PACK', 'パックの設定を先生に確認してください');
+    const drawn = [];
+    let pity = Number(user.pityCounter || 0);
+    for (let index = 0; index < pack.cardsPerPack; index++) {
+      const guaranteed = index === 0 && pack.pityCount > 0 && pity >= pack.pityCount;
+      const choices = guaranteed ? rates.filter(function (item) { return item.rarity === 'SR' || item.rarity === 'UR'; }) : rates;
+      const total = choices.reduce(function (sum, item) { return sum + item.rate; }, 0);
+      let roll = Math.random() * total;
+      let picked = choices[choices.length - 1];
+      for (let n = 0; n < choices.length; n++) { roll -= choices[n].rate; if (roll < 0) { picked = choices[n]; break; } }
+      drawn.push(picked.cards[Math.floor(Math.random() * picked.cards.length)]);
+    }
+    if (drawn.some(function (card) { return card.rarity === 'SR' || card.rarity === 'UR'; })) pity = 0;
+    else pity++;
+    const acquired = drawn.map(function (card) { return { ownedId: Utilities.getUuid(), cardId: card.cardId, trainLevel: 0, rarity: card.rarity }; });
+    const now = new Date().toISOString();
+    const ownedSheet = gcSheet_('OwnedCards');
+    ownedSheet.getRange(ownedSheet.getLastRow() + 1, 1, acquired.length, GC_HEADERS.OwnedCards.length).setValues(acquired.map(function (card) { return [card.ownedId, identity.email, card.cardId, 0, 'pack:' + requestId, now, '']; }));
+    user.gPoint = Number(user.gPoint || 0) - pack.price;
+    user.pityCounter = pity;
+    user.updatedAt = now;
+    gcWriteUser_(record, user);
+    counter.values[5] = Number(counter.values[5] || 0) + 1;
+    counter.sheet.getRange(counter.rowNumber, 1, 1, GC_HEADERS.DailyCounters.length).setValues([counter.values]);
+    gcPointLog_(identity.email, -pack.price, 'open_pack', requestId, user.gPoint);
+    const completedMissions = gcAwardMissions_(identity, user, { open_pack: 1 });
+    gcWriteUser_(record, user);
+    return gcRememberResult_(identity.email, 'open_pack', requestId, gcState_(identity, { acquired: acquired, completedMissions: completedMissions, pityRemaining: pack.pityCount ? Math.max(0, pack.pityCount - pity) : null }));
+  });
+}
+
+function gcReportBattle_(token, payload) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity);
+  if (typeof payload.battleId !== 'string' || !/^[a-f0-9-]{20,64}$/i.test(payload.battleId) || payload.mode !== 'cpu' ||
+      ![1, 2, 3].includes(Number(payload.cpuLevel)) || ['win', 'draw', 'loss'].indexOf(payload.result) < 0 ||
+      ['sample', 'owned'].indexOf(payload.deckMode) < 0) gcError_('BAD_REQUEST', '対戦結果を確認できません');
+  return gcWithLock_(function () {
+    const log = gcSheet_('BattleLog');
+    const old = log.getDataRange().getValues().slice(1).find(function (row) { return row[0] === payload.battleId && String(row[1]).toLowerCase() === identity.email; });
+    if (old) return gcCachedResult_(identity.email, 'battle', payload.battleId) || gcState_(identity, { awarded: Number(old[7] || 0), duplicate: true });
+    const today = gcToday_();
+    const counter = gcCounter_(identity.email, today);
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    const remaining = gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100) - Number(counter.values[2] || 0);
+    let award = 0;
+    if (remaining > 0 && payload.result === 'win') {
+      award += gcNumber_(identity.settings, 'cpuRewardLv' + Number(payload.cpuLevel), [0, 5, 10, 20][Number(payload.cpuLevel)], 0, 10000);
+      counter.values[2] = Number(counter.values[2] || 0) + 1;
+    }
+    if (payload.result === 'win' && counter.values[4] !== true) {
+      award += gcNumber_(identity.settings, 'firstWinBonus', 20, 0, 10000);
+      counter.values[4] = true;
+    }
+    user.gPoint = Number(user.gPoint || 0) + award;
+    user.totalEarned = Number(user.totalEarned || 0) + award;
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    counter.sheet.getRange(counter.rowNumber, 1, 1, GC_HEADERS.DailyCounters.length).setValues([counter.values]);
+    if (award) gcPointLog_(identity.email, award, 'battle', payload.battleId, user.gPoint);
+    const completedMissions = gcAwardMissions_(identity, user, { play_cpu: 1, win_battle: payload.result === 'win' ? 1 : 0 });
+    gcWriteUser_(record, user);
+    log.appendRow([payload.battleId, identity.email, 'cpu', payload.deckMode, Number(payload.cpuLevel), payload.result, '', award, new Date().toISOString()]);
+    return gcRememberResult_(identity.email, 'battle', payload.battleId, gcState_(identity, { awarded: award, completedMissions: completedMissions }));
+  });
+}
+
+function gcAdminGetEconomy_(token) {
+  gcSession_(token, true);
+  const settings = gcSettings_();
+  return {
+    settings: GC_ECONOMY_SETTINGS.map(function (row) { return { key: row[0], value: settings[row[0]] === undefined ? row[1] : settings[row[0]], description: row[2] }; }),
+    cards: gcCardMaster_(),
+    packs: gcSheet_('Packs').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true }; }),
+    missions: gcSheet_('Missions').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) { return { missionId: row[0], period: row[1], condition: row[2], targetCount: Number(row[3]), reward: Number(row[4]), label: row[5], active: row[6] === true }; }),
+    decks: gcBattleConfig_(token),
+  };
+}
+
+function gcAdminSaveDeck_(token, payload) {
+  gcSession_(token, true);
+  if (['sample', 'cpu-1', 'cpu-2', 'cpu-3'].indexOf(payload.deckId) < 0 || !Array.isArray(payload.cardIds) || payload.cardIds.length < 4 || payload.cardIds.length > 20 || new Set(payload.cardIds).size !== payload.cardIds.length ||
+      !Number.isInteger(Number(payload.maxLife)) || Number(payload.maxLife) < 1 || Number(payload.maxLife) > 9999 ||
+      !Number.isInteger(Number(payload.rockTrainLevel)) || Number(payload.rockTrainLevel) < 0 || Number(payload.rockTrainLevel) > 99) gcError_('BAD_DECK', 'デッキの設定を確認してください');
+  const master = gcCardMaster_();
+  if (!payload.cardIds.every(function (id) { return master.some(function (card) { return card.cardId === id && card.active; }); })) gcError_('BAD_DECK', '有効なカードから選んでください');
+  return gcWithLock_(function () {
+    const sheet = gcSheet_('Decks');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === payload.deckId; });
+    if (index < 1) gcError_('NOT_SETUP', 'デッキを初期化してください');
+    sheet.getRange(index + 1, 3, 1, 3).setValues([[JSON.stringify(payload.cardIds), Number(payload.maxLife), Number(payload.rockTrainLevel)]]);
+    return { deckId: payload.deckId };
+  });
+}
+
+function gcAdminSaveSettings_(token, payload) {
+  gcSession_(token, true);
+  const definition = GC_ECONOMY_SETTINGS.find(function (row) { return row[0] === payload.key; });
+  if (!definition) gcError_('BAD_REQUEST', '変更できない設定です');
+  const value = String(payload.value === undefined ? '' : payload.value).trim();
+  if (value !== '' && (!/^\d+$/.test(value) || Number(value) > 100000)) gcError_('BAD_REQUEST', '0以上の整数を入力してください');
+  if (value === '' && payload.key !== 'maxLifeCap') gcError_('BAD_REQUEST', '数値を入力してください');
+  if (payload.key === 'economyEnabled' && value !== '0' && value !== '1') gcError_('BAD_REQUEST', '公開設定は0か1にしてください');
+  return gcWithLock_(function () {
+    const sheet = gcSheet_('Settings');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === payload.key; });
+    if (index < 1) gcError_('NOT_SETUP', '設定を初期化してください');
+    sheet.getRange(index + 1, 2).setValue(value);
+    return { key: payload.key, value: value };
+  });
+}
+
+function gcAdminSaveCard_(token, payload) {
+  gcSession_(token, true);
+  const price = payload.shopPrice === '' || payload.shopPrice === null ? '' : Number(payload.shopPrice);
+  if (price !== '' && (!Number.isInteger(price) || price < 0 || price > 100000) || typeof payload.active !== 'boolean' || typeof payload.inPack !== 'boolean') gcError_('BAD_REQUEST', 'カードの価格と設定を確認してください');
+  return gcWithLock_(function () {
+    const sheet = gcSheet_('Cards');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === payload.cardId; });
+    if (index < 1) gcError_('BAD_REQUEST', 'カードが見つかりません');
+    sheet.getRange(index + 1, 9, 1, 3).setValues([[price, payload.inPack, payload.active]]);
+    return { cardId: payload.cardId, shopPrice: price, inPack: payload.inPack, active: payload.active };
+  });
+}
+
+function gcAdminSavePack_(token, payload) {
+  gcSession_(token, true);
+  const rates = payload.rarityRates;
+  const pool = payload.cardPool;
+  if (typeof payload.packId !== 'string' || !/^[a-z0-9-]{1,32}$/.test(payload.packId) || typeof payload.name !== 'string' || !payload.name.trim() || payload.name.length > 40 ||
+      !Number.isInteger(Number(payload.price)) || Number(payload.price) < 0 || Number(payload.price) > 100000 ||
+      !Number.isInteger(Number(payload.cardsPerPack)) || Number(payload.cardsPerPack) < 1 || Number(payload.cardsPerPack) > 10 ||
+      !Number.isInteger(Number(payload.pityCount)) || Number(payload.pityCount) < 0 || Number(payload.pityCount) > 100 ||
+      typeof payload.active !== 'boolean' || !Array.isArray(pool) || !pool.length || !rates || typeof rates !== 'object') gcError_('BAD_REQUEST', 'パックの設定を確認してください');
+  const master = gcCardMaster_();
+  const keys = Object.keys(rates);
+  if (!keys.length || keys.some(function (rarity) { return ['N', 'R', 'SR', 'UR'].indexOf(rarity) < 0 || !Number.isFinite(Number(rates[rarity])) || Number(rates[rarity]) <= 0 || !pool.some(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === rarity && card.active && card.inPack; }); }); }) ||
+      Math.abs(keys.reduce(function (sum, key) { return sum + Number(rates[key]); }, 0) - 100) > .001 ||
+      pool.some(function (id) { return !master.some(function (card) { return card.cardId === id && card.active && card.inPack; }); }) ||
+      Number(payload.pityCount) > 0 && !keys.some(function (key) { return key === 'SR' || key === 'UR'; })) gcError_('BAD_PACK', '排出率と収録カードのレア度を確認してください');
+  return gcWithLock_(function () {
+    const sheet = gcSheet_('Packs');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === payload.packId; });
+    const existing = index >= 1 ? rows[index] : [];
+    const values = [payload.packId, payload.name.trim(), Number(payload.price), Number(payload.cardsPerPack), JSON.stringify(rates), JSON.stringify(pool), Number(payload.pityCount), existing[7] || '', existing[8] || '', payload.active];
+    if (index >= 1) sheet.getRange(index + 1, 1, 1, GC_HEADERS.Packs.length).setValues([values]);
+    else sheet.appendRow(values);
+    return { packId: payload.packId };
+  });
+}
+
+function gcAdminSaveMission_(token, payload) {
+  gcSession_(token, true);
+  const conditions = ['submit_test', 'perfect_test', 'submit_reflection', 'win_battle', 'play_online', 'play_cpu', 'train', 'open_pack', 'login'];
+  if (typeof payload.missionId !== 'string' || !/^[a-z0-9-]{1,40}$/.test(payload.missionId) || ['daily', 'weekly'].indexOf(payload.period) < 0 ||
+      conditions.indexOf(payload.condition) < 0 || !Number.isInteger(Number(payload.targetCount)) || Number(payload.targetCount) < 1 || Number(payload.targetCount) > 1000 ||
+      !Number.isInteger(Number(payload.reward)) || Number(payload.reward) < 0 || Number(payload.reward) > 100000 ||
+      typeof payload.label !== 'string' || !payload.label.trim() || payload.label.length > 80 || typeof payload.active !== 'boolean') gcError_('BAD_REQUEST', 'ミッションの設定を確認してください');
+  return gcWithLock_(function () {
+    const sheet = gcSheet_('Missions');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === payload.missionId; });
+    const values = [payload.missionId, payload.period, payload.condition, Number(payload.targetCount), Number(payload.reward), payload.label.trim(), payload.active, index >= 1 ? rows[index][7] : sheet.getLastRow()];
+    if (index >= 1) sheet.getRange(index + 1, 1, 1, GC_HEADERS.Missions.length).setValues([values]);
+    else sheet.appendRow(values);
+    return { missionId: payload.missionId };
   });
 }

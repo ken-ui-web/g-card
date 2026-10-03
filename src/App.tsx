@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card } from './components/Card';
 import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabels } from './data/cards';
-import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type PlayerIndex, type RoundLog } from './game/battle';
+import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
-import { portalConfigured } from './portal/api';
+import { callApi, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
 import './styles.css';
 
 type Screen = 'menu' | 'deck' | 'battle' | 'result';
@@ -111,6 +111,15 @@ function App() {
   const [names, setNames] = useState<[string, string]>(['あなた', 'CPU Lv1']);
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(defaultDeckIds);
+  const [deckMode, setDeckMode] = useState<'sample' | 'owned'>('sample');
+  const [account, setAccount] = useState<BootstrapData | null>(null);
+  const [ownedSelection, setOwnedSelection] = useState<string[]>([]);
+  const [reward, setReward] = useState<EconomyState | null>(null);
+  const [rewardError, setRewardError] = useState('');
+  const [deckError, setDeckError] = useState('');
+  const [starting, setStarting] = useState(false);
+  const battleId = useRef('');
+  const reportingId = useRef('');
   const [ui, setUi] = useState<BattleUi>('select');
   const [turn, setTurn] = useState<PlayerIndex>(0);
   const [firstPick, setFirstPick] = useState<string | null>(null);
@@ -126,6 +135,24 @@ function App() {
     return () => window.removeEventListener('hashchange', update);
   }, []);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => {
+    const session = savedSession();
+    if (hash !== '#/battle' || !session || !portalConfigured) return;
+    let cancelled = false;
+    callApi<BootstrapData>('bootstrap', session).then((data) => {
+      if (cancelled) return;
+      setAccount(data);
+      const samplePool = data.battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
+      if (samplePool && samplePool.length >= 4) setSelectedDeckIds((selected) => {
+        const valid = selected.filter((id) => samplePool.includes(id));
+        return valid.length === 4 ? valid : samplePool.slice(0, 4);
+      });
+      const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
+      const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
+      setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
+    }).catch(() => { if (!cancelled) setAccount(null); });
+    return () => { cancelled = true; };
+  }, [hash]);
   useEffect(() => {
     if (ui === 'round-intro' || ui === 'reveal') window.scrollTo(0, 0);
   }, [ui]);
@@ -164,19 +191,39 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [ui, battle, firstPick, level, settings.animationSpeed]);
 
-  const startGame = () => {
-    if (selectedDeckIds.length !== 4) return;
+  const startGame = async () => {
+    const usingOwned = mode === 'cpu' && deckMode === 'owned';
+    if (usingOwned ? ownedSelection.length !== 4 : selectedDeckIds.length !== 4) return;
+    if (usingOwned) {
+      const session = savedSession();
+      if (!session) { setDeckError('学校アカウントでログインしてください'); return; }
+      setStarting(true); setDeckError('');
+      try { await callApi<EconomyState>('saveDeck', session, { ownedIds: ownedSelection }); }
+      catch (error) { setDeckError((error as Error).message); setStarting(false); return; }
+      setStarting(false);
+    }
     setNames(mode === 'cpu' ? ['あなた', `CPU Lv${level}`] : [localNames[0].trim() || 'プレイヤー1', localNames[1].trim() || 'プレイヤー2']);
     seed.current = Date.now() >>> 0;
-    const cpuDeck = mode === 'cpu' ? chooseCpuDeck(selectedDeckIds, level, seed.current) : null;
+    const ownEntries: DeckEntry[] = usingOwned ? ownedSelection.map((id) => {
+      const owned = account!.ownedCards.find((card) => card.ownedId === id)!;
+      return { cardId: owned.cardId, ownedId: id, trainLevel: owned.trainLevel };
+    }) : selectedDeckIds;
+    const cpuConfig = account?.battleConfig?.find((deck) => deck.deckId === `cpu-${level}`);
+    const sampleConfig = account?.battleConfig?.find((deck) => deck.deckId === 'sample');
+    const cpuPool = cpuConfig?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
+    const cpuDeck = mode === 'cpu' ? chooseCpuDeck(ownEntries.map((entry) => typeof entry === 'string' ? entry : entry.cardId), level, seed.current, cpuPool && cpuPool.length >= 4 ? cpuPool : undefined) : null;
     if (cpuDeck) seed.current = cpuDeck.seed;
     setBattle(createBattle(mode, {
-      initialLife: settings.initialLife,
-      cpuMaxLife: settings.cpuMaxLife,
-      cpuTraining: settings.cpuTraining,
+      initialLife: usingOwned ? account!.profile.maxLife : sampleConfig?.maxLife ?? settings.initialLife,
+      cpuMaxLife: cpuConfig?.maxLife ?? settings.cpuMaxLife,
+      cpuTraining: cpuConfig?.rockTrainLevel ?? settings.cpuTraining,
       damages: { ...settings.damages },
       heals: { ...settings.heals },
-    }, seed.current, [selectedDeckIds, cpuDeck?.ids ?? selectedDeckIds]));
+    }, seed.current, [ownEntries, cpuDeck?.ids ?? selectedDeckIds]));
+    battleId.current = crypto.randomUUID();
+    reportingId.current = '';
+    setReward(null);
+    setRewardError('');
     setTurn(0);
     setFirstPick(null);
     setSelectedTarget(null);
@@ -189,6 +236,27 @@ function App() {
       ? selected.filter((id) => id !== cardId)
       : selected.length < 4 ? [...selected, cardId] : selected);
   };
+  const toggleOwnedCard = (ownedId: string) => setOwnedSelection((selected) => selected.includes(ownedId)
+    ? selected.filter((id) => id !== ownedId)
+    : selected.length < 4 ? [...selected, ownedId] : selected);
+
+  const reportResult = async () => {
+    const session = savedSession();
+    if (!session || !battle || mode !== 'cpu' || !battleId.current || reportingId.current === battleId.current) return;
+    reportingId.current = battleId.current;
+    setRewardError('');
+    try {
+      const result = await callApi<EconomyState>('reportBattle', session, {
+        battleId: battleId.current, mode: 'cpu', deckMode, cpuLevel: level,
+        result: battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss',
+      });
+      setReward(result);
+    } catch (failure) {
+      reportingId.current = '';
+      setRewardError((failure as Error).message);
+    }
+  };
+  useEffect(() => { if (screen === 'result' && mode === 'cpu' && battle?.outcome !== null && account?.economy?.enabled && savedSession()) void reportResult(); }, [screen, battle?.outcome, account?.economy?.enabled]);
 
   const selectCard = (id: string) => {
     if (!battle) return;
@@ -241,11 +309,15 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
-  if (hash === '#/home' || hash === '#/admin' || (!hash && portalConfigured)) return <Portal adminRoute={hash === '#/admin'} />;
+  if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || (!hash && portalConfigured)) {
+    const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : 'home';
+    return <Portal page={page} />;
+  }
 
   const current = battle?.players[turn];
   const opponent = battle?.players[turn === 0 ? 1 : 0];
   const log = battle?.history.at(-1);
+  const sampleCards = availableCards.filter((card) => !account?.battleConfig?.length || account.battleConfig.find((deck) => deck.deckId === 'sample')?.cardIds.includes(card.cardId));
   const reveal = battle?.reveal;
   const winnerName = (winner: PlayerIndex | null) => winner === null ? 'あいこ！' : `${names[winner]}の勝ち！`;
 
@@ -258,23 +330,24 @@ function App() {
 
       {screen === 'menu' && <>
         <section className="hero">
-          <div className="hero__copy"><p className="eyebrow">STAGE 4 · CARD EXPANSION</p><h1>見せるのは手の形。<br /><em>勝負はカードの中身。</em></h1><p>5枚から4枚を選んで対戦できます。新しい「救急箱」は、勝つとライフを回復します。</p></div>
+          <div className="hero__copy"><p className="eyebrow">G CARD BATTLE</p><h1>見せるのは手の形。<br /><em>勝負はカードの中身。</em></h1><p>サンプルカードか、自分が持っているカードから4枚を選んで対戦できます。</p></div>
           <div className="hero__cards">{availableCards.filter((card) => selectedDeckIds.includes(card.cardId)).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
         </section>
-        <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>この試作は端末内で動作し、Gポイントは変わりません。</p></div></div>
+        <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦は学校アカウントでログインしていると、勝利報酬を受け取れます。</p></div></div>
           <div className="mode-grid">
             <button type="button" className={`mode-option ${mode === 'cpu' ? 'is-active' : ''}`} onClick={() => setMode('cpu')} aria-pressed={mode === 'cpu'}><span className="mode-option__icon">⚙</span><strong>CPUと対戦</strong><small>レベルを選んで1人でプレイ</small></button>
             <button type="button" className={`mode-option ${mode === 'local' ? 'is-active' : ''}`} onClick={() => setMode('local')} aria-pressed={mode === 'local'}><span className="mode-option__icon">↔</span><strong>この端末で対戦</strong><small>交代で端末を渡して2人でプレイ</small></button>
           </div>
           {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => setLevel(value)}>Lv{value}<small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
+          {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログインとサーバー更新後に選べます。</small>}</div>}
           <div className="button-row"><button type="button" className="button button--primary" onClick={() => setScreen('deck')}>カードセットを見る <span aria-hidden="true">→</span></button></div>
         </section>
       </>}
 
-      {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>5枚から4枚を選びます（現在 {selectedDeckIds.length} / 4 枚）。別のカードを入れるときは、まず選択中の1枚を外してください。{mode === 'cpu' ? 'CPUも独自に4枚を選びます。名前と効果は公開まで見えません。' : 'この端末での2人対戦では、両者が同じ4枚を使います。'}</p>
-        <div className="deck-grid">{availableCards.map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && selectedDeckIds.length === 4} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>
+      {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>{mode === 'cpu' && deckMode === 'owned' ? `所持カードから4枚を選びます（現在 ${ownedSelection.length} / 4 枚）。筋トレ値と最大ライフが反映されます。` : `サンプル${sampleCards.length}枚から4枚を選びます（現在 ${selectedDeckIds.length} / 4 枚）。`} 別のカードを入れるときは、まず選択中の1枚を外してください。</p>
+        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && ownedSelection.length === 4} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && selectedDeckIds.length === 4} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
         <div className="deck-note"><strong>勝ち方</strong><p>グーはチョキに、チョキはパーに、パーはグーに勝ちます。勝ったカードだけが効果を発動。4ラウンド後、残りライフが多い側の勝利です。</p></div>
-        <div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={selectedDeckIds.length !== 4} onClick={startGame}>対戦を始める</button></div>
+        {deckError && <p className="portal-error" role="alert">{deckError}</p>}<div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={starting || (mode === 'cpu' && deckMode === 'owned' ? ownedSelection : selectedDeckIds).length !== 4} onClick={() => { void startGame(); }}>{starting ? '保存中…' : '対戦を始める'}</button></div>
       </section>}
 
       {screen === 'battle' && battle && <section className="battle-page">
@@ -312,11 +385,11 @@ function App() {
         {ui === 'target' && reveal && <div className="target-panel panel"><p className="eyebrow">MAGIC EFFECT</p><h2>{names[reveal.winner!]}が対象を選ぶ</h2><p>相手の残りカードを1枚選び、種類を【グー】に変えます。カードの中身は見えません。</p><div className="target-grid">{targetOptions(battle).map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side="back" backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>手品で変化</small>}</button>)}</div><button type="button" className="button button--primary" disabled={!selectedTarget} onClick={() => commitRound(selectedTarget!)}>このカードを変える</button></div>}
 
         {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div key={instance.instanceId}><span>{names[index]}</span><Card card={getCard(instance.cardId)} damage={finalDamage(instance, battle.config)} width={180} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
-        <div className="battle-footnote">この試作ではGポイントやミッションの結果は保存されません。</div>
+        <div className="battle-footnote">CPU対戦はログイン中、結果画面でGポイントとミッションの進み具合を保存します。この端末での2人対戦に報酬はありません。</div>
       </section>}
 
-      {screen === 'result' && battle && <section className="result-page panel"><p className="eyebrow">BATTLE RESULT</p><h1>{battle.outcome === 'draw' ? '引き分け！' : `${names[battle.outcome!]}の勝ち！`}</h1><div className="result-life"><LifeBar name={names[0]} life={battle.players[0].life} maxLife={battle.players[0].maxLife} side="self" /><LifeBar name={names[1]} life={battle.players[1].life} maxLife={battle.players[1].maxLife} side="other" /></div><p className="result-note">段階4の試作対戦です。Gポイント・ミッション・ランキングには反映されません。</p><h2>ラウンドの記録</h2><ol className="history-list">{battle.history.map((round: RoundLog) => <li key={round.round}><strong>{round.round}R</strong><span>{getCard(round.cards[0].cardId).name} vs {getCard(round.cards[1].cardId).name}</span><b>{round.winner === null ? 'あいこ' : `${names[round.winner]}の勝ち`}</b><small>{round.lifeAfter[0]} – {round.lifeAfter[1]}</small></li>)}</ol><div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>対戦メニューへ</button><button type="button" className="button button--primary" onClick={startGame}>もう一度対戦</button></div></section>}
-      <footer className="app-footer">Gカード · 段階4 対戦試作</footer>
+      {screen === 'result' && battle && <section className="result-page panel"><p className="eyebrow">BATTLE RESULT</p><h1>{battle.outcome === 'draw' ? '引き分け！' : `${names[battle.outcome!]}の勝ち！`}</h1><div className="result-life"><LifeBar name={names[0]} life={battle.players[0].life} maxLife={battle.players[0].maxLife} side="self" /><LifeBar name={names[1]} life={battle.players[1].life} maxLife={battle.players[1].maxLife} side="other" /></div>{mode === 'cpu' && account?.economy?.enabled && savedSession() ? <div className="result-note" role="status">{reward ? <>獲得したGポイント：{reward.awarded ?? 0}G。今日のCPU報酬：{reward.daily.cpuRewards} / {account?.economy?.cpuRewardDailyCap ?? 3}回。{reward.completedMissions?.map((item) => ` ミッション達成：${item.label} +${item.reward}G`).join('')}</> : rewardError ? <>報酬の保存に失敗しました：{rewardError} <button type="button" className="button button--ghost" onClick={() => { void reportResult(); }}>もう一度送る</button></> : '報酬を確認中…'}</div> : <p className="result-note">この対戦にGポイント報酬はありません。</p>}<h2>ラウンドの記録</h2><ol className="history-list">{battle.history.map((round: RoundLog) => <li key={round.round}><strong>{round.round}R</strong><span>{getCard(round.cards[0].cardId).name} vs {getCard(round.cards[1].cardId).name}</span><b>{round.winner === null ? 'あいこ' : `${names[round.winner]}の勝ち`}</b><small>{round.lifeAfter[0]} – {round.lifeAfter[1]}</small></li>)}</ol><div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>対戦メニューへ</button><button type="button" className="button button--primary" disabled={starting} onClick={() => { void startGame(); }}>もう一度対戦</button></div></section>}
+      <footer className="app-footer">Gカード · 対戦</footer>
     </main>
   );
 }

@@ -2,6 +2,7 @@ import { getCard, initialCards, type CardType } from '../data/cards';
 
 export type PlayerIndex = 0 | 1;
 export type BattleMode = 'cpu' | 'local';
+export type DeckEntry = string | { cardId: string; ownedId: string; trainLevel: number };
 
 export interface BattleCard {
   instanceId: string;
@@ -77,16 +78,18 @@ export function finalDamage(card: BattleCard, config: BattleConfig): number | nu
   return Math.max(0, base + training);
 }
 
-function createDeck(player: PlayerIndex, training: number, seed: number, cardIds: string[]): BattleCard[] {
-  if (cardIds.length !== 4 || new Set(cardIds).size !== 4) throw new Error('異なるカードを4枚選んでください');
-  const deck = cardIds.map((id) => getCard(id)).map((card) => ({
-    instanceId: `${player}-${card.cardId}`,
+function createDeck(player: PlayerIndex, training: number, seed: number, entries: DeckEntry[]): BattleCard[] {
+  if (entries.length !== 4 || new Set(entries.map((entry) => typeof entry === 'string' ? entry : entry.ownedId)).size !== 4) throw new Error('異なる所持カードを4枚選んでください');
+  const deck = entries.map((entry) => {
+    const card = getCard(typeof entry === 'string' ? entry : entry.cardId);
+    return {
+    instanceId: `${player}-${typeof entry === 'string' ? entry : entry.ownedId}`,
     cardId: card.cardId,
     originalType: card.type,
     currentType: card.type,
-    trainLevel: card.type === 'rock' ? training : 0,
+    trainLevel: card.type === 'rock' ? typeof entry === 'string' ? training : entry.trainLevel : 0,
     nullified: false,
-  }));
+  }; });
   let current = seed >>> 0;
   for (let index = deck.length - 1; index > 0; index--) {
     current = (Math.imul(current, 1664525) + 1013904223) >>> 0;
@@ -96,7 +99,7 @@ function createDeck(player: PlayerIndex, training: number, seed: number, cardIds
   return deck;
 }
 
-export function createBattle(mode: BattleMode, config: BattleConfig, seed = 1, decks?: [string[], string[]]): BattleState {
+export function createBattle(mode: BattleMode, config: BattleConfig, seed = 1, decks?: [DeckEntry[], DeckEntry[]]): BattleState {
   const cardIds = decks ?? [initialCards.map((card) => card.cardId), initialCards.map((card) => card.cardId)];
   const max0 = Math.max(1, config.initialLife);
   const max1 = Math.max(1, mode === 'cpu' ? config.cpuMaxLife : config.initialLife);

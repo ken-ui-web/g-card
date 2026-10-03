@@ -103,3 +103,19 @@ describe('救急箱を含む4枚デッキ', () => {
     expect(lost.history[0].events).toEqual([{ kind: 'damage', actor: 1, target: 0, amount: 50 }]);
   });
 });
+
+describe('所持カードのデッキ', () => {
+  it('同じ名前の所持カードを別々に扱い、それぞれの筋トレ値を使う', () => {
+    const owned = [
+      { cardId: 'G001', ownedId: 'owned-a', trainLevel: 5 },
+      { cardId: 'G001', ownedId: 'owned-b', trainLevel: 0 },
+      { cardId: 'C008', ownedId: 'owned-c', trainLevel: 0 },
+      { cardId: 'P001', ownedId: 'owned-d', trainLevel: 0 },
+    ];
+    const state = createBattle('cpu', { ...config, initialLife: 115 }, 1, [owned, ['G001', 'G002', 'C008', 'P001']]);
+    expect(state.players[0].maxLife).toBe(115);
+    expect(finalDamage(state.players[0].hand.find((card) => card.instanceId === '0-owned-a')!, config)).toBe(25);
+    expect(finalDamage(state.players[0].hand.find((card) => card.instanceId === '0-owned-b')!, config)).toBe(20);
+    expect(() => createBattle('cpu', config, 1, [[owned[0], owned[0], owned[2], owned[3]], ['G001', 'G002', 'C008', 'P001']])).toThrow('異なる所持カード');
+  });
+});

@@ -40,8 +40,8 @@ function typeCounts(ids: string[]): string {
 }
 
 // 候補から4枚を選ぶ。選ばれたカードと裏面の種類構成はプレイヤーと変える。
-export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: number): { ids: string[]; seed: number } {
-  const pool = availableCards.map((card) => card.cardId);
+export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: number, candidateIds = availableCards.map((card) => card.cardId)): { ids: string[]; seed: number } {
+  const pool = candidateIds.filter((id, index) => candidateIds.indexOf(id) === index);
   const combinations: string[][] = [];
   for (let a = 0; a < pool.length - 3; a++) {
     for (let b = a + 1; b < pool.length - 2; b++) {
@@ -54,10 +54,11 @@ export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: nu
   const different = combinations.filter((ids) =>
     !ids.every((id) => playerSet.has(id)) && typeCounts(ids) !== typeCounts(playerCardIds),
   );
-  if (different.length === 0) throw new Error('CPUが選べる別のデッキがありません');
+  if (combinations.length === 0) throw new Error('CPUが選べるカードが足りません');
+  const eligible = different.length ? different : combinations;
   if (level === 1) {
     const draw = nextRandom(seed);
-    return { ids: different[Math.floor(draw.value * different.length)], seed: draw.seed };
+    return { ids: eligible[Math.floor(draw.value * eligible.length)], seed: draw.seed };
   }
   const score = (ids: string[]) => ids.reduce((total, id) => {
     const effect = getCard(id).effects[0];
@@ -65,7 +66,7 @@ export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: nu
     if (effect.type === 'heal') return total + (level === 3 ? 23 : 15);
     return total + (level === 3 ? 17 : 20);
   }, 0) + (typeCounts(ids).split(':').every((count) => Number(count) > 0) ? 20 : 0);
-  const ranked = [...different].sort((a, b) => score(b) - score(a) || a.join(',').localeCompare(b.join(',')));
+  const ranked = [...eligible].sort((a, b) => score(b) - score(a) || a.join(',').localeCompare(b.join(',')));
   return { ids: ranked[0], seed };
 }
 

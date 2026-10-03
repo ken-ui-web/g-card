@@ -65,6 +65,39 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .portal-menu-item[href]:hover{border-color:#ffd45d;transform:translateY(-2px)}
 .portal-menu-item--pending{opacity:.7}
 .portal-error{max-width:680px;padding:14px 18px;border-radius:12px;border:1px solid #ff7d83;background:#5b202b;color:#fff;margin-bottom:24px}
+.economy-page{position:relative;width:min(1080px,calc(100% - 48px));margin:32px auto 60px}
+.economy-page h1{font:clamp(26px,4vw,40px)/1.3 'Dela Gothic One',sans-serif;margin:0 0 14px}
+.economy-page h2{font-size:22px;margin:32px 0 16px}
+.economy-page>p{color:#d7e2f5}
+.economy-balance{display:inline-block;padding:10px 16px;border:1px solid #ffd45d77;border-radius:12px;background:#18254a;color:#ffda6e!important;font-weight:800}
+.economy-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:16px;margin:18px 0 28px}
+.economy-card{padding:16px;display:flex;flex-direction:column;gap:12px}
+.economy-card img{display:block;width:min(100%,200px);aspect-ratio:1024/1365;object-fit:contain;margin-inline:auto;border-radius:12px}
+.economy-catalog .is-locked{filter:grayscale(1) brightness(.3)}
+.economy-card h3{margin:0;font-size:20px}.economy-card h3 small{font-size:13px;color:#ffd66c}
+.economy-card p{margin:7px 0;color:#dae5f7;line-height:1.5}
+.economy-card .button,.economy-pack .button{width:100%;margin-top:10px}
+.economy-price{color:#ffda6e!important;font-weight:800}
+.economy-sell{display:block;margin:10px auto 0;border:0;background:transparent;color:#c9d7ee;text-decoration:underline}
+.economy-pack,.economy-run,.economy-opened{padding:22px}
+.economy-pack h3,.economy-run h2{margin:0 0 10px}.economy-pack p{color:#d8e4f5}
+.economy-message{padding:15px 18px;border:1px solid #ffdb6b;border-radius:12px;background:#4e3d20;color:#fff!important;font-weight:800}
+.economy-opened-card{opacity:0;transform:perspective(700px) rotateY(85deg) scale(.85);animation:economy-card-reveal .65s ease-out forwards}
+@keyframes economy-card-reveal{to{opacity:1;transform:perspective(700px) rotateY(0) scale(1)}}
+.deck-mode-picker{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:22px}
+.deck-mode-picker strong{margin-right:8px}
+.deck-mode-picker button{border:1px solid #ffffff55;border-radius:12px;background:#142044;color:#eef4ff;padding:10px 16px;font-weight:800}
+.deck-mode-picker button[aria-pressed=true]{background:#ffce46;border-color:#ffce46;color:#142044}
+.deck-mode-picker small{color:#aec0db}
+.admin-economy{position:relative;width:min(1080px,calc(100% - 48px));margin:0 auto 50px;padding:28px}
+.admin-economy h2{margin-top:0}.admin-economy details{border-top:1px solid #ffffff30;padding:16px 0}
+.admin-economy summary{cursor:pointer;font-weight:800;font-size:19px;color:#ffdb71}
+.admin-economy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:13px;margin-top:16px}
+.admin-setting,.admin-pack{display:grid;gap:10px;border:1px solid #ffffff22;border-radius:12px;background:#0d1835;padding:14px}
+.admin-setting label,.admin-pack label{display:grid;gap:6px;color:#dce7f7}
+.admin-setting input:not([type=checkbox]),.admin-pack input:not([type=checkbox]){width:100%;min-height:42px;border:1px solid #ffffff55;border-radius:8px;background:#101e42;color:white;padding:8px}
+.admin-economy select,.admin-economy-grid input:not([type=checkbox]){width:100%;min-height:42px;border:1px solid #ffffff55;border-radius:8px;background:#101e42;color:white;padding:8px}
+.admin-setting label:has([type=checkbox]),.admin-pack label:has([type=checkbox]){display:flex;align-items:center;gap:8px}
 @media(max-width:760px){.portal-dashboard{grid-template-columns:1fr}.portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-overview{align-items:flex-start;flex-direction:column}.portal-header{height:auto;min-height:86px;padding-block:12px}.portal-brand img{width:125px}}
 
 .card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}
