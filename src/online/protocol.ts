@@ -105,7 +105,7 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
           const candidates = [0, 1, 2, 3].filter((index) => !used[loser].includes(index));
           if (candidates.length) {
             const target = record.choices?.[uids[winner]];
-            if (target === undefined) return { ...view, phase: 'target', targetOwner: winner };
+            if (target === undefined) return { ...view, used, phase: 'target', targetOwner: winner };
             if (!candidates.includes(target)) return invalid(view, '手品の対象が正しくありません');
             nextTypes[loser][target] = effect.to;
             view.events.push(`相手の残りカードの種類を変更`);

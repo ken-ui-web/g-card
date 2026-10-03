@@ -47,4 +47,24 @@ describe('オンライン対戦の公開情報', () => {
     };
     expect((await deriveView(room)).phase).toBe('invalid');
   });
+
+  it('手品の対象選択では今出した相手カードを候補から外す', async () => {
+    const host: OnlineEntry[] = ['P001', 'G001', 'C008', 'P003'].map((cardId) => ({ cardId, trainLevel: 0 }));
+    const guest: OnlineEntry[] = ['G001', 'C008', 'P003', 'G002'].map((cardId) => ({ cardId, trainLevel: 0 }));
+    const room: OnlineRoom = {
+      meta: { battleId: 'magic-target', deckMode: 'sample', hostUid: 'host', guestUid: 'guest', seed: 1, createdAt: 1, expiresAt: 2 },
+      players: { host: { nickname: 'A', maxLife: 100, connected: true, lastSeen: 1 }, guest: { nickname: 'B', maxLife: 100, connected: true, lastSeen: 1 } },
+      decks: { host: { types: host.map((entry) => getCard(entry.cardId).type), commit: await deckCommit(host, 'a') }, guest: { types: guest.map((entry) => getCard(entry.cardId).type), commit: await deckCommit(guest, 'b') } },
+      rounds: { '1': {
+        commit: { host: await pickCommit('magic-target', 1, 0, 'h'), guest: await pickCommit('magic-target', 1, 0, 'g') },
+        reveal: { host: { index: 0, salt: 'h', card: host[0] }, guest: { index: 0, salt: 'g', card: guest[0] } },
+      } },
+    };
+    const targeting = await deriveView(room);
+    expect(targeting.phase).toBe('target');
+    expect(targeting.targetOwner).toBe(0);
+    expect(targeting.used[1]).toContain(0);
+    room.rounds!['1'].choices = { host: 1 };
+    expect((await deriveView(room)).phase).toBe('verify');
+  });
 });
