@@ -1,0 +1,87 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "queue": {
+      "$mode": {
+        ".read": "auth != null && ($mode === 'sample' || $mode === 'owned')",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && ($mode === 'sample' || $mode === 'owned')",
+          ".validate": "newData.hasChildren(['nickname', 'maxLife', 'joinedAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 8 && newData.child('maxLife').isNumber() && newData.child('maxLife').val() >= 1 && newData.child('maxLife').val() <= 9999 && newData.child('joinedAt').isNumber()",
+          "claim": {
+            ".write": "auth != null && auth.uid !== $uid && !data.exists() && newData.val() === auth.uid && data.parent().child('joinedAt').val() > now - 90000"
+          }
+        }
+      }
+    },
+    "codes": {
+      "$code": {
+        ".read": "auth != null && $code.matches(/^[0-9]{4}$/)",
+        ".write": "auth != null && $code.matches(/^[0-9]{4}$/) && ((newData.exists() && newData.child('hostUid').val() === auth.uid && (!data.exists() || data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() < now)) || (!newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() < now)))",
+        ".validate": "newData.hasChildren(['hostUid', 'deckMode', 'expiresAt']) && newData.child('hostUid').isString() && (newData.child('deckMode').val() === 'sample' || newData.child('deckMode').val() === 'owned') && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 1800000"
+      }
+    },
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && (data.child('meta/hostUid').val() === auth.uid || data.child('meta/guestUid').val() === auth.uid)",
+        ".write": "auth != null && ((!data.exists() && newData.child('meta/hostUid').val() === auth.uid && newData.child('meta/battleId').val() === $roomId && newData.child('meta/expiresAt').val() > now && newData.child('meta/expiresAt').val() <= now + 1800000) || (!newData.exists() && data.child('meta/hostUid').val() === auth.uid && (data.child('meta/expiresAt').val() < now || (data.child('receipts').child(data.child('meta/hostUid').val()).val() === true && data.child('receipts').child(data.child('meta/guestUid').val()).val() === true))))",
+        "meta": {
+          "guestUid": {
+            ".read": "auth != null && data.parent().child('code').val() !== '' && data.parent().child('expiresAt').val() > now",
+            ".write": "auth != null && !data.exists() && newData.val() === auth.uid && data.parent().child('hostUid').val() !== auth.uid && data.parent().child('code').val() !== '' && data.parent().child('expiresAt').val() > now"
+          }
+        },
+        "players": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['nickname', 'maxLife', 'connected', 'lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 8 && newData.child('maxLife').isNumber() && newData.child('maxLife').val() >= 1 && newData.child('maxLife').val() <= 9999 && newData.child('connected').isBoolean() && newData.child('lastSeen').isNumber()"
+          }
+        },
+        "decks": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['types', 'commit']) && newData.child('types').numChildren() === 4 && newData.child('commit').isString() && newData.child('commit').val().matches(/^[a-f0-9]{64}$/)"
+          }
+        },
+        "rounds": {
+          "$round": {
+            "commit": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && ($round === '1' || $round === '2' || $round === '3' || $round === '4') && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid)",
+                ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+              }
+            },
+            "reveal": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('commit').child(auth.uid).exists() && data.parent().parent().child('commit').numChildren() === 2",
+                ".validate": "newData.hasChildren(['index', 'salt', 'card']) && newData.child('index').isNumber() && newData.child('index').val() >= 0 && newData.child('index').val() <= 3 && newData.child('salt').isString() && newData.child('salt').val().matches(/^[a-f0-9]{32}$/)"
+              }
+            },
+            "choices": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2",
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+              }
+            },
+            "stateHash": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2",
+                ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+              }
+            }
+          }
+        },
+        "final": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)"
+          }
+        },
+        "receipts": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.val() === true && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)"
+          }
+        }
+      }
+    }
+  }
+}

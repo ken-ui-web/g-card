@@ -31,7 +31,7 @@ export interface EconomyState {
   ownedCards: OwnedCard[];
   lastDeck: string[];
   missions: MissionState[];
-  daily: { cpuRewards: number; packsBought: number };
+  daily: { cpuRewards: number; onlineRewards?: number; packsBought: number };
   acquired?: OwnedCard[];
   trained?: number;
   awarded?: number;
@@ -54,6 +54,7 @@ export interface BootstrapData {
   learning?: { enabled: boolean };
   unreadTests: number;
   pendingReflections: number;
+  online?: { enabled: boolean; rankingEnabled: boolean; rewardDailyCap: number };
 }
 
 const sessionKey = 'g-card-session-v1';

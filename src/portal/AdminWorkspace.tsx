@@ -9,7 +9,7 @@ type Student = { email: string; role: string; className: string; number: string;
 type Detail = { student: Student; ownedCards: { ownedId: string; cardId: string; name: string; trainLevel: number; source: string }[]; pointHistory: { delta: number; reason: string; note: string; balanceAfter: number; at: string }[] };
 type ExportPage = { headers: string[]; rows: unknown[][]; total: number; nextCursor: number | null };
 
-const tableNames = ['Users', 'OwnedCards', 'Cards', 'Packs', 'Decks', 'Tests', 'Questions', 'TestResponses', 'TestBest', 'Reflections', 'ReflectionResponses', 'PointLog', 'Missions', 'MissionProgress', 'BattleLog', 'DailyCounters', 'AdminAdjustments', 'AdminActions', 'Settings'];
+const tableNames = ['Users', 'OwnedCards', 'Cards', 'Packs', 'Decks', 'Tests', 'Questions', 'TestResponses', 'TestBest', 'Reflections', 'ReflectionResponses', 'PointLog', 'Missions', 'MissionProgress', 'BattleLog', 'OnlineMatches', 'DailyCounters', 'AdminAdjustments', 'AdminActions', 'Settings'];
 const reasonNames: Record<string, string> = { welcome: '初回登録', login_bonus: 'ログイン', buy_card: 'カード購入', train: 'トレーニング', mission: 'ミッション', test_score: 'テスト得点', test_perfect: '満点ボーナス', reflection: '振り返り', battle: '対戦', admin_adjust: '先生による調整' };
 
 function DashboardPanel({ session }: { session: string }) {

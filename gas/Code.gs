@@ -17,6 +17,7 @@ const GC_HEADERS = {
   Missions: ['missionId', 'period', 'condition', 'targetCount', 'reward', 'label', 'active', 'sortOrder'],
   MissionProgress: ['email', 'missionId', 'periodKey', 'progress', 'completedAt'],
   BattleLog: ['battleId', 'email', 'mode', 'deckMode', 'cpuLevel', 'result', 'opponentNickname', 'gAwarded', 'createdAt'],
+  OnlineMatches: ['battleId', 'deckMode', 'emailA', 'uidA', 'emailB', 'uidB', 'resultA', 'hashA', 'resultB', 'hashB', 'createdAt', 'status', 'finishedAt'],
   DailyCounters: ['email', 'dateKey', 'cpuRewards', 'onlineRewards', 'firstWinGiven', 'packsBought'],
   AdminAdjustments: ['requestId', 'adminEmail', 'targetEmail', 'delta', 'reason', 'balanceAfter', 'createdAt'],
   AdminActions: ['requestId', 'adminEmail', 'targetEmail', 'action', 'before', 'after', 'createdAt'],
@@ -39,6 +40,9 @@ const GC_ECONOMY_SETTINGS = [
   ['lifePerRun', '5', '走り込み1回の最大ライフ増加'], ['maxLifeCap', '', '最大ライフの上限。空欄なら無制限'],
   ['cpuRewardLv1', '5', 'CPU Lv1勝利報酬'], ['cpuRewardLv2', '10', 'CPU Lv2勝利報酬'],
   ['cpuRewardLv3', '20', 'CPU Lv3勝利報酬'], ['cpuRewardDailyCap', '3', 'CPU対戦報酬の1日上限'],
+  ['onlineEnabled', '0', 'オンライン対戦を受付（0=停止、1=公開）'], ['rankingEnabled', '1', '週間ランキングを表示'],
+  ['onlineRewardWin', '10', 'オンライン勝利報酬'], ['onlineRewardDraw', '5', 'オンライン引き分け報酬'], ['onlineRewardLoss', '3', 'オンライン敗北報酬'],
+  ['onlineRewardDailyCap', '3', 'オンライン対戦報酬の1日上限'],
   ['firstWinBonus', '20', '本日の初勝利報酬'], ['packDailyLimit', '10', 'パックの1日購入上限'],
   ['sellN', '10', 'N売却価格'], ['sellR', '30', 'R売却価格'], ['sellSR', '100', 'SR売却価格'], ['sellUR', '300', 'UR売却価格'],
   ['perfectBonus', '50', 'テストで初めて満点を取ったときのボーナス'],
@@ -160,6 +164,10 @@ function gcDispatch_(request) {
     case 'train': return gcTrain_(request.session, request.payload || {}, request.requestId);
     case 'saveDeck': return gcSaveDeck_(request.session, request.payload || {});
     case 'reportBattle': return gcReportBattle_(request.session, request.payload || {});
+    case 'onlineJoin': return gcOnlineJoin_(request.session, request.payload || {});
+    case 'onlineReport': return gcOnlineReport_(request.session, request.payload || {});
+    case 'onlineResult': return gcOnlineResult_(request.session, request.payload || {});
+    case 'getRanking': return gcGetRanking_(request.session);
     case 'adminSaveSettings': return gcAdminSaveSettings_(request.session, request.payload || {});
     case 'adminSaveCard': return gcAdminSaveCard_(request.session, request.payload || {});
     case 'adminSavePack': return gcAdminSavePack_(request.session, request.payload || {});
@@ -481,11 +489,12 @@ function gcBootstrap_(token) {
       packs: gcPackMaster_(),
       battleConfig: gcBattleConfigRows_(),
       missions: gcMissionState_(identity.email, today),
-      daily: (function () { const counter = gcCounter_(identity.email, today, false).values; return { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) }; })(),
+      daily: (function () { const counter = gcCounter_(identity.email, today, false).values; return { cpuRewards: Number(counter[2] || 0), onlineRewards: Number(counter[3] || 0), packsBought: Number(counter[5] || 0) }; })(),
       economy: { enabled: identity.admin || identity.settings.economyEnabled === '1', muscleCostBase: gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000), muscleCostStep: gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000), runCostBase: gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000), runCostStep: gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000), lifePerRun: gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), cpuRewardDailyCap: gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100), packDailyLimit: gcNumber_(identity.settings, 'packDailyLimit', 10, 0, 1000), sellPrices: { N: gcNumber_(identity.settings, 'sellN', 10, 0, 100000), R: gcNumber_(identity.settings, 'sellR', 30, 0, 100000), SR: gcNumber_(identity.settings, 'sellSR', 100, 0, 100000), UR: gcNumber_(identity.settings, 'sellUR', 300, 0, 100000) } },
       // ホーム表示のたびに受験履歴を全件走査しない。件数はテスト一覧を開いた時に取得する。
       unreadTests: 0, pendingReflections: 0,
       learning: { enabled: identity.admin || identity.settings.learningEnabled === '1' },
+      online: { enabled: identity.settings.onlineEnabled === '1', rankingEnabled: identity.settings.rankingEnabled !== '0', rewardDailyCap: gcNumber_(identity.settings, 'onlineRewardDailyCap', 3, 0, 100) },
     };
 }
 
@@ -550,7 +559,7 @@ function gcState_(identity, extra) {
     maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
     ownedCards: gcOwned_(identity.email), lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
     missions: gcMissionState_(identity.email, gcToday_()),
-    daily: { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) },
+    daily: { cpuRewards: Number(counter[2] || 0), onlineRewards: Number(counter[3] || 0), packsBought: Number(counter[5] || 0) },
   }, extra || {});
 }
 
@@ -852,7 +861,7 @@ function gcAdminSaveSettings_(token, payload) {
   const value = String(payload.value === undefined ? '' : payload.value).trim();
   if (value !== '' && (!/^\d+$/.test(value) || Number(value) > 100000)) gcError_('BAD_REQUEST', '0以上の整数を入力してください');
   if (value === '' && payload.key !== 'maxLifeCap') gcError_('BAD_REQUEST', '数値を入力してください');
-  if ((payload.key === 'economyEnabled' || payload.key === 'learningEnabled') && value !== '0' && value !== '1') gcError_('BAD_REQUEST', '公開設定は0か1にしてください');
+  if (['economyEnabled', 'learningEnabled', 'onlineEnabled', 'rankingEnabled'].indexOf(payload.key) >= 0 && value !== '0' && value !== '1') gcError_('BAD_REQUEST', '公開設定は0か1にしてください');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Settings');
     const rows = sheet.getDataRange().getValues();
@@ -1068,4 +1077,169 @@ function gcAdminExportData_(token, payload) {
     return row.map(function (value) { return value instanceof Date ? value.toISOString() : value; });
   }) : [];
   return { table: table, headers: GC_HEADERS[table], rows: rows, total: total, nextCursor: cursor + count < total ? cursor + count : null };
+}
+
+function gcOnlineAccess_(identity) {
+  if (!identity.admin && identity.settings.onlineEnabled !== '1') gcError_('NOT_READY', 'オンライン対戦は準備中です');
+}
+
+function gcOnlineMatch_(battleId) {
+  const sheet = gcSheet_('OnlineMatches');
+  if (sheet.getLastRow() < 2) return null;
+  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+  const index = ids.findIndex(function (row) { return row[0] === battleId; });
+  return index < 0 ? null : { sheet: sheet, rowNumber: index + 2, values: sheet.getRange(index + 2, 1, 1, GC_HEADERS.OnlineMatches.length).getValues()[0] };
+}
+
+function gcOnlineJoin_(token, payload) {
+  const identity = gcSession_(token, false);
+  gcEconomyAccess_(identity); gcOnlineAccess_(identity);
+  const battleId = gcRequestId_(payload.battleId);
+  const uid = String(payload.uid || '');
+  const mode = String(payload.deckMode || '');
+  if (!/^[a-zA-Z0-9]{10,128}$/.test(uid) || ['sample', 'owned'].indexOf(mode) < 0) gcError_('BAD_REQUEST', '対戦への参加情報を確認してください');
+  return gcWithLock_(function () {
+    const found = gcOnlineMatch_(battleId);
+    if (!found) {
+      gcSheet_('OnlineMatches').appendRow([battleId, mode, identity.email, uid, '', '', '', '', '', '', new Date().toISOString(), 'waiting', '']);
+      return { status: 'waiting' };
+    }
+    const row = found.values;
+    if (row[1] !== mode || row[11] === 'invalid' || row[11] === 'complete') gcError_('BAD_REQUEST', 'この対戦には参加できません');
+    if (row[2] === identity.email) {
+      if (row[3] !== uid) gcError_('BAD_REQUEST', '参加端末が一致しません');
+      return { status: String(row[11]) };
+    }
+    if (row[4] && row[4] !== identity.email || row[5] && row[5] !== uid || row[3] === uid) gcError_('BAD_REQUEST', 'この対戦には参加できません');
+    row[4] = identity.email; row[5] = uid; row[11] = 'active';
+    found.sheet.getRange(found.rowNumber, 1, 1, GC_HEADERS.OnlineMatches.length).setValues([row]);
+    return { status: 'active' };
+  });
+}
+
+function gcOnlineAwardOne_(row, side) {
+  const email = String(row[side === 0 ? 2 : 4]);
+  const opponent = String(row[side === 0 ? 4 : 2]);
+  const result = String(row[side === 0 ? 6 : 8]);
+  const battleId = String(row[0]);
+  const log = gcSheet_('BattleLog');
+  const existing = log.getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === email; });
+  if (existing) return;
+  const record = gcFindUser_(email);
+  const user = gcUserObject_(record);
+  const identity = { email: email, settings: gcSettings_() };
+  const counter = gcCounter_(email, gcToday_());
+  const cap = gcNumber_(identity.settings, 'onlineRewardDailyCap', 3, 0, 100);
+  let award = 0;
+  if (Number(counter.values[3] || 0) < cap) {
+    award += gcNumber_(identity.settings, result === 'win' ? 'onlineRewardWin' : result === 'draw' ? 'onlineRewardDraw' : 'onlineRewardLoss', result === 'win' ? 10 : result === 'draw' ? 5 : 3, 0, 10000);
+    counter.values[3] = Number(counter.values[3] || 0) + 1;
+  }
+  if (result === 'win' && counter.values[4] !== true) {
+    award += gcNumber_(identity.settings, 'firstWinBonus', 20, 0, 10000);
+    counter.values[4] = true;
+  }
+  user.gPoint = Number(user.gPoint || 0) + award;
+  user.totalEarned = Number(user.totalEarned || 0) + award;
+  user.updatedAt = new Date().toISOString();
+  gcWriteUser_(record, user);
+  counter.sheet.getRange(counter.rowNumber, 1, 1, GC_HEADERS.DailyCounters.length).setValues([counter.values]);
+  if (award) gcPointLog_(email, award, 'battle', battleId, user.gPoint);
+  gcAwardMissions_(identity, user, { play_online: 1, win_battle: result === 'win' ? 1 : 0 });
+  gcWriteUser_(record, user);
+  const opponentRecord = gcFindUser_(opponent);
+  const opponentName = opponentRecord ? String(opponentRecord.values[5] || '') : '';
+  log.appendRow([battleId, email, 'online', row[1], '', result, opponentName, award, new Date().toISOString()]);
+}
+
+function gcOnlineValidateDeck_(identity, mode, deck) {
+  if (!Array.isArray(deck) || deck.length !== 4) gcError_('BAD_DECK', 'オンライン対戦のカードを確認できません');
+  if (mode === 'sample') {
+    const sample = gcBattleConfigRows_().find(function (item) { return item.deckId === 'sample'; });
+    const ids = deck.map(function (entry) { return String(entry.cardId || ''); });
+    if (!sample || new Set(ids).size !== 4 || !ids.every(function (id) { return sample.cardIds.indexOf(id) >= 0; }) ||
+        !deck.every(function (entry) { return Number(entry.trainLevel) === 0 && !entry.ownedId; })) gcError_('BAD_DECK', 'サンプルカードを確認できません');
+    return;
+  }
+  const owned = gcOwned_(identity.email);
+  const ids = deck.map(function (entry) { return String(entry.ownedId || ''); });
+  if (new Set(ids).size !== 4 || !deck.every(function (entry) {
+    return owned.some(function (card) { return card.ownedId === entry.ownedId && card.cardId === entry.cardId && Number(card.trainLevel) === Number(entry.trainLevel); });
+  })) gcError_('BAD_DECK', '所持カードと筋トレ値を確認できません');
+}
+
+function gcOnlineReport_(token, payload) {
+  const identity = gcSession_(token, false);
+  const battleId = gcRequestId_(payload.battleId);
+  const result = String(payload.result || '');
+  const hash = String(payload.stateHash || '');
+  if (['win', 'draw', 'loss'].indexOf(result) < 0 || !/^[a-f0-9]{64}$/.test(hash)) gcError_('BAD_REQUEST', '対戦結果を確認できません');
+  return gcWithLock_(function () {
+    const found = gcOnlineMatch_(battleId);
+    if (!found) gcError_('NOT_FOUND', '対戦が見つかりません');
+    const row = found.values;
+    const side = row[2] === identity.email ? 0 : row[4] === identity.email ? 1 : -1;
+    if (side < 0) gcError_('FORBIDDEN', 'この対戦には参加していません');
+    if (row[11] === 'complete' || row[11] === 'invalid') return gcOnlineResult_(token, { battleId: battleId });
+    if (row[11] !== 'active') gcError_('BAD_REQUEST', '相手の参加を待ってください');
+    if (payload.suspicious === true) {
+      row[11] = 'invalid'; row[12] = new Date().toISOString();
+      found.sheet.getRange(found.rowNumber, 1, 1, GC_HEADERS.OnlineMatches.length).setValues([row]);
+      return gcOnlineResult_(token, { battleId: battleId });
+    }
+    gcOnlineValidateDeck_(identity, String(row[1]), payload.deck);
+    const resultIndex = side === 0 ? 6 : 8;
+    const hashIndex = side === 0 ? 7 : 9;
+    if (row[resultIndex] && (row[resultIndex] !== result || row[hashIndex] !== hash)) gcError_('BAD_REQUEST', '送信済みの結果と一致しません');
+    row[resultIndex] = result; row[hashIndex] = hash;
+    if (row[6] && row[8]) {
+      const compatible = row[6] === 'draw' && row[8] === 'draw' || row[6] === 'win' && row[8] === 'loss' || row[6] === 'loss' && row[8] === 'win';
+      if (!compatible || row[7] !== row[9]) row[11] = 'invalid';
+      else {
+        gcOnlineAwardOne_(row, 0);
+        gcOnlineAwardOne_(row, 1);
+        row[11] = 'complete';
+      }
+      row[12] = new Date().toISOString();
+    }
+    found.sheet.getRange(found.rowNumber, 1, 1, GC_HEADERS.OnlineMatches.length).setValues([row]);
+    return gcOnlineResult_(token, { battleId: battleId });
+  });
+}
+
+function gcOnlineResult_(token, payload) {
+  const identity = gcSession_(token, false);
+  const battleId = gcRequestId_(payload.battleId);
+  const found = gcOnlineMatch_(battleId);
+  if (!found) gcError_('NOT_FOUND', '対戦が見つかりません');
+  const row = found.values;
+  const side = row[2] === identity.email ? 0 : row[4] === identity.email ? 1 : -1;
+  if (side < 0) gcError_('FORBIDDEN', 'この対戦には参加していません');
+  const ownResult = row[side === 0 ? 6 : 8];
+  const log = gcSheet_('BattleLog').getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === identity.email; });
+  return { status: String(row[11]), result: ownResult || '', awarded: log ? Number(log[7] || 0) : 0, gPoint: Number(gcFindUser_(identity.email).values[6] || 0), onlineRewards: Number(gcCounter_(identity.email, gcToday_(), false).values[3] || 0) };
+}
+
+function gcGetRanking_(token) {
+  const identity = gcSession_(token, false);
+  if (identity.settings.rankingEnabled === '0') return { enabled: false, weekStart: gcMissionPeriod_('weekly', gcToday_()), sample: [], owned: [], self: { sample: null, owned: null } };
+  const weekStart = gcMissionPeriod_('weekly', gcToday_());
+  const counts = { sample: {}, owned: {} };
+  gcAdminRows_('BattleLog').forEach(function (row) {
+    if (row[2] !== 'online' || row[5] !== 'win' || gcAdminDay_(row[8]) < weekStart || !counts[row[3]]) return;
+    const email = String(row[1]).toLowerCase();
+    counts[row[3]][email] = (counts[row[3]][email] || 0) + 1;
+  });
+  const nicknames = {};
+  gcAdminRows_('Users').forEach(function (row) { nicknames[String(row[0]).toLowerCase()] = String(row[5] || 'プレイヤー'); });
+  const ranking = function (mode) {
+    return Object.keys(counts[mode]).map(function (email) { return { email: email, nickname: nicknames[email] || 'プレイヤー', wins: counts[mode][email] }; })
+      .sort(function (a, b) { return b.wins - a.wins || a.nickname.localeCompare(b.nickname) || a.email.localeCompare(b.email); })
+      .map(function (entry, index) { return { rank: index + 1, email: entry.email, nickname: entry.nickname, wins: entry.wins }; });
+  };
+  const sample = ranking('sample');
+  const owned = ranking('owned');
+  const publicRows = function (rows) { return rows.slice(0, 20).map(function (item) { return { rank: item.rank, nickname: item.nickname, wins: item.wins, isSelf: item.email === identity.email }; }); };
+  const own = function (rows) { const row = rows.find(function (item) { return item.email === identity.email; }); return row ? { rank: row.rank, nickname: row.nickname, wins: row.wins } : null; };
+  return { enabled: true, weekStart: weekStart, sample: publicRows(sample), owned: publicRows(owned), self: { sample: own(sample), owned: own(owned) } };
 }

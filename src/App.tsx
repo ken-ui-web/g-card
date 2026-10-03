@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Card } from './components/Card';
 import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabels } from './data/cards';
 import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
@@ -7,6 +7,9 @@ import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from
 import { Portal } from './portal/Portal';
 import { callApi, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
 import './styles.css';
+
+const OnlinePage = lazy(() => import('./online/OnlinePage').then((module) => ({ default: module.OnlinePage })));
+const RankingPage = lazy(() => import('./online/RankingPage').then((module) => ({ default: module.RankingPage })));
 
 type Screen = 'menu' | 'deck' | 'battle' | 'result';
 type BattleUi = 'handoff' | 'select' | 'thinking' | 'round-intro' | 'reveal' | 'target' | 'summary';
@@ -309,6 +312,8 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
+  if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><p>オンライン対戦を読み込み中…</p></main>}><OnlinePage /></Suspense>;
+  if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><p>ランキングを読み込み中…</p></main>}><RankingPage /></Suspense>;
   if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
     const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
     return <Portal page={page} />;

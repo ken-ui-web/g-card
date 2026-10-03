@@ -1,6 +1,6 @@
 # Gカード
 
-`docs/SPEC.md` に沿ったGカードアプリです。学校Googleログイン、カード購入・育成・対戦に加え、段階7のテストと既存の授業振り返りシステムとの連携を実装しています。テストの回答本文と振り返り本文はGカードのシートへ保存しません。段階7の学校用 Apps Script への配置と実機確認はこれからです。
+`docs/SPEC.md` に沿ったGカードアプリです。学校Googleログイン、カード購入・育成・対戦、テストと既存の授業振り返りシステムとの連携、管理者画面を実装しています。段階9のオンライン対戦と週間ランキングはFirebaseの学校側セットアップを待っています。テストの回答本文と振り返り本文はGカードのシートへ保存しません。
 
 ## ローカルで遊ぶ
 
@@ -18,4 +18,4 @@ npm run build
 
 試作対戦はGポイント・ミッション・ランキングに反映されません。カード表面は枠・人物・文字を一体で生成した画像1枚を使い、ダメージ効果のあるカードの右上に最終ダメージだけを画面で重ねます。`design-source/` と `tools/build-card-fronts.cjs` は以前の試作記録です。
 
-GitHub Pages への公開手順は [docs/SETUP.md](docs/SETUP.md)、学校アカウントの接続は [docs/STAGE5_CONNECT.md](docs/STAGE5_CONNECT.md)、段階7の更新は [docs/STAGE7_DEPLOY.md](docs/STAGE7_DEPLOY.md)、実装と確認の記録は [docs/PROGRESS.md](docs/PROGRESS.md) を参照してください。
+GitHub Pages への公開手順は [docs/SETUP.md](docs/SETUP.md)、学校アカウントの接続は [docs/STAGE5_CONNECT.md](docs/STAGE5_CONNECT.md)、Firebaseの準備は [docs/STAGE9_FIREBASE.md](docs/STAGE9_FIREBASE.md) または [対話式セットアップ](tools/setup-firebase.sh)、実装と確認の記録は [docs/PROGRESS.md](docs/PROGRESS.md) を参照してください。
