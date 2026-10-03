@@ -131,6 +131,32 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .learning-question-image{display:block;max-width:100%;max-height:420px;object-fit:contain;margin:16px auto;border-radius:10px}
 .admin-tests{margin-top:0}.admin-tests input[type=checkbox]{width:19px;height:19px}.admin-tests label{display:grid;gap:6px;color:#e5eefc}.admin-tests label:has([type=checkbox]){display:flex;align-items:center}.admin-tests-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:15px 0}.admin-tests-top span{color:#ffdc79}.admin-tests-title{margin-bottom:13px;font-weight:800}.admin-tests-title input{font-size:21px}.admin-tests-tabs{display:flex;gap:5px;border-bottom:1px solid #ffffff33;margin:22px 0}.admin-tests-tabs button{border:0;border-radius:10px 10px 0 0;padding:11px 20px;background:#1e3158;color:#d4e1f5;font-weight:800}.admin-tests-tabs button.is-active{background:#ffd451;color:#152342}.admin-tests-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}.admin-tests-tools button,.admin-question-head button,.admin-choice-list button{border:1px solid #ffdb71;border-radius:8px;background:#ffdb7118;color:#ffdf81;padding:8px 10px;font-weight:800}.admin-tests-tools span{color:#afc0d7;font-size:13px}.admin-test-section{margin:20px 0 28px;padding:16px;border:1px solid #ffdb6a55;border-radius:16px;background:#0c1733}.admin-tests-section-head,.admin-question-main{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;align-items:end}.admin-question-card{margin:14px 0;padding:18px;border:1px solid #ffffff38;border-radius:15px;background:#1a2850}.admin-question-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:13px}.admin-question-head span{margin-right:auto;font-weight:900;color:#ffdf7e}.admin-choice-list{display:grid;gap:8px;margin:15px 0}.admin-choice-list>div{display:flex;gap:6px}.admin-answer-key{margin:16px 0;padding:14px;border:1px solid #ffdc675c;border-radius:12px}.admin-answer-key summary{cursor:pointer;color:#ffdc72;font-weight:900}.admin-answer-key>label{margin:10px 0}.admin-question-foot{display:flex;gap:18px;flex-wrap:wrap}.admin-tests-settings{display:grid;gap:17px;max-width:640px}.admin-tests-settings>label{border-bottom:1px solid #ffffff22;padding-bottom:10px}.learning-histogram{display:grid;gap:8px;margin:17px 0}.learning-histogram>div{display:grid;grid-template-columns:90px 1fr 50px;align-items:center;gap:10px}.learning-histogram>div>div{height:14px;border-radius:20px;background:#ffffff22;overflow:hidden}.learning-histogram i{display:block;height:100%;background:#ffd45d}.learning-table-wrap{overflow:auto;margin-top:20px}.learning-table-wrap table{border-collapse:collapse;width:100%}.learning-table-wrap th,.learning-table-wrap td{padding:9px 13px;border-bottom:1px solid #ffffff28;text-align:left;white-space:nowrap}
 @media(max-width:650px){.learning-page,.admin-tests{width:min(100% - 28px,480px);padding:18px 14px}.learning-list article{align-items:flex-start;flex-direction:column}.learning-actions{width:100%}.learning-actions .button{flex:1}.admin-test-section{padding:10px}.admin-question-card{padding:13px}}
+.admin-stage-nav,.admin-stage-panel{width:min(1080px,calc(100% - 48px));margin:26px auto;padding:clamp(20px,4vw,36px)}
+.admin-stage-nav h1{margin:0 0 20px;font:clamp(25px,3vw,37px)/1.4 'Dela Gothic One',sans-serif}
+.admin-stage-tabs{display:flex;flex-wrap:wrap;gap:9px}
+.admin-stage-tabs button{border:1px solid #ffdc6d8c;border-radius:11px;background:#18294d;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}
+.admin-stage-tabs button.is-active{background:#ffda5e;color:#132043}
+.admin-stage-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.admin-stage-heading h2,.admin-stage-heading h3{margin:0}
+.admin-stage-panel h2{margin:0 0 18px}
+.admin-metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px;margin:20px 0}
+.admin-metric{padding:18px;border:1px solid #ffdf704e;border-radius:14px;background:#101d3d}
+.admin-metric small{display:block;color:#bcd0ed}
+.admin-metric strong{display:block;margin-top:9px;color:#ffdc6a;font-size:24px}
+.admin-stage-note{color:#b9c9df;font-size:14px}
+.admin-stage-panel label{display:grid;gap:7px;margin:13px 0;color:#e7effc}
+.admin-stage-panel input:not([type=file]),.admin-stage-panel select{width:100%;min-height:44px;border:1px solid #8da2c366;border-radius:9px;background:#0d1935;color:#fff;padding:9px 12px}
+.admin-roster-import{border:1px solid #ffffff38;border-radius:12px;padding:14px;margin:15px 0 20px}
+.admin-roster-import summary{color:#ffdc70;font-weight:800;cursor:pointer}
+.admin-roster-import input[type=file]{display:block;margin:12px 0;max-width:100%}
+.admin-stage-panel .learning-table-wrap table{min-width:630px}
+.admin-stage-panel .learning-table-wrap button{white-space:nowrap;padding:8px 13px}
+.admin-student-detail{margin-top:25px;padding:22px;border:1px solid #ffdc6d66;border-radius:15px;background:#111f42}
+.admin-adjust{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;align-items:end;margin:17px 0}
+.admin-adjust .button{min-height:44px}
+.admin-card-list{display:flex;flex-wrap:wrap;gap:9px}
+.admin-card-list span{border:1px solid #ffffff42;border-radius:999px;padding:7px 11px;background:#1c315a}
+@media(max-width:650px){.admin-stage-nav,.admin-stage-panel{width:calc(100% - 28px);padding:18px 14px}.admin-stage-tabs button{flex:1 1 42%}.admin-student-detail{padding:15px}}
 @media(max-width:760px){.portal-dashboard{grid-template-columns:1fr}.portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-overview{align-items:flex-start;flex-direction:column}.portal-header{height:auto;min-height:86px;padding-block:12px}.portal-brand img{width:125px}}
 
 .card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}

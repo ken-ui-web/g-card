@@ -18,6 +18,8 @@ const GC_HEADERS = {
   MissionProgress: ['email', 'missionId', 'periodKey', 'progress', 'completedAt'],
   BattleLog: ['battleId', 'email', 'mode', 'deckMode', 'cpuLevel', 'result', 'opponentNickname', 'gAwarded', 'createdAt'],
   DailyCounters: ['email', 'dateKey', 'cpuRewards', 'onlineRewards', 'firstWinGiven', 'packsBought'],
+  AdminAdjustments: ['requestId', 'adminEmail', 'targetEmail', 'delta', 'reason', 'balanceAfter', 'createdAt'],
+  AdminActions: ['requestId', 'adminEmail', 'targetEmail', 'action', 'before', 'after', 'createdAt'],
   Settings: ['key', 'value', 'description'],
 };
 
@@ -176,6 +178,12 @@ function gcDispatch_(request) {
     case 'adminSaveTest': return gcAdminSaveTest_(request.session, request.payload || {});
     case 'adminDeleteTest': return gcAdminDeleteTest_(request.session, request.payload || {});
     case 'adminTestResponses': return gcAdminTestResponses_(request.session, request.payload || {});
+    case 'adminDashboard': return gcAdminDashboard_(request.session);
+    case 'adminListStudents': return gcAdminListStudents_(request.session);
+    case 'adminStudentDetail': return gcAdminStudentDetail_(request.session, request.payload || {});
+    case 'adminAdjustPoints': return gcAdminAdjustPoints_(request.session, request.payload || {}, request.requestId);
+    case 'adminResetNickname': return gcAdminResetNickname_(request.session, request.payload || {}, request.requestId);
+    case 'adminExportData': return gcAdminExportData_(request.session, request.payload || {});
     default: gcError_('NOT_IMPLEMENTED', 'この機能はまだ利用できません');
   }
 }
@@ -915,4 +923,149 @@ function gcAdminSaveMission_(token, payload) {
     gcClearMasterCache_('Missions');
     return { missionId: payload.missionId };
   });
+}
+
+function gcAdminRows_(name) {
+  const sheet = gcSheet_(name);
+  const count = sheet.getLastRow() - 1;
+  return count > 0 ? sheet.getRange(2, 1, count, GC_HEADERS[name].length).getValues().filter(function (row) { return row[0]; }) : [];
+}
+
+function gcAdminDay_(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? Utilities.formatDate(date, GC_TZ, 'yyyy-MM-dd') : String(value).slice(0, 10);
+}
+
+function gcAdminDashboard_(token) {
+  gcSession_(token, true);
+  const today = gcToday_();
+  const users = gcAdminRows_('Users');
+  const tests = gcAdminRows_('TestResponses');
+  const reflections = gcAdminRows_('ReflectionResponses');
+  const logs = gcAdminRows_('PointLog');
+  const todayLogs = logs.filter(function (row) { return gcAdminDay_(row[6]) === today; });
+  return {
+    date: today,
+    students: users.filter(function (row) { return row[1] !== 'admin'; }).length,
+    logins: users.filter(function (row) { return gcDateKey_(row[10]) === today; }).length,
+    testAttempts: tests.filter(function (row) { return gcAdminDay_(row[11]) === today; }).length,
+    reflectionSubmissions: reflections.filter(function (row) { return gcAdminDay_(row[5]) === today; }).length,
+    pointsIssued: todayLogs.reduce(function (sum, row) { return sum + Math.max(0, Number(row[2] || 0)); }, 0),
+    pointsSpent: todayLogs.reduce(function (sum, row) { return sum + Math.max(0, -Number(row[2] || 0)); }, 0),
+  };
+}
+
+function gcAdminStudent_(row, identity, ownedCounts) {
+  const email = String(row[0]).trim().toLowerCase();
+  return {
+    email: email, role: String(row[1]), className: String(row[2] || ''), number: String(row[3] || ''),
+    name: String(row[4] || ''), nickname: String(row[5] || ''), gPoint: Number(row[6] || 0),
+    maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(row[7] || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
+    ownedCount: ownedCounts[email] || 0,
+  };
+}
+
+function gcAdminListStudents_(token) {
+  const identity = gcSession_(token, true);
+  const counts = {};
+  gcAdminRows_('OwnedCards').forEach(function (row) {
+    if (!row[6]) { const email = String(row[1]).toLowerCase(); counts[email] = (counts[email] || 0) + 1; }
+  });
+  return gcAdminRows_('Users').map(function (row) { return gcAdminStudent_(row, identity, counts); });
+}
+
+function gcAdminStudentDetail_(token, payload) {
+  const identity = gcSession_(token, true);
+  const email = String(payload.email || '').trim().toLowerCase();
+  const record = gcFindUser_(email);
+  if (!record) gcError_('NOT_FOUND', '利用者が見つかりません');
+  const cards = gcCardMaster_();
+  const owned = gcAdminRows_('OwnedCards').filter(function (row) { return String(row[1]).toLowerCase() === email && !row[6]; }).map(function (row) {
+    const card = cards.find(function (item) { return item.cardId === row[2]; });
+    return { ownedId: String(row[0]), cardId: String(row[2]), name: card ? card.name : String(row[2]), trainLevel: Number(row[3] || 0), source: String(row[4] || '') };
+  });
+  const adjustments = gcAdminRows_('AdminAdjustments');
+  const history = gcAdminRows_('PointLog').filter(function (row) { return String(row[1]).toLowerCase() === email; }).slice(-20).reverse().map(function (row) {
+    const adjustment = row[3] === 'admin_adjust' ? adjustments.find(function (item) { return item[0] === row[4]; }) : null;
+    return { delta: Number(row[2] || 0), reason: String(row[3]), note: adjustment ? String(adjustment[4]) : '', balanceAfter: Number(row[5] || 0), at: row[6] instanceof Date ? row[6].toISOString() : String(row[6] || '') };
+  });
+  return { student: gcAdminStudent_(record.values, identity, { [email]: owned.length }), ownedCards: owned, pointHistory: history };
+}
+
+function gcAdminAdjustPoints_(token, payload, requestId) {
+  const identity = gcSession_(token, true);
+  const id = gcRequestId_(requestId);
+  const email = String(payload.email || '').trim().toLowerCase();
+  const delta = Number(payload.delta);
+  const reason = String(payload.reason || '').trim();
+  if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 100000 || reason.length < 5 || reason.length > 200) gcError_('BAD_REQUEST', '増減額と5文字以上の理由を入力してください');
+  return gcWithLock_(function () {
+    const record = gcFindUser_(email);
+    if (!record) gcError_('NOT_FOUND', '利用者が見つかりません');
+    const user = gcUserObject_(record);
+    const audit = gcSheet_('AdminAdjustments');
+    const priorAudit = gcAdminRows_('AdminAdjustments').find(function (row) { return row[0] === id; });
+    if (priorAudit) {
+      if (String(priorAudit[2]).toLowerCase() !== email || Number(priorAudit[3]) !== delta || String(priorAudit[4]) !== reason) gcError_('BAD_REQUEST', '送信IDの内容が一致しません');
+      return { email: email, delta: delta, gPoint: Number(user.gPoint || 0), reason: reason, alreadyApplied: true };
+    }
+    const priorLog = gcAdminRows_('PointLog').find(function (row) { return row[3] === 'admin_adjust' && row[4] === id; });
+    if (priorLog) {
+      if (String(priorLog[1]).toLowerCase() !== email || Number(priorLog[2]) !== delta) gcError_('BAD_REQUEST', '送信IDの内容が一致しません');
+      const balanceAfter = Number(priorLog[5]);
+      if (Number(user.gPoint || 0) === balanceAfter - delta) {
+        user.gPoint = balanceAfter;
+        if (delta > 0) user.totalEarned = Number(user.totalEarned || 0) + delta;
+        user.updatedAt = new Date().toISOString();
+        gcWriteUser_(record, user);
+      }
+      audit.appendRow([id, identity.email, email, delta, reason, balanceAfter, priorLog[6]]);
+      return { email: email, delta: delta, gPoint: Number(user.gPoint || 0), reason: reason, alreadyApplied: true };
+    }
+    const balanceAfter = Number(user.gPoint || 0) + delta;
+    if (balanceAfter < 0) gcError_('NOT_ENOUGH_POINTS', '残高を0G未満にはできません');
+    const at = new Date().toISOString();
+    gcPointLog_(email, delta, 'admin_adjust', id, balanceAfter);
+    user.gPoint = balanceAfter;
+    if (delta > 0) user.totalEarned = Number(user.totalEarned || 0) + delta;
+    user.updatedAt = at;
+    gcWriteUser_(record, user);
+    audit.appendRow([id, identity.email, email, delta, reason, balanceAfter, at]);
+    return { email: email, delta: delta, gPoint: balanceAfter, reason: reason, alreadyApplied: false };
+  });
+}
+
+function gcAdminResetNickname_(token, payload, requestId) {
+  const identity = gcSession_(token, true);
+  const id = gcRequestId_(requestId);
+  const email = String(payload.email || '').trim().toLowerCase();
+  return gcWithLock_(function () {
+    const record = gcFindUser_(email);
+    if (!record) gcError_('NOT_FOUND', '利用者が見つかりません');
+    const user = gcUserObject_(record);
+    const audit = gcSheet_('AdminActions');
+    const previous = gcAdminRows_('AdminActions').find(function (row) { return row[0] === id; });
+    if (previous) return { email: email, nickname: String(user.nickname || ''), alreadyApplied: true };
+    const before = String(user.nickname || '');
+    if (!before) return { email: email, nickname: '', alreadyApplied: false };
+    audit.appendRow([id, identity.email, email, 'reset_nickname', before, '', new Date().toISOString()]);
+    user.nickname = ''; user.updatedAt = new Date().toISOString(); gcWriteUser_(record, user);
+    return { email: email, nickname: '', alreadyApplied: false };
+  });
+}
+
+function gcAdminExportData_(token, payload) {
+  gcSession_(token, true);
+  const table = String(payload.table || '');
+  if (!Object.prototype.hasOwnProperty.call(GC_HEADERS, table)) gcError_('BAD_REQUEST', '書き出すデータを選んでください');
+  const cursor = Number(payload.cursor || 0);
+  if (!Number.isInteger(cursor) || cursor < 0) gcError_('BAD_REQUEST', '書き出し位置を確認してください');
+  const sheet = gcSheet_(table);
+  const total = Math.max(0, sheet.getLastRow() - 1);
+  const count = Math.min(300, Math.max(0, total - cursor));
+  const rows = count ? sheet.getRange(cursor + 2, 1, count, GC_HEADERS[table].length).getValues().map(function (row) {
+    return row.map(function (value) { return value instanceof Date ? value.toISOString() : value; });
+  }) : [];
+  return { table: table, headers: GC_HEADERS[table], rows: rows, total: total, nextCursor: cursor + count < total ? cursor + count : null };
 }
