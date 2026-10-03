@@ -29,7 +29,7 @@
 
 # 段階5：学校アカウントとサーバーの準備
 
-段階5では、学校のGoogleアカウントでログインし、GASをサーバーとしてスプレッドシートにデータを保存します。Pages公開URLは `https://ken-ui-web.github.io/g-card/` です。OAuthの**承認済みの JavaScript 生成元**には、パスを除いた `https://ken-ui-web.github.io` を登録します。現在、GASコードとログイン画面はまだ作成前です。以下のうち「コード完成後」とある操作は、こちらから案内してから行ってください。
+段階5では、学校のGoogleアカウントでログインし、GASをサーバーとしてスプレッドシートにデータを保存します。Pages公開URLは `https://ken-ui-web.github.io/g-card/` です。OAuthの**承認済みの JavaScript 生成元**には、パスを除いた `https://ken-ui-web.github.io` を登録します。GASコード、ログイン画面、PWAのファイルは作成済みです。現在の作業手順は [STAGE5_CONNECT.md](STAGE5_CONNECT.md) を参照してください。
 
 **生徒のメールアドレス・氏名・名簿CSV・パスワードはGitHubに置きません。** GitHub Pagesには画面のコードと画像だけを置きます。名簿は学校アカウント所有の、先生だけが開けるスプレッドシートに保存し、GASだけが参照します。生徒はGoogleで認証し、GASが本人のメールアドレスを名簿と照合します。生徒の画面に名簿全体を送る処理は作りません。リポジトリが非公開でもPagesは公開され得るため、公開前にCSV・実名・秘密鍵が混入していないことを確認します。
 
@@ -47,13 +47,13 @@ Google公式：[ウェブ用クライアントIDの設定](https://developers.go
 
 1. 同じ学校アカウントで、Gカード専用の空のGoogleスプレッドシートを作ります。生徒名簿を入れるため、共有範囲は学校の方針に合わせ、一般公開しないでください。
 2. **拡張機能 → Apps Script** を開きます。このスプレッドシートに紐づくGASプロジェクトを使います。
-3. GASコードが完成したら、案内に従ってコードを貼り付け、`setup()` を実行します。必要なシートとヘッダー、カードの初期データはコードで作成します。
+3. [STAGE5_CONNECT.md](STAGE5_CONNECT.md) に従って `Code.gs` と `Bridge.html` を貼り付け、`setup()` を実行します。必要なシートとヘッダー、カードの初期データはコードで作成します。
 4. GASの **プロジェクトの設定 → スクリプト プロパティ** に、`GOOGLE_CLIENT_ID` と `SESSION_SECRET` を登録します。`GOOGLE_CLIENT_ID` は手順1のIDです。`SESSION_SECRET` は十分に長いランダムな値を先生側で作り、**チャットやGitHubには貼らない**でください。
 5. `setup()` 実行後、`Settings` シートの `schoolDomain` と `adminEmails` に学校ドメイン、先生のメールアドレスを入れます。名簿CSV（`email,class,number,name`）は管理者画面ができてからインポートします。
 
 Google公式：[スクリプト プロパティ](https://developers.google.com/apps-script/guides/properties)。
 
-## 3. GASをウェブアプリとして公開する（コード完成後）
+## 3. GASをウェブアプリとして公開する
 
 1. Apps Scriptの右上 **デプロイ → 新しいデプロイ** を開き、種類を **ウェブアプリ** にします。
 2. 実行ユーザーは **自分**（先生）、アクセスは仕様書の方針に合わせて **全員** に設定します。アプリ側でGoogleのIDトークン、学校ドメイン、名簿、セッションを検証します。学校管理者のポリシーによりこの設定が選べない場合は、その表示を控えてください。
@@ -61,7 +61,7 @@ Google公式：[スクリプト プロパティ](https://developers.google.com/a
 
 Google公式：[Apps Scriptウェブアプリのデプロイ](https://developers.google.com/apps-script/guides/web)。
 
-## 4. GitHub Actionsへ公開設定を渡す（接続コード完成後）
+## 4. GitHub Actionsへ公開設定を渡す
 
 リポジトリの **Settings → Secrets and variables → Actions → Variables → New repository variable** で、`VITE_GOOGLE_CLIENT_ID` と `VITE_GAS_URL` を登録します。両者はフロントのビルドに使う公開設定です。`SESSION_SECRET` と名簿は絶対に登録しないでください。必要なワークフロー修正はコードと一緒に行います。
 
@@ -73,4 +73,4 @@ GitHub公式：[Actionsのリポジトリ変数](https://docs.github.com/en/acti
 2. Safariの共有ボタンから **ホーム画面に追加** し、追加されたアイコンから起動して再度ログインを確認します。ホーム画面版のGoogleログインは実機での確認が必要です。
 3. ログイン後、ニックネーム、初期カード、ログインボーナスが表示され、スプレッドシートに記録されることを確認します。
 
-まず必要なのは **GitHubリポジトリのURLとPages公開URL** です。その後、学校Google CloudのクライアントIDを設定し、GASコード完成時に残りの操作へ進みます。
+GitHubリポジトリ・Pages URL・Google CloudクライアントID・学校用の空シートは準備済みです。残りは [STAGE5_CONNECT.md](STAGE5_CONNECT.md) のGAS配置と接続設定、iPad確認です。

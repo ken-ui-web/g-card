@@ -4,6 +4,7 @@ import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabel
 import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type PlayerIndex, type RoundLog } from './game/battle';
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
+import { Portal } from './portal/Portal';
 import './styles.css';
 
 type Screen = 'menu' | 'deck' | 'battle' | 'result';
@@ -239,6 +240,7 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
+  if (hash === '#/home' || hash === '#/admin') return <Portal adminRoute={hash === '#/admin'} />;
 
   const current = battle?.players[turn];
   const opponent = battle?.players[turn === 0 ? 1 : 0];

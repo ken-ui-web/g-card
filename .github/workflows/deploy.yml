@@ -29,6 +29,9 @@ jobs:
       - run: npm ci
       - name: ビルド
         shell: bash
+        env:
+          VITE_GAS_URL: ${{ vars.VITE_GAS_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
         run: |
           if [[ "${{ github.event.repository.name }}" == *.github.io ]]; then
             export VITE_BASE_PATH=/

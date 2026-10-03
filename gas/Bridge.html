@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>Gカード API</title></head>
+<body>
+<script>
+  google.script.url.getLocation(function (location) {
+    const parentOrigin = location.parameter.parentOrigin;
+    const nonce = location.parameter.nonce;
+    if (!parentOrigin || !nonce) return;
+    window.addEventListener('message', function (event) {
+      if (event.source !== window.top || event.origin !== parentOrigin) return;
+      const message = event.data;
+      if (!message || message.channel !== 'g-card-bridge-v1' || message.type !== 'request' ||
+          typeof message.id !== 'string' || !message.request) return;
+      google.script.run
+        .withSuccessHandler(function (result) {
+          window.top.postMessage({ channel: 'g-card-bridge-v1', type: 'response', id: message.id, result: result }, parentOrigin);
+        })
+        .withFailureHandler(function () {
+          window.top.postMessage({ channel: 'g-card-bridge-v1', type: 'response', id: message.id,
+            result: { ok: false, error: { code: 'SERVER_ERROR', message: 'サーバーで処理できませんでした' } } }, parentOrigin);
+        })
+        .bridgeRequest(message.request);
+    });
+    window.top.postMessage({ channel: 'g-card-bridge-v1', type: 'ready', nonce: nonce }, parentOrigin);
+  });
+</script>
+</body>
+</html>

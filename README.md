@@ -1,6 +1,6 @@
 # Gカード
 
-`docs/SPEC.md` の段階4までの独立した対戦試作アプリです。初期4枚（パンチ・キック・火縄銃・手品）に救急箱を加えた5枚から4枚を選び、CPU対戦 Lv1～3 と、この端末での2人対戦を試せます。次の段階5はログインとサーバー接続です。既存の授業管理システムには接続していません。
+`docs/SPEC.md` に沿ったGカードアプリです。段階4までの対戦試作に加え、段階5の学校Googleログイン・ホーム画面・GASとスプレッドシートのサーバーコード・PWAを実装しています。学校シートへのGAS配置とiPadでの実機確認はこれからです。既存の授業管理システムには接続していません。
 
 ## ローカルで遊ぶ
 
@@ -16,6 +16,6 @@ npm test
 npm run build
 ```
 
-段階3ではGポイント・ミッション・ランキング・ログイン・サーバー接続はありません。カード表面は枠・人物・文字を一体で生成した画像1枚を使い、ダメージ効果のあるカードの右上に最終ダメージだけを画面で重ねます。`design-source/` と `tools/build-card-fronts.cjs` は以前の試作記録です。
+試作対戦はGポイント・ミッション・ランキングに反映されません。カード表面は枠・人物・文字を一体で生成した画像1枚を使い、ダメージ効果のあるカードの右上に最終ダメージだけを画面で重ねます。`design-source/` と `tools/build-card-fronts.cjs` は以前の試作記録です。
 
-GitHub Pages への公開手順は [docs/SETUP.md](docs/SETUP.md)、実装と確認の記録は [docs/PROGRESS.md](docs/PROGRESS.md) を参照してください。
+GitHub Pages への公開手順は [docs/SETUP.md](docs/SETUP.md)、学校アカウントの接続は [docs/STAGE5_CONNECT.md](docs/STAGE5_CONNECT.md)、実装と確認の記録は [docs/PROGRESS.md](docs/PROGRESS.md) を参照してください。

@@ -30,6 +30,40 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .button--ghost:hover{background:#ffffff1d}
 .button:disabled{cursor:wait;opacity:.55;box-shadow:none}
 
+.portal-shell{padding-bottom:24px}
+.portal-brand img{display:block;width:155px;max-height:64px;object-fit:contain;object-position:left center}
+.portal-header nav{flex-wrap:wrap;justify-content:flex-end;gap:10px 22px}
+.portal-panel,.portal-overview,.portal-dashboard,.portal-menu,.portal-error{position:relative;width:min(1080px,calc(100% - 48px));margin-inline:auto}
+.portal-panel{max-width:680px;margin-top:52px;margin-bottom:60px;padding:clamp(26px,5vw,55px)}
+.portal-panel h1,.portal-overview h1{font:clamp(25px,3vw,38px)/1.4 'Dela Gothic One',sans-serif;margin:0 0 18px}
+.portal-panel p:not(.eyebrow){color:#d5e0f1;line-height:1.8}
+.portal-google-button{min-height:44px;margin-top:26px}
+.portal-form{display:flex;flex-wrap:wrap;align-items:end;gap:14px;margin-top:24px}
+.portal-form label{flex:1 1 240px;display:grid;gap:9px;font-weight:800}
+.portal-form input,.portal-panel input[type=file]{width:100%;min-height:48px;border:1px solid #ffffff55;border-radius:11px;background:#0a1430;color:#fff;padding:11px 13px}
+.portal-panel input[type=file]{margin:12px 0 22px}
+.portal-panel .button--ghost{margin-top:18px}
+.portal-overview{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:32px;padding:28px 34px}
+.portal-overview h1{margin:0}
+.portal-stats{display:flex;flex-wrap:wrap;gap:12px}
+.portal-stats strong{display:block;padding:12px 16px;border-radius:12px;background:#0b1733;color:#ffe083}
+.portal-dashboard{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.portal-dashboard .panel{padding:24px}
+.portal-dashboard h2{font-size:19px;margin:0 0 14px}
+.portal-dashboard p{margin:14px 0 0;color:#cdd9ec}
+.portal-stamps{display:flex;gap:7px;flex-wrap:wrap}
+.portal-stamps span{width:38px;height:38px;display:grid;place-items:center;border:1px solid #ffd56c66;border-radius:50%;color:#b9c8df;font-weight:800}
+.portal-stamps .is-stamped{background:#ffcf52;border-color:#ffcf52;color:#1a2442;box-shadow:0 0 13px #ffd15466}
+.portal-menu{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:25px;margin-bottom:40px}
+.portal-menu-item{min-height:118px;display:flex;flex-direction:column;gap:7px;padding:20px}
+.portal-menu-item>span{font-size:27px}
+.portal-menu-item strong{font-size:15px}
+.portal-menu-item small{color:#aabbd5}
+.portal-menu-item[href]:hover{border-color:#ffd45d;transform:translateY(-2px)}
+.portal-menu-item--pending{opacity:.7}
+.portal-error{max-width:680px;padding:14px 18px;border-radius:12px;border:1px solid #ff7d83;background:#5b202b;color:#fff;margin-bottom:24px}
+@media(max-width:760px){.portal-dashboard{grid-template-columns:1fr}.portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-overview{align-items:flex-start;flex-direction:column}.portal-header{height:auto;min-height:86px;padding-block:12px}.portal-brand img{width:125px}}
+
 .card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}
 .card img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
 .card__damage{position:absolute;top:2.4%;right:2%;width:19%;aspect-ratio:1;display:grid;place-items:center;color:#16213d;font-family:'Dela Gothic One','M PLUS Rounded 1c',sans-serif;font-weight:900;font-size:8cqw;line-height:1;text-shadow:0 1px #fff0a9}
