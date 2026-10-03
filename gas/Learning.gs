@@ -127,20 +127,23 @@ function gcLearnResult_(identity, test, row) {
 function gcSubmitTest_(token, payload, requestId) {
   const identity = gcSession_(token, false); gcLearningAccess_(identity); const id = gcRequestId_(requestId); const testId = String(payload.testId || '');
   if (!payload.answers || typeof payload.answers !== 'object' || JSON.stringify(payload.answers).length > 100000) gcError_('BAD_REQUEST', '回答を確認してください');
+  // 問題の読み込みと採点はロックの外で行う。35人の同時送信時も、残高更新だけを順番に処理する。
+  const paper = gcLearnTestById_(testId);
+  const questions = gcLearnQuestions_(testId, true); if (!questions.length) gcError_('NOT_AVAILABLE', '問題がありません');
+  let auto = 0; let maxScore = 0;
+  questions.forEach(function (q) {
+    const answer = payload.answers[q.questionId];
+    if (!gcLearnValidAnswer_(q, answer)) gcError_('BAD_ANSWER', '未回答または形式の違う答えがあります');
+    if (q.type === 'paragraph' && q.points > 0) gcError_('BAD_TEST', '長文問題の配点を0にしてください');
+    auto += gcLearnAutoScore_(q, answer); maxScore += q.points;
+  });
   return gcWithLock_(function () {
     const test = gcLearnTestById_(testId); const own = gcLearnResponses_(identity.email, testId);
     const old = own.find(function (row) { return row[0] === id; }); if (old) return gcLearnResult_(identity, test, old);
+    if (test.updatedAt !== paper.updatedAt) gcError_('TEST_CHANGED', 'テストが更新されました。開き直して回答してください');
     const record = gcFindUser_(identity.email); const user = gcUserObject_(record);
     if (!gcLearnAvailable_(test, user)) gcError_('NOT_AVAILABLE', 'このテストは受けられません');
     if (Number(test.settings.attemptLimit || 0) && own.length >= Number(test.settings.attemptLimit)) gcError_('LIMIT_REACHED', '受験回数の上限です');
-    const questions = gcLearnQuestions_(testId, true); if (!questions.length) gcError_('NOT_AVAILABLE', '問題がありません');
-    let auto = 0; let maxScore = 0;
-    questions.forEach(function (q) {
-      const answer = payload.answers[q.questionId];
-      if (!gcLearnValidAnswer_(q, answer)) gcError_('BAD_ANSWER', '未回答または形式の違う答えがあります');
-      if (q.type === 'paragraph' && q.points > 0) gcError_('BAD_TEST', '長文問題の配点を0にしてください');
-      auto += gcLearnAutoScore_(q, answer); maxScore += q.points;
-    });
     const best = gcLearnBest_(identity.email, testId);
     const award = gcLearnAward_(identity, user, test, best, auto, maxScore, id);
     const response = [id, testId, identity.email, own.length + 1, '', auto, 0, auto, maxScore, award.awarded, 'complete', new Date().toISOString()];
