@@ -113,6 +113,7 @@ function setup() {
   if (!properties.getProperty('SESSION_SECRET')) {
     properties.setProperty('SESSION_SECRET', [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('-'));
   }
+  ['Cards', 'Packs', 'Decks', 'Missions'].forEach(gcClearMasterCache_);
   return 'Gカードの設定が完了しました。Settings の schoolDomain と adminEmails、スクリプトプロパティの GOOGLE_CLIENT_ID を確認してください。';
 }
 
@@ -175,6 +176,23 @@ function gcSheet_(name) {
   const sheet = SpreadsheetApp.openById(gcProperty_('SPREADSHEET_ID')).getSheetByName(name);
   if (!sheet) gcError_('NOT_SETUP', '先生による初期設定が必要です');
   return sheet;
+}
+
+function gcMasterRows_(name) {
+  const key = 'gc-master:' + name;
+  try {
+    const cached = CacheService.getScriptCache().get(key);
+    if (cached) return JSON.parse(cached);
+  } catch (_) { /* キャッシュを読めない場合はシートから読む。 */ }
+  const rows = gcSheet_(name).getDataRange().getValues().slice(1);
+  try { CacheService.getScriptCache().put(key, JSON.stringify(rows), 60); }
+  catch (_) { /* キャッシュ容量を超えても処理は続ける。 */ }
+  return rows;
+}
+
+function gcClearMasterCache_(name) {
+  try { CacheService.getScriptCache().remove('gc-master:' + name); }
+  catch (_) { /* キャッシュが使えなくてもシートの更新は有効。 */ }
 }
 
 function gcSettings_() {
@@ -273,7 +291,7 @@ function gcEqual_(a, b) {
 function gcWithLock_(callback) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) gcError_('BUSY', '混み合っています。もう一度試してください');
-  try { return callback(); } finally { lock.releaseLock(); }
+  try { const result = callback(); SpreadsheetApp.flush(); return result; } finally { lock.releaseLock(); }
 }
 
 function gcLogin_(payload) {
@@ -303,7 +321,7 @@ function gcPointLogEntry_(email, reason, refId) {
   const sheet = gcSheet_('PointLog');
   if (sheet.getLastRow() < 2) return null;
   const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 5).getValues();
-  return rows.find(function (row) { return String(row[0]).toLowerCase() === email && row[2] === reason && String(row[3]) === refId; }) || null;
+  return rows.find(function (row) { return String(row[0]).toLowerCase() === email && row[2] === reason && gcDateKey_(row[3]) === refId; }) || null;
 }
 
 function gcSetNickname_(token, payload) {
@@ -336,10 +354,11 @@ function gcSetNickname_(token, payload) {
 }
 
 function gcToday_() { return Utilities.formatDate(new Date(), GC_TZ, 'yyyy-MM-dd'); }
+function gcDateKey_(value) { return value instanceof Date ? Utilities.formatDate(value, GC_TZ, 'yyyy-MM-dd') : String(value || ''); }
 function gcDayNumber_(dateText) { return Date.parse(dateText + 'T00:00:00Z') / 86400000; }
 
 function gcCardMaster_() {
-  return gcSheet_('Cards').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) {
+  return gcMasterRows_('Cards').filter(function (row) { return row[0]; }).map(function (row) {
     return { cardId: row[0], name: row[1], type: row[2], rarity: row[3], text: row[4], effects: JSON.parse(row[5] || '[]'), trainingMultiplier: Number(row[6] || 0), image: row[7], shopPrice: row[8] === '' ? null : Number(row[8]), inPack: row[9] === true, active: row[10] === true };
   });
 }
@@ -351,17 +370,18 @@ function gcOwned_(email) {
 }
 
 function gcPackMaster_() {
-  return gcSheet_('Packs').getDataRange().getValues().slice(1).filter(function (row) { return row[0] && row[9] === true; }).map(function (row) {
-    return { packId: String(row[0]), name: String(row[1]), price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), startAt: row[7] ? String(row[7]) : '', endAt: row[8] ? String(row[8]) : '' };
+  return gcMasterRows_('Packs').filter(function (row) { return row[0] && row[9] === true; }).map(function (row) {
+    return { packId: String(row[0]), name: String(row[1]), price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), startAt: row[7] ? gcDateKey_(row[7]) : '', endAt: row[8] ? gcDateKey_(row[8]) : '' };
   });
 }
 
-function gcCounter_(email, today) {
+function gcCounter_(email, today, create) {
   const sheet = gcSheet_('DailyCounters');
   const rows = sheet.getDataRange().getValues();
-  const index = rows.findIndex(function (row, i) { return i > 0 && String(row[0]).toLowerCase() === email && String(row[1]) === today; });
+  const index = rows.findIndex(function (row, i) { return i > 0 && String(row[0]).toLowerCase() === email && gcDateKey_(row[1]) === today; });
   if (index >= 0) return { sheet: sheet, rowNumber: index + 1, values: rows[index] };
   const values = [email, today, 0, 0, false, 0];
+  if (create === false) return { sheet: sheet, rowNumber: 0, values: values };
   sheet.appendRow(values);
   return { sheet: sheet, rowNumber: sheet.getLastRow(), values: values };
 }
@@ -375,47 +395,60 @@ function gcMissionPeriod_(period, today) {
 
 function gcMissionState_(email, today) {
   const progress = gcSheet_('MissionProgress').getDataRange().getValues();
-  return gcSheet_('Missions').getDataRange().getValues().slice(1).filter(function (row) { return row[0] && row[6] === true; }).map(function (row) {
+  return gcMasterRows_('Missions').filter(function (row) { return row[0] && row[6] === true; }).map(function (row) {
     const periodKey = gcMissionPeriod_(String(row[1]), today);
-    const found = progress.find(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === email && entry[1] === row[0] && String(entry[2]) === periodKey; });
+    const found = progress.find(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === email && entry[1] === row[0] && gcDateKey_(entry[2]) === periodKey; });
     return { missionId: String(row[0]), period: String(row[1]), condition: String(row[2]), targetCount: Number(row[3]), reward: Number(row[4]), label: String(row[5]), progress: found ? Number(found[3] || 0) : 0, completed: Boolean(found && found[4]) };
   });
 }
 
 function gcBattleConfig_(token) {
   gcSession_(token, false);
-  return gcSheet_('Decks').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) {
+  return gcBattleConfigRows_();
+}
+
+function gcBattleConfigRows_() {
+  return gcMasterRows_('Decks').filter(function (row) { return row[0]; }).map(function (row) {
     return { deckId: String(row[0]), name: String(row[1]), cardIds: JSON.parse(row[2] || '[]'), maxLife: Number(row[3] || 100), rockTrainLevel: Number(row[4] || 0) };
   });
 }
 
 function gcBootstrap_(token) {
   const identity = gcSession_(token, false);
-  return gcWithLock_(function () {
-    const record = gcFindUser_(identity.email);
-    const user = gcUserObject_(record);
-    const today = gcToday_();
-    const bonus = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
-    if (user.nickname && String(user.lastLoginDate || '') !== today) {
-      const previous = String(user.lastLoginDate || '');
-      const consecutive = previous && gcDayNumber_(today) - gcDayNumber_(previous) === 1;
-      const streak = consecutive ? Number(user.loginStreak || 0) + 1 : 1;
-      const award = (Number(identity.settings.loginBonus) || 10) + (streak % 7 === 0 ? Number(identity.settings.loginStreakBonus) || 100 : 0);
-      const prior = gcPointLogEntry_(identity.email, 'login_bonus', today);
-      if (!prior) gcPointLog_(identity.email, award, 'login_bonus', today, Number(user.gPoint || 0) + award);
-      user.gPoint = prior ? Number(prior[4]) : Number(user.gPoint || 0) + award;
-      user.totalEarned = Number(user.totalEarned || 0) + award;
-      user.loginStreak = streak;
-      user.lastLoginDate = today;
-      user.updatedAt = new Date().toISOString();
-      gcWriteUser_(record, user);
-      gcAwardMissions_(identity, user, { login: 1 });
-      gcWriteUser_(record, user);
-      bonus.awarded = !prior;
-      bonus.amount = prior ? 0 : award;
-      bonus.streak = streak;
-    }
-    return {
+  const today = gcToday_();
+  let user = gcUserObject_(identity.record);
+  let bonus = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
+  if (user.nickname && gcDateKey_(user.lastLoginDate) !== today) {
+    bonus = gcWithLock_(function () {
+      const record = gcFindUser_(identity.email);
+      const user = gcUserObject_(record);
+      const outcome = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
+      const previous = gcDateKey_(user.lastLoginDate);
+      if (user.nickname && previous !== today) {
+        const consecutive = previous && gcDayNumber_(today) - gcDayNumber_(previous) === 1;
+        const streak = consecutive ? Number(user.loginStreak || 0) + 1 : 1;
+        const award = (Number(identity.settings.loginBonus) || 10) + (streak % 7 === 0 ? Number(identity.settings.loginStreakBonus) || 100 : 0);
+        const prior = gcPointLogEntry_(identity.email, 'login_bonus', today);
+        if (!prior) {
+          user.gPoint = Number(user.gPoint || 0) + award;
+          user.totalEarned = Number(user.totalEarned || 0) + award;
+          gcPointLog_(identity.email, award, 'login_bonus', today, user.gPoint);
+        }
+        user.loginStreak = streak;
+        user.lastLoginDate = today;
+        user.updatedAt = new Date().toISOString();
+        gcWriteUser_(record, user);
+        gcAwardMissions_(identity, user, { login: 1 });
+        gcWriteUser_(record, user);
+        outcome.awarded = !prior;
+        outcome.amount = prior ? 0 : award;
+        outcome.streak = streak;
+      }
+      return outcome;
+    });
+    user = gcUserObject_(gcFindUser_(identity.email));
+  }
+  return {
       profile: { nickname: String(user.nickname || ''), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: !user.nickname,
       loginBonus: bonus,
@@ -423,13 +456,12 @@ function gcBootstrap_(token) {
       cardMaster: gcCardMaster_(),
       lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
       packs: gcPackMaster_(),
-      battleConfig: gcBattleConfig_(token),
+      battleConfig: gcBattleConfigRows_(),
       missions: gcMissionState_(identity.email, today),
-      daily: (function () { const counter = gcCounter_(identity.email, today).values; return { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) }; })(),
+      daily: (function () { const counter = gcCounter_(identity.email, today, false).values; return { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) }; })(),
       economy: { enabled: identity.admin || identity.settings.economyEnabled === '1', muscleCostBase: gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000), muscleCostStep: gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000), runCostBase: gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000), runCostStep: gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000), lifePerRun: gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), cpuRewardDailyCap: gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100), packDailyLimit: gcNumber_(identity.settings, 'packDailyLimit', 10, 0, 1000), sellPrices: { N: gcNumber_(identity.settings, 'sellN', 10, 0, 100000), R: gcNumber_(identity.settings, 'sellR', 30, 0, 100000), SR: gcNumber_(identity.settings, 'sellSR', 100, 0, 100000), UR: gcNumber_(identity.settings, 'sellUR', 300, 0, 100000) } },
       unreadTests: 0, pendingReflections: 0,
     };
-  });
 }
 
 function gcImportRoster_(token, payload) {
@@ -517,10 +549,10 @@ function gcAwardMissions_(identity, user, conditions) {
   const sheet = gcSheet_('MissionProgress');
   const rows = sheet.getDataRange().getValues();
   const completed = [];
-  gcSheet_('Missions').getDataRange().getValues().slice(1).forEach(function (mission) {
+  gcMasterRows_('Missions').forEach(function (mission) {
     if (!mission[0] || mission[6] !== true || !conditions[mission[2]]) return;
     const periodKey = gcMissionPeriod_(String(mission[1]), today);
-    let rowNumber = rows.findIndex(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === identity.email && entry[1] === mission[0] && String(entry[2]) === periodKey; }) + 1;
+    let rowNumber = rows.findIndex(function (entry, index) { return index > 0 && String(entry[0]).toLowerCase() === identity.email && entry[1] === mission[0] && gcDateKey_(entry[2]) === periodKey; }) + 1;
     const current = rowNumber ? Number(rows[rowNumber - 1][3] || 0) : 0;
     const done = rowNumber && rows[rowNumber - 1][4];
     if (done) return;
@@ -764,9 +796,9 @@ function gcAdminGetEconomy_(token) {
   return {
     settings: GC_ECONOMY_SETTINGS.map(function (row) { return { key: row[0], value: settings[row[0]] === undefined ? row[1] : settings[row[0]], description: row[2] }; }),
     cards: gcCardMaster_(),
-    packs: gcSheet_('Packs').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true }; }),
-    missions: gcSheet_('Missions').getDataRange().getValues().slice(1).filter(function (row) { return row[0]; }).map(function (row) { return { missionId: row[0], period: row[1], condition: row[2], targetCount: Number(row[3]), reward: Number(row[4]), label: row[5], active: row[6] === true }; }),
-    decks: gcBattleConfig_(token),
+    packs: gcMasterRows_('Packs').filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: JSON.parse(row[4] || '{}'), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true }; }),
+    missions: gcMasterRows_('Missions').filter(function (row) { return row[0]; }).map(function (row) { return { missionId: row[0], period: row[1], condition: row[2], targetCount: Number(row[3]), reward: Number(row[4]), label: row[5], active: row[6] === true }; }),
+    decks: gcBattleConfigRows_(),
   };
 }
 
@@ -783,6 +815,7 @@ function gcAdminSaveDeck_(token, payload) {
     const index = rows.findIndex(function (row) { return row[0] === payload.deckId; });
     if (index < 1) gcError_('NOT_SETUP', 'デッキを初期化してください');
     sheet.getRange(index + 1, 3, 1, 3).setValues([[JSON.stringify(payload.cardIds), Number(payload.maxLife), Number(payload.rockTrainLevel)]]);
+    gcClearMasterCache_('Decks');
     return { deckId: payload.deckId };
   });
 }
@@ -815,6 +848,7 @@ function gcAdminSaveCard_(token, payload) {
     const index = rows.findIndex(function (row) { return row[0] === payload.cardId; });
     if (index < 1) gcError_('BAD_REQUEST', 'カードが見つかりません');
     sheet.getRange(index + 1, 9, 1, 3).setValues([[price, payload.inPack, payload.active]]);
+    gcClearMasterCache_('Cards');
     return { cardId: payload.cardId, shopPrice: price, inPack: payload.inPack, active: payload.active };
   });
 }
@@ -842,6 +876,7 @@ function gcAdminSavePack_(token, payload) {
     const values = [payload.packId, payload.name.trim(), Number(payload.price), Number(payload.cardsPerPack), JSON.stringify(rates), JSON.stringify(pool), Number(payload.pityCount), existing[7] || '', existing[8] || '', payload.active];
     if (index >= 1) sheet.getRange(index + 1, 1, 1, GC_HEADERS.Packs.length).setValues([values]);
     else sheet.appendRow(values);
+    gcClearMasterCache_('Packs');
     return { packId: payload.packId };
   });
 }
@@ -860,6 +895,7 @@ function gcAdminSaveMission_(token, payload) {
     const values = [payload.missionId, payload.period, payload.condition, Number(payload.targetCount), Number(payload.reward), payload.label.trim(), payload.active, index >= 1 ? rows[index][7] : sheet.getLastRow()];
     if (index >= 1) sheet.getRange(index + 1, 1, 1, GC_HEADERS.Missions.length).setValues([values]);
     else sheet.appendRow(values);
+    gcClearMasterCache_('Missions');
     return { missionId: payload.missionId };
   });
 }

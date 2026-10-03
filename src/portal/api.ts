@@ -92,10 +92,11 @@ export async function callApi<T>(action: string, session: string | null, payload
       }
       return result.data;
     } catch (failure) {
-      const transient = failure instanceof TypeError || (failure instanceof DOMException && failure.name === 'AbortError');
+      const busy = (failure as Error & { code?: string })?.code === 'BUSY';
+      const transient = busy || failure instanceof TypeError || (failure instanceof DOMException && failure.name === 'AbortError');
       if (!transient) throw failure;
-      if (attempt === 2) throw new Error('サーバーと通信できません。接続を確認してもう一度試してください');
-      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+      if (attempt === 2) throw busy ? new Error('利用が集中しています。少し待ってからもう一度試してください') : new Error('サーバーと通信できません。接続を確認してもう一度試してください');
+      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1) + Math.random() * 350));
     } finally {
       window.clearTimeout(timeout);
     }
