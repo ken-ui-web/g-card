@@ -51,6 +51,7 @@ export interface BootstrapData {
   missions: MissionState[];
   daily: EconomyState['daily'];
   economy: { enabled: boolean; muscleCostBase: number; muscleCostStep: number; runCostBase: number; runCostStep: number; lifePerRun: number; cpuRewardDailyCap: number; packDailyLimit: number; sellPrices: Record<string, number> };
+  learning?: { enabled: boolean };
   unreadTests: number;
   pendingReflections: number;
 }
@@ -71,7 +72,7 @@ export function saveSession(session: string | null): void {
   } catch { /* Private browsing may deny storage; current login still works. */ }
 }
 
-export async function callApi<T>(action: string, session: string | null, payload: object = {}, requestId = crypto.randomUUID()): Promise<T> {
+export async function callApi<T>(action: string, session: string | null, payload: object = {}, requestId: string = crypto.randomUUID()): Promise<T> {
   if (!gasUrl) throw new Error('サーバーの接続先が未設定です');
   const body = JSON.stringify({ action, session, requestId, payload });
   for (let attempt = 0; attempt < 3; attempt++) {

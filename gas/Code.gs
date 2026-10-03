@@ -31,6 +31,7 @@ const GC_CARDS = [
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 const GC_ECONOMY_SETTINGS = [
   ['economyEnabled', '0', '生徒にGポイント機能を公開（0=停止、1=公開）'],
+  ['learningEnabled', '0', '生徒にテストと振り返り連携を公開（0=停止、1=公開）'],
   ['muscleCostBase', '20', '筋トレの基本価格'], ['muscleCostStep', '2', '筋トレ値ごとの価格上昇'],
   ['runCostBase', '60', '走り込みの基本価格'], ['runCostStep', '6', '走り込み回数ごとの価格上昇'],
   ['lifePerRun', '5', '走り込み1回の最大ライフ増加'], ['maxLifeCap', '', '最大ライフの上限。空欄なら無制限'],
@@ -38,6 +39,8 @@ const GC_ECONOMY_SETTINGS = [
   ['cpuRewardLv3', '20', 'CPU Lv3勝利報酬'], ['cpuRewardDailyCap', '3', 'CPU対戦報酬の1日上限'],
   ['firstWinBonus', '20', '本日の初勝利報酬'], ['packDailyLimit', '10', 'パックの1日購入上限'],
   ['sellN', '10', 'N売却価格'], ['sellR', '30', 'R売却価格'], ['sellSR', '100', 'SR売却価格'], ['sellUR', '300', 'UR売却価格'],
+  ['perfectBonus', '50', 'テストで初めて満点を取ったときのボーナス'],
+  ['defaultReflectionPoint', '20', '振り返りのお題の標準Gポイント'],
 ];
 const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true];
 const GC_STARTER_DECKS = [
@@ -113,6 +116,7 @@ function setup() {
   if (!properties.getProperty('SESSION_SECRET')) {
     properties.setProperty('SESSION_SECRET', [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('-'));
   }
+  if (!properties.getProperty('REFLECTION_REWARD_START_AT')) properties.setProperty('REFLECTION_REWARD_START_AT', new Date().toISOString());
   ['Cards', 'Packs', 'Decks', 'Missions'].forEach(gcClearMasterCache_);
   return 'Gカードの設定が完了しました。Settings の schoolDomain と adminEmails、スクリプトプロパティの GOOGLE_CLIENT_ID を確認してください。';
 }
@@ -161,6 +165,17 @@ function gcDispatch_(request) {
     case 'adminGetEconomy': return gcAdminGetEconomy_(request.session);
     case 'adminSaveDeck': return gcAdminSaveDeck_(request.session, request.payload || {});
     case 'getBattleConfig': return gcBattleConfig_(request.session);
+    case 'listTests': return gcListTests_(request.session);
+    case 'getTest': return gcGetTest_(request.session, request.payload || {});
+    case 'submitTest': return gcSubmitTest_(request.session, request.payload || {}, request.requestId);
+    case 'getTestResult': return gcGetTestResult_(request.session, request.payload || {});
+    case 'listReflections': return gcListReflections_(request.session);
+    case 'syncReflections': return gcSyncReflections_(request.session);
+    case 'adminListTests': return gcAdminListTests_(request.session);
+    case 'adminGetTest': return gcAdminGetTest_(request.session, request.payload || {});
+    case 'adminSaveTest': return gcAdminSaveTest_(request.session, request.payload || {});
+    case 'adminDeleteTest': return gcAdminDeleteTest_(request.session, request.payload || {});
+    case 'adminTestResponses': return gcAdminTestResponses_(request.session, request.payload || {});
     default: gcError_('NOT_IMPLEMENTED', 'この機能はまだ利用できません');
   }
 }
@@ -460,7 +475,9 @@ function gcBootstrap_(token) {
       missions: gcMissionState_(identity.email, today),
       daily: (function () { const counter = gcCounter_(identity.email, today, false).values; return { cpuRewards: Number(counter[2] || 0), packsBought: Number(counter[5] || 0) }; })(),
       economy: { enabled: identity.admin || identity.settings.economyEnabled === '1', muscleCostBase: gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000), muscleCostStep: gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000), runCostBase: gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000), runCostStep: gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000), lifePerRun: gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), cpuRewardDailyCap: gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100), packDailyLimit: gcNumber_(identity.settings, 'packDailyLimit', 10, 0, 1000), sellPrices: { N: gcNumber_(identity.settings, 'sellN', 10, 0, 100000), R: gcNumber_(identity.settings, 'sellR', 30, 0, 100000), SR: gcNumber_(identity.settings, 'sellSR', 100, 0, 100000), UR: gcNumber_(identity.settings, 'sellUR', 300, 0, 100000) } },
+      // ホーム表示のたびに受験履歴を全件走査しない。件数はテスト一覧を開いた時に取得する。
       unreadTests: 0, pendingReflections: 0,
+      learning: { enabled: identity.admin || identity.settings.learningEnabled === '1' },
     };
 }
 
@@ -827,7 +844,7 @@ function gcAdminSaveSettings_(token, payload) {
   const value = String(payload.value === undefined ? '' : payload.value).trim();
   if (value !== '' && (!/^\d+$/.test(value) || Number(value) > 100000)) gcError_('BAD_REQUEST', '0以上の整数を入力してください');
   if (value === '' && payload.key !== 'maxLifeCap') gcError_('BAD_REQUEST', '数値を入力してください');
-  if (payload.key === 'economyEnabled' && value !== '0' && value !== '1') gcError_('BAD_REQUEST', '公開設定は0か1にしてください');
+  if ((payload.key === 'economyEnabled' || payload.key === 'learningEnabled') && value !== '0' && value !== '1') gcError_('BAD_REQUEST', '公開設定は0か1にしてください');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Settings');
     const rows = sheet.getDataRange().getValues();
