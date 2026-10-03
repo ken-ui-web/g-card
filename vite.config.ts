@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   plugins: [react(), VitePWA({
     registerType: 'autoUpdate',
-    includeAssets: ['images/brand/app-icon-192.png', 'images/brand/app-icon-512.png'],
+    includeAssets: ['images/brand/app-icon-192.png', 'images/brand/app-icon-512.png', 'images/brand/apple-touch-icon-180.png'],
     manifest: {
       name: 'Gカード', short_name: 'Gカード', description: '学校で学び、カードで遊ぶ',
       lang: 'ja', start_url: './#/home', scope: './', display: 'standalone',

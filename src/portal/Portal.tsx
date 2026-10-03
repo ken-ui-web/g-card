@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { callApi, googleClientId, portalConfigured, saveSession, savedSession, type BootstrapData } from './api';
+import { PortalIcon, type PortalIconName } from './Icons';
 
 declare global {
   interface Window {
@@ -37,13 +38,13 @@ function GoogleButton({ onCredential }: { onCredential: (credential: string) => 
 }
 
 const menuItems = [
-  { icon: '📝', title: 'テストを受ける', key: 'tests' },
-  { icon: '✍️', title: '振り返りを書く', key: 'reflections' },
-  { icon: '⚔️', title: '対戦する', key: 'battle' },
-  { icon: '🃏', title: 'デッキ・図鑑', key: 'deck' },
-  { icon: '🛒', title: 'カード購入', key: 'shop' },
-  { icon: '💪', title: 'トレーニング', key: 'training' },
-  { icon: '🏆', title: 'ランキング', key: 'ranking' },
+  { icon: 'test', title: 'テストを受ける', key: 'tests' },
+  { icon: 'reflection', title: '振り返りを書く', key: 'reflections' },
+  { icon: 'battle', title: '対戦する', key: 'battle' },
+  { icon: 'deck', title: 'デッキ・図鑑', key: 'deck' },
+  { icon: 'shop', title: 'カード購入', key: 'shop' },
+  { icon: 'training', title: 'トレーニング', key: 'training' },
+  { icon: 'ranking', title: 'ランキング', key: 'ranking' },
 ] as const;
 
 export function Portal({ adminRoute }: { adminRoute: boolean }) {
@@ -117,9 +118,9 @@ export function Portal({ adminRoute }: { adminRoute: boolean }) {
         : needsNickname ? <section className="portal-panel panel"><p className="eyebrow">FIRST STEP</p><h1>ニックネームを決めよう</h1><p>対戦やランキングで表示する名前です。8文字以内で入力してください。</p><form onSubmit={submitNickname} className="portal-form"><label>ニックネーム<input value={nickname} maxLength={8} onChange={(event) => setNickname(event.target.value)} required /></label><button className="button button--primary" disabled={busy || !nickname.trim()}>決定する</button></form></section>
           : !bootstrap ? <section className="portal-panel panel" role="status"><h1>ホームを読み込み中…</h1></section>
             : adminRoute ? <section className="portal-panel panel"><p className="eyebrow">ADMIN</p><h1>名簿CSVの取込</h1>{bootstrap.profile.role !== 'admin' ? <p>管理者のみ利用できます。</p> : <><p>列名は <code>email,class,number,name</code>。取込前に名簿全体は画面に表示しません。</p><input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setCsv).catch(() => setError('CSVを読めませんでした')); }} /><button type="button" className="button button--primary" disabled={!csv || busy} onClick={importRoster}>名簿を取り込む</button>{importResult && <p role="status">追加 {importResult.added} 件、更新 {importResult.updated} 件</p>}</>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
-              : <><section className="portal-overview panel"><div><p className="eyebrow">MY HOME</p><h1>{bootstrap.profile.nickname}さん</h1></div><div className="portal-stats"><strong>💰 {bootstrap.profile.gPoint.toLocaleString()} G</strong><strong>❤ 最大ライフ {bootstrap.profile.maxLife}</strong></div></section>
-                <section className="portal-dashboard"><div className="portal-bonus panel"><h2>📅 ログインボーナス</h2><div className="portal-stamps">{Array.from({ length: 7 }, (_, index) => <span className={index < ((bootstrap.loginBonus.streak - 1) % 7) + 1 ? 'is-stamped' : ''} key={index}>{index + 1}</span>)}</div><p>{bootstrap.loginBonus.awarded ? `今日のボーナス +${bootstrap.loginBonus.amount}G！` : '今日のスタンプは押してあります。'}</p></div><div className="portal-missions panel"><h2>🎯 今日のミッション</h2><p>ミッションは次の段階で利用できます。</p></div></section>
-                <section className="portal-menu">{menuItems.map((item) => item.key === 'battle' ? <a key={item.key} href="#/battle" className="portal-menu-item panel"><span>{item.icon}</span><strong>{item.title}</strong></a> : <div key={item.key} className="portal-menu-item portal-menu-item--pending panel"><span>{item.icon}</span><strong>{item.title}</strong><small>準備中</small></div>)}</section></>}
+              : <><section className="portal-overview panel"><div><p className="eyebrow">MY HOME</p><h1>{bootstrap.profile.nickname}さん</h1></div><div className="portal-stats"><strong><PortalIcon name="coin" />{bootstrap.profile.gPoint.toLocaleString()} G</strong><strong><PortalIcon name="life" />最大ライフ {bootstrap.profile.maxLife}</strong></div></section>
+                <section className="portal-dashboard"><div className="portal-bonus panel"><h2>ログインボーナス</h2><div className="portal-stamps">{Array.from({ length: 7 }, (_, index) => <span className={index < ((bootstrap.loginBonus.streak - 1) % 7) + 1 ? 'is-stamped' : ''} key={index}>{index < ((bootstrap.loginBonus.streak - 1) % 7) + 1 ? <PortalIcon name="stamp" /> : index + 1}</span>)}</div><p>{bootstrap.loginBonus.awarded ? `今日のボーナス +${bootstrap.loginBonus.amount}G！` : '今日のスタンプは押してあります。'}</p></div><div className="portal-missions panel"><h2>今日のミッション</h2><p>ミッションは次の段階で利用できます。</p></div></section>
+                <section className="portal-menu">{menuItems.map((item) => item.key === 'battle' ? <a key={item.key} href="#/battle" className="portal-menu-item panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong></a> : <div key={item.key} className="portal-menu-item portal-menu-item--pending panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong><small>準備中</small></div>)}</section></>}
     {error && <p className="portal-error" role="alert">{error}</p>}
     <footer className="app-footer">Gカード · 学校アカウントのホーム</footer>
   </main>;
