@@ -43,4 +43,4 @@ GitHubの `ken-ui-web/g-card` で **Settings → Secrets and variables → Actio
 4. 名簿内の生徒アカウントでログインし、初期カード4枚、初回100G、日次10Gがシートに記録されるか確かめます。名簿にないアカウントは拒否されることも確認します。
 5. iPad Safariで**ホーム画面に追加**し、そこから開いてログインを確認します。この実機確認が終わるまで、段階5のチェックは未完了です。
 
-GASのHTML Serviceと `google.script.run` を使ってPagesとの通信を行います。学校のGoogle Workspace設定やiPadのログイン動作は、実際のデプロイ後に確認が必要です。
+PagesからGASの `doPost` へJSONを送ります。ブラウザーからの通信と無効セッション拒否は確認済みです。学校のGoogle Workspace設定やiPadのログイン動作は、実機での確認が必要です。
