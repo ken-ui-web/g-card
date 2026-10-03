@@ -5,6 +5,7 @@ import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
+import { portalConfigured } from './portal/api';
 import './styles.css';
 
 type Screen = 'menu' | 'deck' | 'battle' | 'result';
@@ -240,7 +241,7 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
-  if (hash === '#/home' || hash === '#/admin') return <Portal adminRoute={hash === '#/admin'} />;
+  if (hash === '#/home' || hash === '#/admin' || (!hash && portalConfigured)) return <Portal adminRoute={hash === '#/admin'} />;
 
   const current = battle?.players[turn];
   const opponent = battle?.players[turn === 0 ? 1 : 0];
@@ -252,7 +253,7 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
-        <nav><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a></nav>
+        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a></nav>
       </header>
 
       {screen === 'menu' && <>
