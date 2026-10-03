@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { callApi, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
 import { availableCards } from '../data/cards';
 import { PortalIcon, type PortalIconName } from './Icons';
@@ -25,11 +26,18 @@ function CardTile({ card, owned, children, className = '' }: { card: CardMaster;
 }
 
 export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedback; onClose: () => void }) {
-  return <div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (feedback.phase !== 'working') return;
+    const started = Date.now();
+    const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [feedback.phase]);
+  return createPortal(<div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
     {feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
     <p className="eyebrow">{feedback.phase === 'working' ? 'PROCESSING' : feedback.phase === 'done' ? 'COMPLETE' : 'TRY AGAIN'}</p><h2>{feedback.title}</h2>
-    {feedback.phase === 'working' ? <p role="status">サーバーからの返事を待っています</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
-  </div></div>;
+    {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : 'サーバーからの返事を待っています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
+  </div></div>, document.body);
 }
 
 export function EconomyPages({ page, session, data, onState }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void }) {
@@ -105,7 +113,7 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
   if (page === 'training') {
     const projected = pendingCost(data, pendingTrain);
     const runCost = data.economy.runCostBase + data.economy.runCostStep * projected.runs;
-    return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">TRAINING</p><h1>トレーニング</h1><p className="economy-balance">所持 {(data.profile.gPoint - projected.cost).toLocaleString()} G · 最大ライフ {data.profile.maxLife + (projected.runs - data.profile.runCount) * data.economy.lifePerRun}</p><div className={`economy-run panel ${pendingTrain.some((item) => item.kind === 'run') ? 'is-training' : ''}`}><h2>走り込み</h2><p>1回で最大ライフ +{data.economy.lifePerRun}。次の1回：{runCost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < runCost} onClick={() => queueTraining('run')}>走り込む</button></div><h2>筋トレ</h2><p>グーカード1枚ごとに育てられます。1回でダメージ +1。</p><div className="economy-grid">{data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').map((owned) => { const card = cardById(owned.cardId)!; const queued = pendingTrain.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * (owned.trainLevel + queued); return <CardTile key={owned.ownedId} card={card} owned={{ ...owned, trainLevel: owned.trainLevel + queued }} className={queued ? 'is-training' : ''}><p>次の1回：{cost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < cost} onClick={() => queueTraining('muscle', owned.ownedId)}>筋トレする</button></CardTile>; })}</div>{pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
+    return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">TRAINING</p><h1>トレーニング</h1><p className="economy-balance">所持 {(data.profile.gPoint - projected.cost).toLocaleString()} G · 最大ライフ {data.profile.maxLife + (projected.runs - data.profile.runCount) * data.economy.lifePerRun}</p><div className={`economy-run panel ${pendingTrain.some((item) => item.kind === 'run') ? 'is-training' : ''}`}><h2>走り込み</h2><p>1回で最大ライフ +{data.economy.lifePerRun}。次の1回：{runCost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < runCost} onClick={() => queueTraining('run')}>走り込む</button>{pendingTrain.some((item) => item.kind === 'run') && <p className="economy-inline-working" role="status">保存を準備中…</p>}</div><h2>筋トレ</h2><p>グーカード1枚ごとに育てられます。1回でダメージ +1。</p><div className="economy-grid">{data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').map((owned) => { const card = cardById(owned.cardId)!; const queued = pendingTrain.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * (owned.trainLevel + queued); return <CardTile key={owned.ownedId} card={card} owned={{ ...owned, trainLevel: owned.trainLevel + queued }} className={queued ? 'is-training' : ''}><p>次の1回：{cost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < cost} onClick={() => queueTraining('muscle', owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-inline-working" role="status">{queued}回分を保存準備中…</p>}</CardTile>; })}</div>{pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }
 
   const toggle = (ownedId: string) => setSelected((current) => current.includes(ownedId) ? current.filter((id) => id !== ownedId) : current.length < 4 ? [...current, ownedId] : current);

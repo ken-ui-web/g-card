@@ -86,12 +86,14 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 @keyframes economy-card-reveal{to{opacity:1;transform:perspective(700px) rotateY(0) scale(1)}}
 .economy-card.is-training,.economy-run.is-training{border-color:#ffda68;box-shadow:0 0 0 2px #ffda682b,0 0 32px #ffda682a}
 .economy-card.is-training img{animation:economy-training-pulse .5s ease-in-out infinite alternate}
+.economy-inline-working{display:flex;align-items:center;gap:8px;color:#ffe083!important;font-size:14px;font-weight:800}
+.economy-inline-working::before{content:'';width:12px;height:12px;flex:none;border:2px solid #ffd45d;border-top-color:transparent;border-radius:50%;animation:economy-feedback-spin .75s linear infinite}
 @keyframes economy-training-pulse{to{transform:translateY(-8px) rotate(-2deg);filter:drop-shadow(0 0 15px #ffdf77)}}
 .economy-training-status{position:relative;overflow:hidden;padding:15px 18px;border:1px solid #ffd769;border-radius:12px;background:#3a3424;color:#fff!important;font-weight:900}
 .economy-training-status span{color:#ffe39a;font-size:13px;margin-left:8px}
 .economy-training-status::after{content:'';position:absolute;left:0;bottom:0;height:4px;width:100%;background:#ffdb6a;transform-origin:left;animation:economy-queue-progress .8s linear both}
 @keyframes economy-queue-progress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.economy-feedback-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:#050b1bdb;backdrop-filter:blur(6px)}
+.economy-feedback-backdrop{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#050b1bdb;backdrop-filter:blur(6px)}
 .economy-feedback{width:min(100%,470px);max-height:calc(100dvh - 40px);overflow:auto;padding:27px 24px;text-align:center;border-color:#ffd86b;box-shadow:0 25px 80px #000a,0 0 50px #ffcf4638;animation:economy-feedback-in .45s cubic-bezier(.2,.9,.3,1.15) both}
 .economy-feedback--error{border-color:#ff8e91;box-shadow:0 25px 80px #000a,0 0 40px #fa596231}
 .economy-feedback .eyebrow{margin:12px 0 8px;color:#ffd86b}

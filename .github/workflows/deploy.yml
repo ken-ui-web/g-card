@@ -32,6 +32,7 @@ jobs:
         env:
           VITE_GAS_URL: ${{ vars.VITE_GAS_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_BUILD_VERSION: ${{ github.sha }}
         run: |
           if [[ "${{ github.event.repository.name }}" == *.github.io ]]; then
             export VITE_BASE_PATH=/
