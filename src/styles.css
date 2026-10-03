@@ -1,0 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap');
+
+:root{font-family:'M PLUS Rounded 1c',sans-serif;color:#f8f5e9;background:#0d1530;font-synthesis:none;font-size:16px}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px}
+button,input,select{font:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.55}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #fff1ab;outline-offset:3px}
+a{color:inherit;text-decoration:none}
+img{user-select:none;-webkit-user-drag:none}
+
+.app-shell{min-height:100vh;overflow:hidden;position:relative;background:radial-gradient(circle at 84% 2%,#2b3e72 0,transparent 29%),radial-gradient(circle at 2% 42%,#18345e 0,transparent 34%),linear-gradient(180deg,#0c1632,#0b1229)}
+.app-shell::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.35;background-image:linear-gradient(#ffffff09 1px,transparent 1px),linear-gradient(90deg,#ffffff09 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(#000,transparent 82%)}
+.app-header,.hero,.mode-panel,.deck-page,.battle-page,.result-page,.tuning-page,.app-footer{position:relative;width:min(1180px,calc(100% - 48px));margin-inline:auto}
+.app-header{height:86px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #ffffff28}
+.app-header nav{display:flex;align-items:center;gap:25px}
+.brand{display:flex;align-items:center;gap:12px;border:0;background:none;color:#fff;font:20px 'Dela Gothic One',sans-serif;padding:0}
+.brand span{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;transform:rotate(-8deg);background:#ffd34b;color:#11203d;box-shadow:0 5px 0 #9c6711;font:26px 'Dela Gothic One',sans-serif}
+.text-link{border:0;background:none;color:#d3e0f8;font-weight:800;font-size:14px;padding:10px 0}
+.text-link:hover{color:#ffdc6f}
+.eyebrow{margin:0 0 12px;color:#ffd05a;letter-spacing:.14em;font-size:12px;font-weight:800}
+h1,h2,h3,p{overflow-wrap:anywhere}
+.panel{background:linear-gradient(145deg,#19254d,#131d3e);border:1px solid #ffffff26;border-radius:24px;box-shadow:0 22px 48px #03081783}
+.button-row{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-top:25px}
+.button{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:50px;padding:12px 25px;border-radius:12px;border:1px solid transparent;font-weight:800;text-align:center}
+.button--primary{background:#ffd449;color:#13203c;box-shadow:0 5px 0 #a06d0d}
+.button--primary:hover:not(:disabled){background:#ffe27a;transform:translateY(-1px)}
+.button--ghost{border-color:#8da9d555;background:#ffffff0d;color:#f7f5e9}
+.button--ghost:hover{background:#ffffff1d}
+.button:disabled{cursor:wait;opacity:.55;box-shadow:none}
+
+.card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}
+.card img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.card__damage{position:absolute;top:2.4%;right:2%;width:19%;aspect-ratio:1;display:grid;place-items:center;color:#16213d;font-family:'Dela Gothic One','M PLUS Rounded 1c',sans-serif;font-weight:900;font-size:8cqw;line-height:1;text-shadow:0 1px #fff0a9}
+
+.hero{min-height:410px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:28px;padding:46px 0 32px}
+.hero__copy{position:relative;z-index:2}
+.hero h1{font:clamp(30px,3.4vw,49px)/1.45 'Dela Gothic One',sans-serif;margin:0 0 20px}
+.hero h1 em{font-style:normal;color:#ffda62}
+.hero__copy>p:last-child{max-width:500px;color:#c9d5ea;line-height:1.9;margin:0}
+.hero__cards{height:330px;position:relative}
+.hero__cards .card{width:168px;position:absolute;left:50%;top:15px;transform-origin:50% 100%}
+.hero__cards .card:nth-child(1){transform:translateX(-128%) rotate(-17deg)}
+.hero__cards .card:nth-child(2){transform:translateX(-74%) rotate(-6deg)}
+.hero__cards .card:nth-child(3){transform:translateX(-22%) rotate(7deg)}
+.hero__cards .card:nth-child(4){transform:translateX(29%) rotate(18deg)}
+.mode-panel{padding:28px 32px;margin-bottom:36px}
+.section-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
+.section-heading>span{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:1px solid #ffd253;color:#ffdc75;font-weight:800;font-size:12px}
+.section-heading h2{font:22px 'Dela Gothic One',sans-serif;margin:0 0 4px}
+.section-heading p{margin:0;color:#bfcce1;font-size:13px}
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mode-option{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:20px 22px;text-align:left;border:2px solid #ffffff22;border-radius:17px;background:#101a38;color:#fff}
+.mode-option.is-active{border-color:#ffd355;background:#283456;box-shadow:inset 0 0 0 2px #ffd35520}
+.mode-option__icon{color:#ffda67;font-size:23px;line-height:1}
+.mode-option strong{font-size:18px}
+.mode-option small{color:#b9c7df;font-size:13px}
+.level-picker,.name-grid{margin-top:22px}
+.level-picker>strong{display:block;margin-bottom:10px}
+.level-picker>div{display:flex;gap:10px;flex-wrap:wrap}
+.level-picker button{min-width:118px;min-height:62px;border:1px solid #ffffff37;border-radius:12px;background:#0e1936;color:#fff;font-weight:800}
+.level-picker button[aria-pressed='true']{border:2px solid #ffd252;background:#3c3b46;color:#ffdc75}
+.level-picker button small{display:block;font-size:11px;color:#b8c8e0;font-weight:500}
+.name-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.name-grid label,.tuning-grid label{display:flex;flex-direction:column;gap:8px;font-weight:800}
+.name-grid input,.tuning-grid input,.tuning-grid select{width:100%;min-height:48px;border:1px solid #ffffff42;border-radius:10px;background:#0a1430;color:#fff;padding:8px 12px}
+
+.deck-page{padding:34px;margin-top:30px;margin-bottom:35px}
+.deck-page h1,.tuning-page h1{font:clamp(27px,3vw,38px) 'Dela Gothic One',sans-serif;margin:0 0 9px}
+.deck-page>p:not(.eyebrow),.tuning-page>p:not(.eyebrow){color:#c5d2e7;line-height:1.8;margin:0 0 22px}
+.deck-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:15px}
+.deck-card{display:flex;flex-direction:column;align-items:center;padding:15px;border-radius:16px;background:#0d1836;border:2px solid #ffffff1c;color:#fff;text-align:left;cursor:pointer}
+.deck-card.is-selected{border-color:#ffd451;background:#1b2845}
+.deck-card:hover:not(:disabled){transform:translateY(-3px);border-color:#ffdf7c}
+.deck-card:disabled{opacity:.55;cursor:default}
+.deck-card .card{max-width:190px}
+.deck-card strong{align-self:stretch;margin-top:12px;font-size:16px}
+.deck-card span{align-self:stretch;color:#b6c6df;font-size:12px;line-height:1.6}
+.deck-card small{align-self:stretch;margin-top:auto;padding-top:10px;color:#ffdc75;font-weight:800}
+.deck-note{margin-top:20px;padding:17px 20px;border-radius:14px;background:#ffd45112;border:1px solid #ffd45138}
+.deck-note strong{color:#ffdc73}
+.deck-note p{margin:5px 0 0;color:#d3def0;line-height:1.7;font-size:14px}
+
+.battle-page{padding-top:30px;padding-bottom:30px}
+.battle-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:20px}
+.battle-heading h1{font:28px 'Dela Gothic One',sans-serif;margin:0}
+.battle-heading h1 span{color:#8597bb;font-size:16px}
+.round-pill{border:1px solid #ffd65d77;border-radius:30px;padding:8px 15px;color:#ffdc7c;font-size:13px;font-weight:800}
+.life-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.life{padding:15px 18px;border-radius:16px;border:1px solid #ffffff25;background:#111d3d}
+.life__row{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px}
+.life__row span{font-weight:800;color:#e8effe}
+.life__track{height:14px;border-radius:20px;background:#ffffff1a;overflow:hidden;border:1px solid #ffffff24}
+.life__track span{display:block;height:100%;border-radius:20px;transition:width .65s ease,background-color .3s}
+.selection-board{padding:25px 30px}
+.hand-block__heading{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:14px}
+.hand-block__heading h3{font:18px 'Dela Gothic One',sans-serif;margin:0}
+.hand-block__heading span{color:#adc0db;font-size:13px}
+.back-row,.select-grid,.target-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.back-card{display:flex;flex-direction:column;align-items:center;gap:8px}
+.back-card .card{max-width:145px}
+.back-card>span{font-size:13px;color:#d0def4;font-weight:800}
+.board-divider{display:flex;align-items:center;gap:16px;margin:22px 0;color:#ffdc6d;font:18px 'Dela Gothic One',sans-serif}
+.board-divider::before,.board-divider::after{content:'';height:1px;background:#ffffff29;flex:1}
+.select-card{display:flex;flex-direction:column;align-items:stretch;gap:5px;padding:11px;border:2px solid #ffffff1e;border-radius:16px;background:#0d1733;color:#fff;text-align:left;min-width:0}
+.select-card:hover{border-color:#ffd451;transform:translateY(-3px)}
+.select-card .card{max-width:185px;margin-inline:auto}
+.select-card strong{margin-top:8px;font-size:16px}
+.select-card>span{font-size:12px;color:#c3d1e8;line-height:1.5;min-height:38px}
+.select-card small{display:grid;place-items:center;min-height:40px;margin-top:auto;border-radius:9px;background:#ffdc5a;color:#17233e;font-weight:900;font-size:12px}
+.final-open{display:flex;justify-content:center;align-items:center;gap:35px;padding:18px}
+.final-open>div:last-child{max-width:410px}
+.final-open h2,.thinking h2{font:27px 'Dela Gothic One',sans-serif;margin:0 0 10px}
+.final-open p:not(.eyebrow),.thinking p{color:#c3d2e9;line-height:1.8}
+.thinking{text-align:center;padding:50px 15px;min-height:245px}
+.thinking__gear{display:block;font-size:42px;color:#ffda61;animation:spin 2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.handoff{padding:65px 25px;text-align:center;margin-top:20px}
+.handoff__icon{display:block;font-size:51px;color:#ffdd65;margin-bottom:10px}
+.handoff h2{font:clamp(26px,4vw,39px) 'Dela Gothic One',sans-serif;margin:0 0 16px}
+.handoff>p:not(.eyebrow){color:#c7d3e8;line-height:1.8;margin:0 auto 23px;max-width:460px}
+
+.round-intro{min-height:420px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:42px 20px;background:radial-gradient(circle at center,#384f82 0,#19254d 43%,#111b3b 100%)}
+.round-intro__number{font:clamp(42px,8vw,88px) 'Dela Gothic One',sans-serif;color:#ffdf72;text-shadow:0 5px 0 #8c5d19,0 0 40px #ffd55980;animation:round-appear .8s ease both}
+.round-intro>p:not(.eyebrow){font-size:clamp(17px,2.5vw,23px);font-weight:800;color:#e0e9f8;margin:12px 0 28px}
+.round-intro--suspense{background:radial-gradient(circle at center,#364878 0,#19254d 38%,#111b3b 100%);animation:arena-pulse 1.1s ease-in-out infinite alternate}
+.round-intro__suspense{display:flex;flex-direction:column;align-items:center;gap:24px;animation:round-appear .45s ease both}
+.round-intro__versus{width:150px;height:150px;display:grid;place-items:center;border:2px solid #ffdc7180;border-radius:50%;background:#ffd35116;box-shadow:0 0 0 12px #ffd35110,0 0 50px #ffd35173;color:#ffdd72;font:clamp(48px,7vw,76px) 'Dela Gothic One',sans-serif;animation:versus-thump .75s ease-in-out infinite alternate}
+.round-intro__suspense p{margin:0;color:#e6efff;font-size:clamp(19px,3vw,28px);font-weight:900;letter-spacing:.08em}
+.round-intro__pulse{display:flex;gap:12px}
+.round-intro__pulse span{width:13px;height:13px;border-radius:50%;background:#ffdc6c;animation:pulse .9s ease-in-out infinite alternate}
+.round-intro__pulse span:nth-child(2){animation-delay:.2s}.round-intro__pulse span:nth-child(3){animation-delay:.4s}
+@keyframes round-appear{from{opacity:0;transform:scale(.75)}to{opacity:1;transform:scale(1)}}
+@keyframes arena-pulse{to{background-color:#263e70}}
+@keyframes versus-thump{to{transform:scale(1.1);box-shadow:0 0 0 22px #ffd35108,0 0 70px #ffd351a0}}
+@keyframes pulse{to{opacity:.25;transform:scale(.7)}}
+
+.reveal-panel,.summary-panel,.target-panel{padding:26px 30px;text-align:center}
+.reveal-panel h2,.summary-panel h2,.target-panel h2{font:clamp(25px,3.3vw,39px) 'Dela Gothic One',sans-serif;margin:0 0 20px;color:#ffdd6b}
+.reveal-verdict{margin-bottom:15px;animation:verdict-appear .5s .65s both}
+.reveal-verdict h2{margin:7px 0 6px}
+.reveal-verdict>p:last-child{margin:0;color:#cddbf0;font-weight:700}
+.reveal-verdict__types{font:clamp(23px,4vw,43px) 'Dela Gothic One',sans-serif;margin:0;color:#fff}
+.reveal-verdict__types span{font-size:.45em;color:#ffcf53;vertical-align:middle;margin:0 12px}
+.reveal-grid,.summary-cards{display:flex;justify-content:center;align-items:start;gap:clamp(22px,7vw,100px)}
+.reveal-entry,.summary-cards>div{display:flex;flex-direction:column;align-items:center;gap:11px;font-weight:800}
+.reveal-entry.is-dealt{animation:card-deal .65s cubic-bezier(.16,.8,.25,1.2) both}
+.reveal-entry.is-dealt:nth-child(2){animation-delay:.2s}
+.reveal-entry.is-winner .flip-card{filter:drop-shadow(0 0 17px #ffdb55b5)}
+@keyframes card-deal{from{opacity:0;transform:translateY(90px) scale(.75) rotate(-8deg)}to{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+@keyframes verdict-appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.reveal-entry__type{display:block;border-radius:22px;padding:7px 16px;background:#ffd75c;color:#172342;font-size:16px}
+.flip-card{width:min(205px,21vh,34vw);aspect-ratio:1024/1365;perspective:900px}
+.flip-card__inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .75s ease}
+.flip-card.is-flipped .flip-card__inner{transform:rotateY(180deg)}
+.flip-card__face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.flip-card__face--front{transform:rotateY(180deg)}
+.reveal-panel .button-row{justify-content:center;align-items:center;margin-top:17px}
+.reveal-hint{width:100%;margin:0;color:#d2def0;font-size:14px}
+.target-panel>p:not(.eyebrow){color:#c9d8ec;line-height:1.7}
+.target-grid{max-width:900px;margin:24px auto}
+.target-card{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;padding:9px;border:2px solid #ffffff26;border-radius:13px;background:#0e1937;color:#fff}
+.target-card.is-selected{border-color:#ffdb59;background:#24334e}
+.target-card .card{max-width:145px}
+.target-card strong{font-size:13px}
+.target-card small{color:#bcd1e8}
+.summary-panel .summary-cards{margin-bottom:22px}
+.event-box{max-width:700px;margin:0 auto 23px;border:1px solid #ffdc6255;border-radius:15px;padding:14px 20px;background:#ffdc6211}
+.event-line{margin:4px 0;line-height:1.7;color:#f7f2dd}
+.event-line--damage strong{font:21px 'Dela Gothic One',sans-serif;color:#ffdf70;animation:pop .6s ease both}
+.event-line--heal strong{font:21px 'Dela Gothic One',sans-serif;color:#83efa8;animation:pop .6s ease both}
+@keyframes pop{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.16)}100%{transform:scale(1);opacity:1}}
+.battle-footnote{text-align:center;color:#8ea2c1;font-size:12px;margin-top:17px}
+
+.result-page{padding:40px;margin-top:32px;margin-bottom:35px;text-align:center}
+.result-page h1{font:clamp(29px,4vw,48px) 'Dela Gothic One',sans-serif;color:#ffdc64;margin:0 0 26px}
+.result-life{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
+.result-note{color:#baccdf;font-size:13px;line-height:1.7;margin:19px 0 28px}
+.result-page h2{text-align:left;font:19px 'Dela Gothic One',sans-serif}
+.history-list{padding:0;list-style:none;text-align:left}
+.history-list li{display:grid;grid-template-columns:50px 1fr auto 80px;gap:12px;align-items:center;border-bottom:1px solid #ffffff24;padding:12px 6px}
+.history-list strong{color:#ffdc69}
+.history-list b{font-size:13px}
+.history-list small{text-align:right;color:#b9c9e1;font-size:13px}
+.tuning-page{padding:35px;margin-top:30px;margin-bottom:35px}
+.tuning-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;max-width:850px}
+.tuning-grid label{font-size:14px}
+.app-footer{text-align:center;padding:28px 0 35px;color:#8094b5;font-size:12px}
+
+@media(max-width:900px){.hero{grid-template-columns:1fr;min-height:0;padding:38px 0 22px}.hero__cards{height:250px}.hero__cards .card{width:130px;top:0}.deck-grid,.select-grid,.back-row,.target-grid{gap:9px}.deck-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.selection-board{padding:22px}.select-card{padding:8px}.select-card>span{min-height:54px}}
+@media(max-width:650px){.app-header,.hero,.mode-panel,.deck-page,.battle-page,.result-page,.tuning-page,.app-footer{width:min(100% - 28px,480px)}.app-header{height:72px}.brand{font-size:16px}.brand span{width:39px;height:39px;font-size:21px}.app-header nav{gap:12px}.text-link{font-size:11px}.hero{padding:35px 0 14px}.hero h1{font-size:30px}.hero__copy>p:last-child{font-size:14px}.hero__cards{height:207px}.hero__cards .card{width:100px}.mode-panel,.deck-page,.tuning-page,.result-page{padding:20px 16px}.mode-grid,.name-grid,.life-grid,.result-life,.tuning-grid{grid-template-columns:1fr}.mode-option{min-height:105px;padding:16px}.deck-grid,.select-grid,.back-row,.target-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.deck-card .card{max-width:145px}.selection-board{padding:18px 12px}.back-card .card{max-width:100px}.select-card .card{max-width:140px}.select-card>span{min-height:0}.final-open{gap:15px;padding:8px;align-items:flex-start}.final-open .card{max-width:125px}.final-open h2{font-size:20px}.final-open p:not(.eyebrow){font-size:13px}.round-intro{min-height:350px}.reveal-panel,.summary-panel,.target-panel{padding:22px 12px}.flip-card{width:min(155px,39vw)}.reveal-entry__type{font-size:13px;padding:6px 9px}.summary-cards .card{width:min(150px,38vw)!important}.battle-heading h1{font-size:22px}.history-list li{grid-template-columns:37px 1fr auto;gap:8px}.history-list small{grid-column:2/-1;text-align:left}.button-row .button{flex:1}.app-footer{padding:18px 0 26px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

@@ -1,0 +1,84 @@
+import { useEffect, useState } from 'react';
+import { Card } from './components/Card';
+import { punch, type FrontVariant } from './data/cards';
+import './styles.css';
+
+const designs: { id: FrontVariant; title: string; description: string }[] = [
+  { id: 'a', title: '王道バトル', description: '金色の枠と広いイラスト。カードゲームらしい落ち着いた案。' },
+  { id: 'b', title: 'マンガの勢い', description: '飛び出す線と強い色。パンチの迫力を前に出した案。' },
+  { id: 'c', title: '技術・機械', description: '歯車や回路の形を使い、Gカードの世界観を見せる案。' },
+];
+
+function CardPreview() {
+  const [selected, setSelected] = useState<FrontVariant>('a');
+  const [trainingLevel, setTrainingLevel] = useState(0);
+  const selectedDesign = designs.find((design) => design.id === selected)!;
+
+  return (
+    <main className="page">
+      <header className="topbar">
+        <div className="brand-mark" aria-hidden="true">G</div>
+        <div><p>Gカード・デザイン確認</p><h1>パンチのカード</h1></div>
+        <span className="stage-pill">段階1・表面の再提案</span>
+      </header>
+
+      <section className="intro">
+        <p className="eyebrow">表面のデザイン案　01 / 03</p>
+        <h2>新しい表を、<br /><em>3つの案から。</em></h2>
+        <p>3案とも同じ男の子の絵を使っています。名前・レア度・種類・攻撃力・効果文は、カードの画像に入っています。</p>
+      </section>
+
+      <section className="design-section" aria-labelledby="design-title">
+        <div className="section-heading"><span>01</span><div><h3 id="design-title">表面の3案</h3><p>見た目と、小さくしたときの読みやすさを比べてください。</p></div></div>
+        <div className="design-grid">
+          {designs.map((design) => (
+            <article className={`design-option ${selected === design.id ? 'design-option--selected' : ''}`} key={design.id}>
+              <div className="design-option__heading"><span>案 {design.id.toUpperCase()}</span><h4>{design.title}</h4></div>
+              <Card card={punch} variant={design.id} width={290} trainingLevel={trainingLevel} />
+              <p>{design.description}</p>
+              <button type="button" aria-pressed={selected === design.id} onClick={() => setSelected(design.id)}>
+                {selected === design.id ? '大きさを表示中' : 'この案を大きさ比較で見る'}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="check-section" aria-label="採用済みの裏面と筋トレ値">
+        <div className="back-panel">
+          <div><span className="approved">採用済み</span><h3>裏面はこのまま</h3><p>先生が選んだグーの裏面です。今回の3案では変えていません。</p></div>
+          <Card card={punch} side="back" width={195} />
+        </div>
+        <div className="training-panel">
+          <h3>筋トレの数字を試す</h3>
+          <p>動く文字は右下の「+数字」だけです。ほかの文字やアイコンは表面画像の一部です。</p>
+          <label htmlFor="training-level">筋トレ値 <strong>+{trainingLevel}</strong></label>
+          <input id="training-level" type="range" min="0" max="10" value={trainingLevel} onChange={(event) => setTrainingLevel(Number(event.target.value))} />
+        </div>
+      </section>
+
+      <section className="scale-section" aria-labelledby="scale-title">
+        <div className="section-heading"><span>02</span><div><h3 id="scale-title">「{selectedDesign.title}」の大きさ比較</h3><p>案を切り替えると、大・中・小のカードも切り替わります。</p></div></div>
+        <div className="scale-grid">
+          <div className="scale-item"><div className="scale-item__title"><strong>大</strong>デッキで選ぶ</div><Card card={punch} variant={selected} width={290} trainingLevel={trainingLevel} /></div>
+          <div className="scale-item"><div className="scale-item__title"><strong>中</strong>対戦中</div><Card card={punch} variant={selected} width={220} trainingLevel={trainingLevel} /></div>
+          <div className="scale-item"><div className="scale-item__title"><strong>小</strong>手札に並ぶ</div><Card card={punch} variant={selected} width={150} trainingLevel={trainingLevel} /></div>
+        </div>
+      </section>
+      <footer>Gカード　段階1・表面のデザイン確認</footer>
+    </main>
+  );
+}
+
+function App() {
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const updateHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', updateHash);
+    return () => window.removeEventListener('hashchange', updateHash);
+  }, []);
+  if (hash === '#/preview/cards' || hash === '') return <CardPreview />;
+  return <main className="not-found"><h1>ページが見つかりません</h1><a href="#/preview/cards">カードの確認にもどる</a></main>;
+}
+
+export default App;

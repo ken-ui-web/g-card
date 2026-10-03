@@ -1,0 +1,23 @@
+{
+  "G001": {
+    "status": "adopted",
+    "front": "G001-front.webp",
+    "design": "B"
+  },
+  "G002": {
+    "status": "adopted",
+    "front": "G002-front.webp"
+  },
+  "C008": {
+    "status": "adopted",
+    "front": "C008-front.webp"
+  },
+  "P001": {
+    "status": "adopted",
+    "front": "P001-front.webp"
+  },
+  "P003": {
+    "status": "adopted",
+    "front": "P003-front.webp"
+  }
+}
