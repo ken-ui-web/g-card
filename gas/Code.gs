@@ -33,7 +33,8 @@ const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 function setup() {
   const book = SpreadsheetApp.getActiveSpreadsheet();
   if (!book) throw new Error('Gカード用スプレッドシートから Apps Script を開いてください');
-  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', book.getId());
+  const properties = PropertiesService.getScriptProperties();
+  properties.setProperty('SPREADSHEET_ID', book.getId());
   Object.keys(GC_HEADERS).forEach(function (name) {
     let sheet = book.getSheetByName(name);
     if (!sheet) sheet = book.insertSheet(name);
@@ -60,7 +61,18 @@ function setup() {
       ['initialLife', '100', '初期ライフ'],
     ]);
   }
-  return 'Gカードのシートを用意しました。Settings の schoolDomain と adminEmails を入力してください。';
+  // 公開用IDは一時的にSettings!A9:B9に置き、スクリプトプロパティへ移してから消す。
+  const pending = settings.getRange(9, 1, 1, 2).getValues()[0];
+  if (pending[0] === 'googleClientIdSetup') {
+    const clientId = String(pending[1] || '').trim();
+    if (!/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(clientId)) throw new Error('Settings!B9 のGoogleクライアントIDを確認してください');
+    properties.setProperty('GOOGLE_CLIENT_ID', clientId);
+    settings.getRange(9, 1, 1, 3).clearContent();
+  }
+  if (!properties.getProperty('SESSION_SECRET')) {
+    properties.setProperty('SESSION_SECRET', [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('-'));
+  }
+  return 'Gカードの設定が完了しました。Settings の schoolDomain と adminEmails、スクリプトプロパティの GOOGLE_CLIENT_ID を確認してください。';
 }
 
 function doGet() {

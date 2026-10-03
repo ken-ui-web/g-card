@@ -14,17 +14,9 @@
 ## 2. 学校用の値を設定する
 
 1. スプレッドシートの `Settings` シートで、`schoolDomain` の値に学校メールの **@より後だけ**を入れます。`adminEmails` には、管理する先生自身の学校メールアドレスを入れます。複数人ならカンマ区切りです。これらはGitHubには入れません。
-2. Apps Scriptの左側の **プロジェクトの設定 → スクリプト プロパティ** に2件追加します。
-   - `GOOGLE_CLIENT_ID`: Google Cloudで作成したウェブアプリ用クライアントID
-   - `SESSION_SECRET`: 予測できないランダムな文字列。先生のPowerShellで以下を実行し、出た値を直接貼ります。チャットに送らないでください。
-
-   ```powershell
-   $bytes = New-Object byte[] 48
-   [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-   [Convert]::ToBase64String($bytes)
-   ```
-
-3. Google Cloudのウェブアプリ用クライアントで、**承認済みの JavaScript 生成元**に `https://ken-ui-web.github.io` が登録されていることを確認します。URLの `/g-card/` 以降は含めません。
+2. クライアントIDがまだスクリプトプロパティに入っていない場合は、`Settings` シートの `A9` に `googleClientIdSetup`、`B9` にウェブアプリ用クライアントIDを入力し、Apps Scriptで `setup` をもう一度実行します。`setup` はIDをスクリプトプロパティへ移し、A9:C9を消します。`SESSION_SECRET` はGAS内で自動生成されるため、先生が作る必要はありません。秘密値をチャットへ送らないでください。
+3. Apps Scriptの **プロジェクトの設定 → スクリプト プロパティ** で `GOOGLE_CLIENT_ID`、`SESSION_SECRET`、`SPREADSHEET_ID` の3件が存在することだけ確認します。値は共有しないでください。
+4. Google Cloudのウェブアプリ用クライアントで、**承認済みの JavaScript 生成元**に `https://ken-ui-web.github.io` が登録されていることを確認します。URLの `/g-card/` 以降は含めません。
 
 ## 3. GASを公開する
 
