@@ -1,12 +1,14 @@
 # 段階9：Firebaseの準備とオンライン対戦
 
-Firebaseプロジェクトはまだ作成されていません。学校アカウントで次の順に進めます。操作を1段階ずつ案内する [セットアップウィザード](../tools/setup-firebase.sh) も用意しています。WindowsではGit Bashから `bash tools/setup-firebase.sh` で実行できます。手作業で進める場合は以下だけで足ります。
+Firebaseプロジェクトはまだ作成されていません。個人のGoogleアカウントでも作成できます。操作を1段階ずつ案内する [セットアップウィザード](../tools/setup-firebase.sh) も用意しています。WindowsではGit Bashから `bash tools/setup-firebase.sh` で実行できます。手作業で進める場合は以下だけで足ります。
 
-## 1. 学校アカウントでFirebaseプロジェクトを作る
+## 1. Firebaseプロジェクトを作る
 
-1. [Firebaseコンソール](https://console.firebase.google.com/)を開き、「プロジェクトを追加」を押す。Gカード専用の名前を付ける。学校の管理者が既存のGoogle Cloudプロジェクトを指定している場合は、その指示を優先する。
+1. [Firebaseコンソール](https://console.firebase.google.com/)を開き、「プロジェクトを追加」を押す。Gカード専用の名前を付ける。個人アカウントでも動く。学校の管理者がアカウントやGoogle Cloudプロジェクトを指定している場合は、その指示を優先する。
 2. 料金プランは **Spark（無料）** のままにする。Google Analyticsはこのアプリには不要。
 3. プロジェクトの概要が表示されたら、そのプロジェクトを開いたまま次へ進む。
+
+Firebaseには対戦用のニックネーム・デッキ・対戦の進行情報が入る。学校メール、名簿、Gポイントは学校側のApps Scriptとスプレッドシートで管理する。個人アカウントで運用する場合は、学校の情報管理ルールを確認し、引き継ぎが必要になったときのために[プロジェクトのユーザーと権限](https://firebase.google.com/docs/projects/iam/overview)から学校側の管理者を追加できるようにしておく。
 
 ## 2. 匿名認証を有効にする
 

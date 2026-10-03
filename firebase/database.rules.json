@@ -53,19 +53,19 @@
             },
             "reveal": {
               "$uid": {
-                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('commit').child(auth.uid).exists() && data.parent().parent().child('commit').numChildren() === 2",
-                ".validate": "newData.hasChildren(['index', 'salt', 'card']) && newData.child('index').isNumber() && newData.child('index').val() >= 0 && newData.child('index').val() <= 3 && newData.child('salt').isString() && newData.child('salt').val().matches(/^[a-f0-9]{32}$/)"
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('commit').child(auth.uid).exists() && data.parent().parent().child('commit').numChildren() === 2 && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid)",
+                ".validate": "newData.hasChildren(['index', 'salt', 'card']) && newData.child('index').isNumber() && newData.child('index').val() >= 0 && newData.child('index').val() <= 3 && newData.child('salt').isString() && newData.child('salt').val().matches(/^[a-f0-9]{32}$/) && newData.child('card/cardId').isString() && newData.child('card/cardId').val().length <= 12 && newData.child('card/trainLevel').isNumber() && newData.child('card/trainLevel').val() >= 0 && newData.child('card/trainLevel').val() <= 99"
               }
             },
             "choices": {
               "$uid": {
-                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2",
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2 && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid)",
                 ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
               }
             },
             "stateHash": {
               "$uid": {
-                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2",
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').numChildren() === 2 && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid)",
                 ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
               }
             }
@@ -73,7 +73,8 @@
         },
         "final": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)"
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['entries', 'salt']) && newData.child('entries').numChildren() === 4 && newData.child('salt').isString() && newData.child('salt').val().matches(/^[a-f0-9]{32}$/)"
           }
         },
         "receipts": {
