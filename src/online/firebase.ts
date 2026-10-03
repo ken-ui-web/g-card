@@ -93,6 +93,6 @@ export async function joinCodeRoom(db: Database, uid: string, code: string, deck
 
 export async function setPresence(db: Database, roomId: string, uid: string, nickname: string, maxLife: number): Promise<void> {
   const target = ref(db, `${roomPath(roomId)}/players/${uid}`);
+  await onDisconnect(target).set({ nickname, maxLife, connected: false, lastSeen: serverTimestamp() });
   await set(target, { nickname, maxLife, connected: true, lastSeen: serverTimestamp() });
-  await onDisconnect(target).update({ connected: false, lastSeen: serverTimestamp() });
 }

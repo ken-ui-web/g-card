@@ -107,6 +107,22 @@ export function OnlinePage() {
     })();
   }, [db, uid, room, session, account, joined, roomId]);
 
+  useEffect(() => {
+    if (!db || !uid || !room || !roomId || !joined || !account) return;
+    let active = true;
+    let seenConnection = false;
+    const unsubscribe = onValue(ref(db, '.info/connected'), (snapshot) => {
+      if (snapshot.val() !== true) return;
+      if (!seenConnection) { seenConnection = true; return; }
+      const maxLife = room.meta.deckMode === 'owned' ? account.profile.maxLife : account.battleConfig.find((item) => item.deckId === 'sample')?.maxLife ?? 100;
+      const nickname = room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname;
+      void setPresence(db, roomId, uid, nickname, maxLife).catch((failure: Error) => {
+        if (active) setError(`再接続できません：${failure.message}`);
+      });
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [db, uid, roomId, joined, room?.meta.battleId, room?.meta.deckMode, room?.meta.hostUid, room?.meta.teacherTest, account]);
+
   const takeAction = (key: string, task: () => Promise<unknown>) => {
     if (actionKey.current.has(key)) return;
     actionKey.current.add(key);
