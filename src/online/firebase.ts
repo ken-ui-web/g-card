@@ -52,11 +52,11 @@ async function cleanupHostedRooms(db: Database, uid: string): Promise<void> {
   try { localStorage.setItem(hostedKey, JSON.stringify(remaining)); } catch { /* 保存できない端末 */ }
 }
 
-export async function createRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, code = '', guestUid = '', teacherTest = false): Promise<string> {
+async function createRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, code: string, teacherTest: boolean): Promise<string> {
   const battleId = crypto.randomUUID();
   const createdAt = Date.now();
   const room: OnlineRoom = {
-    meta: { battleId, deckMode, hostUid: uid, ...(guestUid ? { guestUid } : {}), ...(teacherTest ? { teacherTest: true } : {}), seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt: createdAt + 30 * 60_000 },
+    meta: { battleId, deckMode, hostUid: uid, ...(teacherTest ? { teacherTest: true } : {}), seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt: createdAt + 30 * 60_000 },
     players: { [uid]: { nickname, maxLife, connected: true, lastSeen: createdAt } },
   };
   await set(ref(db, roomPath(battleId)), room);
@@ -72,7 +72,7 @@ export async function createCodeRoom(db: Database, uid: string, nickname: string
     const current = await runTransaction(reservation, (value) => value && value.expiresAt > Date.now() ? undefined : { hostUid: uid, deckMode, expiresAt: Date.now() + 30 * 60_000 }, { applyLocally: false });
     if (!current.committed) continue;
     try {
-      const roomId = await createRoom(db, uid, nickname, maxLife, deckMode, code, '', teacherTest);
+      const roomId = await createRoom(db, uid, nickname, maxLife, deckMode, code, teacherTest);
       await update(reservation, { roomId });
       return { roomId, code };
     } catch (error) { await remove(reservation).catch(() => {}); throw error; }
