@@ -342,7 +342,7 @@ function App() {
     <main className={`app-shell${screen === 'battle' || screen === 'result' ? ' app-shell--battle' : ''}`} style={screen === 'battle' || screen === 'result' ? battleBackgroundStyle : undefined}>
       <header className="app-header">
         <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
-        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a><SoundToggle /></nav>
+        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link app-header__menu" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link app-header__tuning" href="#/dev/tuning">試作用の調整</a><SoundToggle /></nav>
       </header>
 
       {screen === 'menu' && <>

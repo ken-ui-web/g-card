@@ -7,28 +7,56 @@ import { availableCards, defaultDeckIds, getCard, typeLabels } from '../data/car
 import { callApi, savedSession, type BootstrapData } from '../portal/api';
 import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
 import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
-import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type DeckMode, type OnlineEntry, type OnlineRoom, type OnlineView } from './protocol';
+import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type DeckMode, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
 
 type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
 const roomFromHash = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('room') || '';
 const battleBackgroundStyle = { '--battle-bg': `url("${import.meta.env.BASE_URL}images/bg/battle.webp")` } as CSSProperties;
 
+function onlineCardDamage(pick: RoundPick): number | null {
+  const card = getCard(pick.card.cardId);
+  const damage = card.effects.find((effect) => effect.type === 'damage');
+  return damage?.type === 'damage' ? damage.amount + (card.type === 'rock' ? pick.card.trainLevel * card.trainingMultiplier : 0) : null;
+}
+
 function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; side: 0 | 1; names: [string, string]; onClose: () => void }) {
-  const [stage, setStage] = useState<'title' | 'suspense' | 'backs' | 'fronts'>('title');
+  const [stage, setStage] = useState<'title' | 'suspense' | 'backs' | 'flipping' | 'fronts'>('title');
+  const [canFlip, setCanFlip] = useState(false);
   useEffect(() => {
-    if (stage === 'fronts' || stage === 'backs') return;
+    if (stage === 'fronts' || stage === 'backs' || stage === 'flipping') return;
     const delay = stage === 'title' ? 1400 : 2200;
     const timer = window.setTimeout(() => setStage(stage === 'title' ? 'suspense' : 'backs'), delay);
     return () => window.clearTimeout(timer);
   }, [stage]);
   useEffect(() => {
+    if (stage !== 'backs') return;
+    const timer = window.setTimeout(() => setCanFlip(true), 2600);
+    return () => window.clearTimeout(timer);
+  }, [stage]);
+  useEffect(() => {
+    if (stage !== 'flipping') return;
+    const timer = window.setTimeout(() => setStage('fronts'), 850);
+    return () => window.clearTimeout(timer);
+  }, [stage]);
+  useEffect(() => {
     if (stage === 'title') playSfx('round');
-    if (stage === 'backs') playSfx('flip');
     if (stage === 'fronts' && view.winner !== null) playSfx(view.events.some((event) => event.includes('回復')) ? 'heal' : view.winner === side ? 'win' : 'damage');
   }, [stage, view.events, view.winner, side]);
   const cards = view.reveal!;
   return <div className="online-presentation panel">
-    {stage === 'title' ? <><p className="eyebrow">ROUND START</p><h2>ラウンド {view.round}</h2><p>お互いのカードが決まりました</p></> : stage === 'suspense' ? <><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></> : <><p className="eyebrow">ROUND {view.round} REVEAL</p><div className="online-reveal-grid">{cards.map((pick, index) => <div key={index}><span>{names[index]}</span><Card card={getCard(pick.card.cardId)} side={stage === 'backs' ? 'back' : 'front'} backType={view.types[index as 0 | 1][pick.index]} width={170} /></div>)}</div><h2>{view.winner === null ? 'あいこ' : view.winner === side ? 'このラウンドは勝ち' : 'このラウンドは負け'}</h2>{stage === 'backs' ? <button className="button button--primary" onClick={() => setStage('fronts')}>カードをめくる</button> : <><p>{view.events.join(' · ')}</p><button className="button button--primary" onClick={onClose}>{view.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></>}</>}
+    {stage === 'title' ? <><p className="eyebrow">ROUND START</p><h2>ラウンド {view.round}</h2><p>お互いのカードが決まりました</p></> : stage === 'suspense' ? <><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></> : <>
+      <p className="eyebrow">ROUND {view.round} REVEAL</p>
+      {stage === 'backs' && <p className="online-reveal-types" role="status">{typeLabels[view.types[0][cards[0].index]]} <span>VS</span> {typeLabels[view.types[1][cards[1].index]]}</p>}
+      <div className="online-reveal-grid">{cards.map((pick, index) => <div key={index}><span>{names[index]}</span>
+        <div className={`flip-card online-flip-card${stage === 'flipping' || stage === 'fronts' ? ' is-flipped' : ''}`}><div className="flip-card__inner">
+          <div className="flip-card__face flip-card__face--back" aria-hidden={stage === 'fronts'}><Card card={getCard(pick.card.cardId)} side="back" backType={view.types[index as 0 | 1][pick.index]} /></div>
+          <div className="flip-card__face flip-card__face--front" aria-hidden={stage !== 'fronts'}><Card card={getCard(pick.card.cardId)} damage={onlineCardDamage(pick)} /></div>
+        </div></div>
+        {stage === 'backs' && <strong className="reveal-entry__type">{typeLabels[view.types[index as 0 | 1][pick.index]]}{view.winner === index ? ' · 勝ち' : view.winner === null ? ' · あいこ' : ' · 負け'}</strong>}
+      </div>)}</div>
+      <h2>{view.winner === null ? 'あいこ' : view.winner === side ? 'このラウンドは勝ち' : 'このラウンドは負け'}</h2>
+      {stage === 'backs' ? <><p className="reveal-hint">種類と勝敗を見たら、カードをめくろう。</p><button className="button button--primary" disabled={!canFlip} onClick={() => { playSfx('flip'); setStage('flipping'); }}>{canFlip ? 'カードをめくる' : '勝敗を見てね…'}</button></> : stage === 'flipping' ? <p role="status">カードをめくっています…</p> : <><p>{view.events.join(' · ')}</p><button className="button button--primary" onClick={onClose}>{view.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></>}
+    </>}
   </div>;
 }
 
