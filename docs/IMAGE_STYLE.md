@@ -153,3 +153,9 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 放課後の教室を1枚生成し、オーナーが採用した。元画像は `design-source/stage10/test-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。正式画像は `public/images/bg/test.webp`。窓から柔らかな光が入り、手前の机の右側に無地のノートと鉛筆を置いた。設問と入力欄を読みやすくするため、中央は濃紺の低詳細領域とし、テスト画面で濃紺の半透明グラデーションを重ねる。
 
 > Original landscape 4:3 quiz-screen environment: calm after-school classroom from a seated student's viewpoint, tidy wooden desk, blank notebook and pencil off to one side, soft warm daylight through windows. Restrained deep-navy metal and antique-brass trim with a small gear motif, polished anime cel-shaded environment art. Keep the central and lower-middle area dark and low detail for question text and controls; place the brightest window light toward an edge. Crop-safe on landscape and portrait iPad. No people, writing, answer symbols, cards, UI, letters, numbers, logos or watermark.
+
+## 段階10・通常パック画像サンプル（2026-10-04、確認待ち）
+
+金色と紺色の密封パックを1枚生成した。元画像は `design-source/stage10/normal-pack-sample.png`、確認用の透過WebPは同名の `.webp`（600×900）。中央の歯車型メダリオンは文字やマークを入れず空白とした。ショップ画面にはまだ適用していない。
+
+> One isolated upright 2:3 sealed standard booster pack with transparent background. Cohesive metallic foil wrapper, crimped seams, deep navy enamel, antique brass and bright gold angled trim, subtle gears and circuits, small electric-blue and emerald accents. A clean blank circular gear-shaped medallion centered on the wrapper. Bold manga/cel-shaded rendering, readable at small size, straight-on view. No writing, numbers, card faces, characters, logos, watermark, floor or external shadow.
