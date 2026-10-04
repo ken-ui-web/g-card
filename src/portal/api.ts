@@ -1,3 +1,5 @@
+import { guestAction } from './guest';
+
 export interface ApiError {
   code: string;
   message: string;
@@ -18,7 +20,7 @@ export interface Profile {
   pityCounter: number;
 }
 
-export interface OwnedCard { ownedId: string; cardId: string; trainLevel: number; source?: string }
+export interface OwnedCard { ownedId: string; cardId: string; trainLevel: number; trainingSpent?: number | null; source?: string }
 export interface CardMaster { cardId: string; name: string; type: string; rarity: string; image: string; text: string; effects: { type: string; amount?: number }[]; trainingMultiplier: number; trainingBonus: number; shopPrice: number | null; inPack: boolean; active: boolean }
 export interface PackMaster { packId: string; name: string; price: number; cardsPerPack: number; rarityRates: Record<string, number>; cardPool: string[]; pityCount: number }
 export interface BattleDeckConfig { deckId: string; name: string; cardIds: string[]; maxLife: number; rockTrainLevel: number }
@@ -42,7 +44,7 @@ export interface EconomyState {
 export interface BootstrapData {
   profile: Profile;
   needsNickname: boolean;
-  loginBonus: { awarded: boolean; amount: number; streak: number };
+  loginBonus: { awarded: boolean; amount: number; streak: number; dailyAmount?: number; streakBonus?: number };
   ownedCards: OwnedCard[];
   cardMaster: CardMaster[];
   lastDeck: string[];
@@ -61,6 +63,8 @@ const sessionKey = 'g-card-session-v1';
 export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
 const gasUrl = import.meta.env.VITE_GAS_URL?.trim() ?? '';
 export const portalConfigured = Boolean(googleClientId && gasUrl);
+export const guestSession = 'guest:local';
+export const isGuest = (session: string | null): boolean => session === guestSession;
 
 export function savedSession(): string | null {
   try { return localStorage.getItem(sessionKey); } catch { return null; }
@@ -74,6 +78,9 @@ export function saveSession(session: string | null): void {
 }
 
 export async function callApi<T>(action: string, session: string | null, payload: object = {}, requestId: string = crypto.randomUUID()): Promise<T> {
+  if (isGuest(session)) {
+    return guestAction(action, payload as Record<string, unknown>, requestId) as T;
+  }
   if (!gasUrl) throw new Error('サーバーの接続先が未設定です');
   const body = JSON.stringify({ action, session, requestId, payload });
   for (let attempt = 0; attempt < 3; attempt++) {

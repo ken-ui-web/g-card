@@ -11,7 +11,7 @@ type CardProps = {
   className?: string;
 };
 
-const asset = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+const asset = (path: string) => `${import.meta.env.BASE_URL}${path}${path.startsWith('images/cards/') ? `?v=${import.meta.env.VITE_BUILD_VERSION || 'dev'}` : ''}`;
 
 export function Card({ card, side = 'front', backType, damage, width, className = '' }: CardProps) {
   const type = backType ?? card.type;

@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Card } from './components/Card';
+import { LoadingState } from './components/LoadingState';
+import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
 import { playSfx } from './audio/sfx';
 import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, typeLabels } from './data/cards';
@@ -7,7 +9,7 @@ import { beginRound, choiceRequests, createBattle, effectOrder, finishRound, sho
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
-import { callApi, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
+import { callApi, isGuest, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
 import './styles.css';
 
 const OnlinePage = lazy(() => import('./online/OnlinePage').then((module) => ({ default: module.OnlinePage })));
@@ -149,7 +151,7 @@ function App() {
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => {
     const session = savedSession();
-    if (hash !== '#/battle' || !session || !portalConfigured) return;
+    if (hash !== '#/battle' || !session || (!portalConfigured && !isGuest(session))) return;
     let cancelled = false;
     callApi<BootstrapData>('bootstrap', session).then((data) => {
       if (cancelled) return;
@@ -216,7 +218,7 @@ function App() {
       catch (error) { setDeckError((error as Error).message); setStarting(false); return; }
       setStarting(false);
     }
-    setNames(mode === 'cpu' ? ['あなた', `CPU Lv${level}`] : [localNames[0].trim() || 'プレイヤー1', localNames[1].trim() || 'プレイヤー2']);
+    setNames(mode === 'cpu' ? [account?.profile.nickname || 'あなた', `CPU Lv${level}`] : [localNames[0].trim() || 'プレイヤー1', localNames[1].trim() || 'プレイヤー2']);
     seed.current = Date.now() >>> 0;
     const ownEntries: DeckEntry[] = usingOwned ? ownedSelection.map((id) => {
       const owned = account!.ownedCards.find((card) => card.ownedId === id)!;
@@ -352,8 +354,8 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
-  if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><p>オンライン対戦を読み込み中…</p></main>}><OnlinePage /></Suspense>;
-  if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><p>ランキングを読み込み中…</p></main>}><RankingPage /></Suspense>;
+  if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><LoadingState text="オンライン対戦を読み込み中" /></main>}><OnlinePage /></Suspense>;
+  if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><LoadingState text="ランキングを読み込み中" /></main>}><RankingPage /></Suspense>;
   if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
     const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
     return <Portal page={page} />;
@@ -372,29 +374,29 @@ function App() {
     <main className={`app-shell${screen === 'battle' || screen === 'result' ? ' app-shell--battle' : ''}`} style={screen === 'battle' || screen === 'result' ? battleBackgroundStyle : undefined}>
       <header className="app-header">
         <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
-        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link app-header__menu" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link app-header__tuning" href="#/dev/tuning">試作用の調整</a><SoundToggle /></nav>
+        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link app-header__menu" onClick={() => setScreen('menu')}>対戦メニュー</button><SoundToggle /></nav>
       </header>
 
       {screen === 'menu' && <>
         <section className="hero">
           <div className="hero__copy"><p className="eyebrow">G CARD BATTLE</p><h1>見せるのは手の形。<br /><em>勝負はカードの中身。</em></h1><p>サンプルカードか、自分が持っているカードから4枚を選んで対戦できます。</p></div>
-          <div className="hero__cards">{availableCards.filter((card) => selectedDeckIds.includes(card.cardId)).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
+          <div className="hero__cards">{availableCards.filter((card) => selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
         </section>
-        <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦は学校アカウントでログインしていると、勝利報酬を受け取れます。</p></div></div>
+        <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦はログイン中、勝利報酬を受け取れます。ゲストの記録はこの端末に保存されます。</p></div></div>
           <div className="mode-grid">
             <button type="button" className={`mode-option ${mode === 'cpu' ? 'is-active' : ''}`} onClick={() => setMode('cpu')} aria-pressed={mode === 'cpu'}><span className="mode-option__icon">⚙</span><strong>CPUと対戦</strong><small>レベルを選んで1人でプレイ</small></button>
             <button type="button" className={`mode-option ${mode === 'local' ? 'is-active' : ''}`} onClick={() => setMode('local')} aria-pressed={mode === 'local'}><span className="mode-option__icon">↔</span><strong>この端末で対戦</strong><small>交代で端末を渡して2人でプレイ</small></button>
           </div>
           {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={`${import.meta.env.BASE_URL}images/cpu/lv${value}.webp`} alt="" />Lv{value}<small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
-          {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログインとサーバー更新後に選べます。</small>}</div>}
+          {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログイン後に選べます。</small>}</div>}
           <div className="button-row"><button type="button" className="button button--primary" onClick={() => setScreen('deck')}>カードセットを見る <span aria-hidden="true">→</span></button></div>
         </section>
       </>}
 
       {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>{mode === 'cpu' && deckMode === 'owned' ? `所持カードから4枚を選びます（現在 ${ownedSelection.length} / 4 枚）。筋トレ値と最大ライフが反映されます。` : `サンプル${sampleCards.length}枚から4枚を選びます（現在 ${selectedDeckIds.length} / 4 枚）。`} SSRはデッキに1枚までです。別のカードを入れるときは、まず選択中の1枚を外してください。</p>
-        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && (ownedSelection.length === 4 || card.rarity === 'SSR' && ssrCount(ownedSelection.map((id) => account.ownedCards.find((item) => item.ownedId === id)?.cardId || '')) >= 1)} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && (selectedDeckIds.length === 4 || card.rarity === 'SSR' && ssrCount(selectedDeckIds) >= 1)} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
+        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).sort((a, b) => compareCards(getCard(a.cardId), getCard(b.cardId))).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''} ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && (ownedSelection.length === 4 || card.rarity === 'SSR' && ssrCount(ownedSelection.map((id) => account.ownedCards.find((item) => item.ownedId === id)?.cardId || '')) >= 1)} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.sort(compareCards).map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''} ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && (selectedDeckIds.length === 4 || card.rarity === 'SSR' && ssrCount(selectedDeckIds) >= 1)} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
         <div className="deck-note"><strong>勝ち方</strong><p>グーはチョキに、チョキはパーに、パーはグーに勝ちます。勝ったカードだけが効果を発動。4ラウンド後、残りライフが多い側の勝利です。</p></div>
-        {deckError && <p className="portal-error" role="alert">{deckError}</p>}<div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={starting || (mode === 'cpu' && deckMode === 'owned' ? ownedSelection : selectedDeckIds).length !== 4} onClick={() => { void startGame(); }}>{starting ? '保存中…' : '対戦を始める'}</button></div>
+        {deckError && <p className="portal-error" role="alert">{deckError}</p>}<div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={starting || (mode === 'cpu' && deckMode === 'owned' ? ownedSelection : selectedDeckIds).length !== 4} onClick={() => { void startGame(); }}>{starting ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />デッキを保存中…</> : '対戦を始める'}</button></div>
       </section>}
 
       {screen === 'battle' && battle && <section className="battle-page">

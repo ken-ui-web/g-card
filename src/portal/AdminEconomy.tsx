@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { callApi, type BattleDeckConfig, type CardMaster } from './api';
+import { LoadingState } from '../components/LoadingState';
 
 interface AdminData {
   settings: { key: string; value: string; description: string }[];
@@ -37,7 +38,7 @@ export function AdminEconomy({ session }: { session: string }) {
     catch (error) { setMessage((error as Error).message); }
     finally { setBusy(false); }
   };
-  if (!data) return <section className="admin-economy panel"><h2>カードとゲームの設定</h2><p role="status">{message || '読み込み中…'}</p></section>;
+  if (!data) return <section className="admin-economy panel"><h2>カードとゲームの設定</h2>{message ? <p role="alert">{message}</p> : <LoadingState text="設定を読み込み中" />}</section>;
   return <section className="admin-economy panel"><h2>カードとゲームの設定</h2><p>仮の価格や報酬をここで変更できます。変更後の操作から反映されます。</p>
     <details><summary>Gポイントと育成の数値</summary><div className="admin-economy-grid">{data.settings.map((setting, index) => <div className="admin-setting" key={setting.key}><label>{setting.description}<input type="number" min={setting.key === 'lifePerRun' ? '1' : '0'} max="100000" value={setting.value} onChange={(event) => setData((current) => { if (!current) return current; const settings = [...current.settings]; settings[index] = { ...settings[index], value: event.target.value }; return { ...current, settings }; })} /></label><button type="button" className="button button--ghost" disabled={busy || (setting.key === 'lifePerRun' && Number(setting.value) < 1)} onClick={() => { void save('adminSaveSettings', { key: setting.key, value: setting.value }); }}>保存</button></div>)}</div></details>
     <details><summary>カードの販売設定</summary><div className="admin-economy-grid">{data.cards.map((card, index) => <div className="admin-setting" key={card.cardId}><strong>{card.name}（{card.rarity}）</strong><label>単品価格（空欄なら販売しない）<input type="number" min="0" max="100000" value={card.shopPrice ?? ''} onChange={(event) => setData((current) => { if (!current) return current; const cards = [...current.cards]; cards[index] = { ...cards[index], shopPrice: event.target.value === '' ? null : Number(event.target.value) }; return { ...current, cards }; })} /></label><label><input type="checkbox" checked={card.inPack} onChange={(event) => setData((current) => { if (!current) return current; const cards = [...current.cards]; cards[index] = { ...cards[index], inPack: event.target.checked }; return { ...current, cards }; })} />パックに入れる</label><label><input type="checkbox" checked={card.active} onChange={(event) => setData((current) => { if (!current) return current; const cards = [...current.cards]; cards[index] = { ...cards[index], active: event.target.checked }; return { ...current, cards }; })} />購入できる状態</label><button type="button" className="button button--ghost" disabled={busy} onClick={() => { void save('adminSaveCard', { cardId: card.cardId, shopPrice: card.shopPrice, inPack: card.inPack, active: card.active }); }}>保存</button></div>)}</div></details>

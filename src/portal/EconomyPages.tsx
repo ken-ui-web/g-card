@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { callApi, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
 import { availableCards } from '../data/cards';
+import { compareCards } from '../data/cardOrder';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
 
 type Page = 'shop' | 'training' | 'collection';
 type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; icon?: PortalIconName; missions?: EconomyState['completedMissions'] };
 type FeedbackPlan = { working: string; workingImage?: string; done: (result: EconomyState) => Omit<Feedback, 'phase' | 'balance' | 'missions'> };
-const cardImage = (card: CardMaster) => `${import.meta.env.BASE_URL}images/cards/${card.image}`;
+const cardImage = (card: CardMaster) => `${import.meta.env.BASE_URL}images/cards/${card.image}?v=${import.meta.env.VITE_BUILD_VERSION || 'dev'}`;
+const salePrice = (data: BootstrapData, owned: OwnedCard, card: CardMaster) => (data.economy.sellPrices?.[card.rarity] ?? 0) + (owned.trainingSpent ?? data.economy.muscleCostBase * owned.trainLevel + data.economy.muscleCostStep * owned.trainLevel * (owned.trainLevel - 1) / 2);
 
 function pendingCost(data: BootstrapData, items: { kind: 'muscle' | 'run'; ownedId?: string; count: number }[]) {
   let cost = 0;
@@ -23,7 +25,7 @@ function pendingCost(data: BootstrapData, items: { kind: 'muscle' | 'run'; owned
 
 function CardTile({ card, owned, children, className = '' }: { card: CardMaster; owned?: OwnedCard; children?: React.ReactNode; className?: string }) {
   const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount;
-  return <article className={`economy-card panel ${className}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div><h3>{card.name} <small>{card.rarity}</small></h3><p>{card.text}</p>{owned && card.type === 'rock' && <p>筋トレ +{owned.trainLevel}{baseDamage !== undefined ? ` · 最終ダメージ ${baseDamage + (owned.trainLevel + card.trainingBonus) * card.trainingMultiplier}` : ''}</p>}{children}</div></article>;
+  return <article className={`economy-card panel ${card.rarity === 'SSR' ? 'economy-card--ssr' : ''} ${className}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div><h3>{card.name} <small>{card.rarity}</small></h3><p>{card.text}</p>{owned && card.type === 'rock' && <p>筋トレ +{owned.trainLevel}{baseDamage !== undefined ? ` · 最終ダメージ ${baseDamage + (owned.trainLevel + card.trainingBonus) * card.trainingMultiplier}` : ''}</p>}{children}</div></article>;
 }
 
 export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedback; onClose: () => void }) {
@@ -37,11 +39,12 @@ export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedba
   return createPortal(<div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
     {feedback.phase === 'working' && feedback.image ? <img className="economy-feedback__pack" src={feedback.image} alt="" /> : feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
     <p className="eyebrow">{feedback.phase === 'working' ? 'PROCESSING' : feedback.phase === 'done' ? 'COMPLETE' : 'TRY AGAIN'}</p><h2>{feedback.title}</h2>
-    {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : 'サーバーからの返事を待っています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
+    {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : '記録を保存しています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
   </div></div>, document.body);
 }
 
 export function EconomyPages({ page, session, data, onState }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void }) {
+  const [collectionTab, setCollectionTab] = useState<'deck' | 'catalog'>('deck');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [message, setMessage] = useState('');
@@ -66,17 +69,17 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
     if (busyRef.current) return null;
     busyRef.current = true;
     setBusy(true); setMessage('');
-    if (plan) setFeedback({ phase: 'working', title: plan.working, image: plan.workingImage });
+    setFeedback({ phase: 'working', title: plan?.working ?? '記録を保存中…', image: plan?.workingImage });
     try {
       const result = await callApi<EconomyState>(action, session, payload);
       onState(result);
       setMessage(success(result));
       if (result.completedMissions?.length) setMessage((before) => `${before}　ミッション達成：${result.completedMissions!.map((item) => `${item.label} +${item.reward}G`).join('、')}`);
-      if (plan) setFeedback({ ...plan.done(result), phase: 'done', balance: result.gPoint, missions: result.completedMissions });
+      setFeedback({ ...(plan?.done(result) ?? { title: '保存完了！', detail: success(result) }), phase: 'done', balance: result.gPoint, missions: result.completedMissions });
       if (action === 'openPack') playSfx((result.acquired ?? []).some((item) => ['SR', 'SSR'].includes(cardById(item.cardId)?.rarity ?? '')) ? 'rare' : 'pack');
       else if (action === 'buyCard' || action === 'train') playSfx('point');
       return result;
-    } catch (error) { const detail = (error as Error).message; setMessage(detail); if (plan) setFeedback({ phase: 'error', title: '処理できませんでした', detail }); return null; }
+    } catch (error) { const detail = (error as Error).message; setMessage(detail); setFeedback({ phase: 'error', title: '処理できませんでした', detail }); return null; }
     finally { busyRef.current = false; setBusy(false); }
   };
 
@@ -111,7 +114,7 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
   const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => { if (feedback.phase === 'done' && opened.length) setShowOpened(true); setFeedback(null); }} />;
 
   if (page === 'shop') return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">CARD SHOP</p><h1>カード購入</h1><p className="economy-balance">所持 {data.profile.gPoint.toLocaleString()} G</p>
-    <h2>カードを選んで買う</h2><div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && cardImage(card)).map((card) => <CardTile key={card.cardId} card={card}><p className="economy-price">{card.shopPrice} G</p><button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button></CardTile>)}</div>
+    <h2>カードを選んで買う</h2><div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && card.image).sort(compareCards).map((card) => <CardTile key={card.cardId} card={card}><p className="economy-price">{card.shopPrice} G</p><button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button></CardTile>)}</div>
     <h2>パックを開ける</h2><div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}><img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" /><h3>{pack.name}</h3><p>{pack.cardsPerPack}枚入り · {pack.price}G</p><p>排出率：{Object.entries(pack.rarityRates).map(([rarity, rate]) => `${rarity} ${rate}%`).join('／')}</p><p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>{pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}<button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < pack.price || data.daily.packsBought >= data.economy.packDailyLimit} onClick={() => { playSfx('pack'); setOpening(true); setOpened([]); setShowOpened(false); void transact('openPack', { packId: pack.packId }, (result) => { setOpened((result.acquired ?? []).map((item) => item.cardId)); return 'パックを開けました！'; }, { working: 'パックを開封中…', workingImage: `${import.meta.env.BASE_URL}images/packs/normal.webp`, done: (result) => ({ title: 'パック開封！', detail: `${result.acquired?.length ?? 0}枚のカードを手に入れました。閉じるとカードが表示されます。`, icon: 'shop' }) }).finally(() => setOpening(false)); }}>{opening ? '開封中…' : 'パックを開ける'}</button></article>)}</div>{showOpened && opened.length > 0 && <div className="economy-opened panel" role="status"><h2>出たカード</h2><div className="economy-grid">{opened.map((id, index) => { const card = cardById(id); return card ? <div className="economy-opened-card" style={{ animationDelay: `${index * 220}ms` }} key={`${id}-${index}`}><CardTile card={card} /></div> : null; })}</div></div>}
     {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
 
@@ -126,5 +129,10 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
 
   const selectedSsr = selected.filter((id) => cardById(data.ownedCards.find((item) => item.ownedId === id)?.cardId ?? '')?.rarity === 'SSR').length;
   const toggle = (ownedId: string) => setSelected((current) => current.includes(ownedId) ? current.filter((id) => id !== ownedId) : current.length < 4 && !(cardById(data.ownedCards.find((item) => item.ownedId === ownedId)?.cardId ?? '')?.rarity === 'SSR' && selectedSsr >= 1) ? [...current, ownedId] : current);
-  return <section className="economy-page"><p className="eyebrow">MY COLLECTION</p><h1>デッキ・図鑑</h1><p>所持カードから４枚選びます。SSRは1枚までです。同じ名前でも、所持カードごとに筋トレ値は異なります。</p><p className="economy-balance">選択中 {selected.length} / 4 枚</p><div className="economy-grid">{data.ownedCards.map((owned) => { const card = cardById(owned.cardId); if (!card) return null; const playable = availableCards.some((item) => item.cardId === owned.cardId); return <CardTile key={owned.ownedId} card={card} owned={owned}><button type="button" className={`button ${selected.includes(owned.ownedId) ? 'button--primary' : 'button--ghost'}`} disabled={!playable || (!selected.includes(owned.ownedId) && (selected.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1))} onClick={() => toggle(owned.ownedId)}>{!playable ? '対戦対応待ち' : selected.includes(owned.ownedId) ? 'デッキから外す' : 'デッキに入れる'}</button><button type="button" className="economy-sell" disabled={busy || data.ownedCards.length <= 4} onClick={() => { if (owned.trainLevel > 0 && !window.confirm('筋トレの成果も消えます。売却しますか？')) return; void transact('sellCard', { ownedId: owned.ownedId }, () => `${card.name}を売却しました。`).then((result) => { if (result) setSelected(result.lastDeck); }); }}>売却する（+{data.economy.sellPrices?.[card.rarity] ?? 0}G）</button></CardTile>; })}</div><div className="button-row"><button className="button button--primary" disabled={busy || selected.length !== 4 || selectedSsr > 1} onClick={() => { void transact('saveDeck', { ownedIds: selected }, () => 'デッキを保存しました。'); }}>この４枚を保存</button><a className="button button--ghost" href="#/battle">対戦する</a></div><h2>カード図鑑</h2><div className="economy-grid economy-catalog">{data.cardMaster.filter((card) => card.image).map((card) => { const count = data.ownedCards.filter((owned) => owned.cardId === card.cardId).length; return <article key={card.cardId} className="economy-card panel"><img src={cardImage(card)} className={count ? '' : 'is-locked'} alt={count ? `${card.name}のカード表面` : '未所持のカード'} /><strong>{count ? card.name : '未所持のカード'}</strong><small>所持 {count} 枚</small></article>; })}</div>{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section>;
+  const ownedSorted = [...data.ownedCards].sort((a, b) => compareCards(cardById(a.cardId)!, cardById(b.cardId)!));
+  return <section className="economy-page"><p className="eyebrow">MY COLLECTION</p><h1>デッキ・図鑑</h1>
+    <div className="collection-tabs" role="tablist" aria-label="デッキと図鑑"><button type="button" role="tab" aria-selected={collectionTab === 'deck'} onClick={() => setCollectionTab('deck')}>デッキ</button><button type="button" role="tab" aria-selected={collectionTab === 'catalog'} onClick={() => setCollectionTab('catalog')}>図鑑</button></div>
+    {collectionTab === 'deck' ? <div role="tabpanel"><p>所持カードから４枚選びます。SSRは1枚までです。同じ名前でも、所持カードごとに筋トレ値は異なります。</p><p className="economy-balance">選択中 {selected.length} / 4 枚</p><div className="economy-grid">{ownedSorted.map((owned) => { const card = cardById(owned.cardId); if (!card) return null; const playable = availableCards.some((item) => item.cardId === owned.cardId); return <CardTile key={owned.ownedId} card={card} owned={owned}><button type="button" className={`button ${selected.includes(owned.ownedId) ? 'button--primary' : 'button--ghost'}`} disabled={!playable || (!selected.includes(owned.ownedId) && (selected.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1))} onClick={() => toggle(owned.ownedId)}>{!playable ? '対戦対応待ち' : selected.includes(owned.ownedId) ? 'デッキから外す' : 'デッキに入れる'}</button><button type="button" className="economy-sell" disabled={busy || data.ownedCards.length <= 4} onClick={() => { if (owned.trainLevel > 0 && !window.confirm(`筋トレに使ったGも含めて${salePrice(data, owned, card)}Gで売却します。筋トレ値は失われます。よろしいですか？`)) return; void transact('sellCard', { ownedId: owned.ownedId }, (result) => `${card.name}を売却しました。所持 ${result.gPoint}G`).then((result) => { if (result) setSelected(result.lastDeck); }); }}>売却する（+{salePrice(data, owned, card)}G）</button></CardTile>; })}</div><div className="button-row"><button className="button button--primary" disabled={busy || selected.length !== 4 || selectedSsr > 1} onClick={() => { void transact('saveDeck', { ownedIds: selected }, () => 'デッキを保存しました。'); }}>この４枚を保存</button><a className="button button--ghost" href="#/battle">対戦する</a></div></div>
+      : <div role="tabpanel"><p>カードはグー、チョキ、パーの順です。まだ持っていないカードは暗く表示されます。</p><div className="economy-grid economy-catalog">{data.cardMaster.filter((card) => card.image).sort(compareCards).map((card) => { const count = data.ownedCards.filter((owned) => owned.cardId === card.cardId).length; return <article key={card.cardId} className={`economy-card panel ${card.rarity === 'SSR' ? 'economy-card--ssr' : ''}`}><img src={cardImage(card)} className={count ? '' : 'is-locked'} alt={count ? `${card.name}のカード表面` : '未所持のカード'} /><strong>{count ? card.name : '未所持のカード'}</strong><small>所持 {count} 枚</small></article>; })}</div></div>}
+    {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section>;
 }

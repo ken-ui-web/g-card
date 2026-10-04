@@ -59,10 +59,12 @@ assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'first-wave').
 assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'all-cards').cardPool.length, 40);
 // Upgrade a school sheet created by the previous version without deleting purchases or custom settings.
 sheets.get('Cards').rows = sheets.get('Cards').rows.slice(0, 6).map((row) => row.slice(0, 13));
+sheets.get('OwnedCards').rows[0] = sheets.get('OwnedCards').rows[0].slice(0, 7);
 sheets.get('Packs').rows = sheets.get('Packs').rows.filter((row) => row[0] !== 'first-wave');
 call('setup');
 assert.equal(sheets.get('Cards').getLastRow(), 41);
 assert.equal(sheets.get('Cards').rows[0][13], 'trainingBonus');
+assert.equal(sheets.get('OwnedCards').rows[0][7], 'trainingSpent', '既存の学校シートに筋トレ累計列を追加する');
 assert.equal(call('gcPackMaster_').filter((pack) => pack.packId === 'first-wave').length, 1);
 call('setup');
 assert.equal(sheets.get('Cards').getLastRow(), 41);
@@ -95,6 +97,7 @@ assert.equal(trained.trained, 2);
 assert.equal(trained.gPoint, 450 - 20 - 22 + 10); // デイリートレーニング達成
 assert.equal(repeatedTrain.gPoint, trained.gPoint);
 assert.equal(call('gcOwned_', email).find((card) => card.ownedId === firstCard.ownedId).trainLevel, 2);
+assert.equal(call('gcOwned_', email).find((card) => card.ownedId === firstCard.ownedId).trainingSpent, 42, '筋トレに実際に使ったGをカードに記録する');
 
 const battleId = id();
 const battle = call('gcReportBattle_', token, { battleId, mode: 'cpu', deckMode: 'owned', cpuLevel: 1, result: 'win' });
@@ -258,4 +261,12 @@ const ssrOwned = [id(), id()];
 ssrOwned.forEach((ownedId) => sheets.get('OwnedCards').appendRow([ownedId, email, 'C014', 0, 'pack', new Date().toISOString(), '']));
 assert.throws(() => call('gcSaveDeck_', token, { ownedIds: [ssrOwned[0], ssrOwned[1], firstCard.ownedId, call('gcOwned_', email).find((card) => card.cardId === 'G002').ownedId] }), /SSRはデッキに1枚まで/);
 assert.throws(() => call('gcOnlineValidateDeck_', call('gcSession_', token, false), 'sample', ['C014', 'C014', 'G001', 'P001'].map((cardId) => ({ cardId, trainLevel: 0 }))), /SSRはデッキに1枚まで/);
+const beforeTrainedSale = call('gcState_', call('gcSession_', token, false)).gPoint;
+const trainedSale = call('gcSellCard_', token, { ownedId: firstCard.ownedId }, id());
+assert.equal(trainedSale.gPoint, beforeTrainedSale + 10 + 42, '筋トレ費用を売却額に加える');
+assert.equal(call('gcOwned_', email).some((card) => card.ownedId === firstCard.ownedId), false);
+const legacyOwnedId = id();
+sheets.get('OwnedCards').appendRow([legacyOwnedId, email, 'G002', 2, 'initial', new Date().toISOString(), '']);
+const beforeLegacySale = call('gcState_', call('gcSession_', token, false)).gPoint;
+assert.equal(call('gcSellCard_', token, { ownedId: legacyOwnedId }, id()).gPoint, beforeLegacySale + 52, '以前から筋トレしたカードも売却額に反映する');
 console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export OK');

@@ -3,7 +3,7 @@
 const GC_TZ = 'Asia/Tokyo';
 const GC_HEADERS = {
   Users: ['email', 'role', 'class', 'number', 'name', 'nickname', 'gPoint', 'runCount', 'totalEarned', 'loginStreak', 'lastLoginDate', 'pityCounter', 'lastDeckJson', 'welcomeGiven', 'createdAt', 'updatedAt'],
-  OwnedCards: ['ownedId', 'email', 'cardId', 'trainLevel', 'source', 'acquiredAt', 'soldAt'],
+  OwnedCards: ['ownedId', 'email', 'cardId', 'trainLevel', 'source', 'acquiredAt', 'soldAt', 'trainingSpent'],
   Cards: ['cardId', 'name', 'type', 'rarity', 'text', 'effects', 'trainingMultiplier', 'image', 'shopPrice', 'inPack', 'active', 'sortOrder', 'flavor', 'trainingBonus'],
   Packs: ['packId', 'name', 'price', 'cardsPerPack', 'rarityRatesJson', 'cardPoolJson', 'pityCount', 'startAt', 'endAt', 'active'],
   Decks: ['deckId', 'name', 'cardIdsJson', 'maxLife', 'rockTrainLevel'],
@@ -115,6 +115,10 @@ function setup() {
       sheet.setFrozenRows(1);
     } else {
       const actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+      if (name === 'OwnedCards' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
+        sheet.getRange(1, headers.length).setValue('trainingSpent');
+        actual[headers.length - 1] = 'trainingSpent';
+      }
       if (name === 'Cards' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
         sheet.getRange(1, headers.length).setValue('trainingBonus');
         actual[headers.length - 1] = 'trainingBonus';
@@ -434,7 +438,7 @@ function gcSetNickname_(token, payload) {
       const owned = gcSheet_('OwnedCards');
       const now = new Date().toISOString();
       const existing = gcOwned_(identity.email).map(function (card) { return card.cardId; });
-      const rows = GC_INITIAL_CARDS.filter(function (cardId) { return existing.indexOf(cardId) < 0; }).map(function (cardId) { return [Utilities.getUuid(), identity.email, cardId, 0, 'initial', now, '']; });
+      const rows = GC_INITIAL_CARDS.filter(function (cardId) { return existing.indexOf(cardId) < 0; }).map(function (cardId) { return [Utilities.getUuid(), identity.email, cardId, 0, 'initial', now, '', 0]; });
       if (rows.length) owned.getRange(owned.getLastRow() + 1, 1, rows.length, GC_HEADERS.OwnedCards.length).setValues(rows);
       const bonus = Number(identity.settings.welcomeBonus) || 100;
       const prior = gcPointLogEntry_(identity.email, 'welcome', 'initial');
@@ -470,7 +474,7 @@ function gcRarityRates_(json) {
 
 function gcOwned_(email) {
   return gcSheet_('OwnedCards').getDataRange().getValues().slice(1).filter(function (row) { return String(row[1]).toLowerCase() === email && !row[6]; }).map(function (row) {
-    return { ownedId: row[0], cardId: row[2], trainLevel: Number(row[3] || 0), source: row[4] };
+    return { ownedId: row[0], cardId: row[2], trainLevel: Number(row[3] || 0), source: row[4], trainingSpent: row[7] === '' ? null : Number(row[7] || 0) };
   });
 }
 
@@ -556,7 +560,7 @@ function gcBootstrap_(token) {
   return {
       profile: { nickname: String(user.nickname || ''), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: !user.nickname,
-      loginBonus: bonus,
+      loginBonus: Object.assign({}, bonus, { dailyAmount: gcNumber_(identity.settings, 'loginBonus', 10, 0, 100000), streakBonus: gcNumber_(identity.settings, 'loginStreakBonus', 100, 0, 100000) }),
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
       lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
@@ -619,6 +623,11 @@ function gcRequestId_(requestId) {
 function gcNumber_(settings, key, fallback, min, max) {
   const value = settings[key] === '' || settings[key] === undefined ? fallback : Number(settings[key]);
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+}
+
+function gcTrainingSpentEstimate_(level, settings) {
+  const count = Number(level || 0);
+  return gcNumber_(settings, 'muscleCostBase', 20, 0, 100000) * count + gcNumber_(settings, 'muscleCostStep', 2, 0, 100000) * count * (count - 1) / 2;
 }
 
 function gcEconomyAccess_(identity) {
@@ -695,7 +704,7 @@ function gcBuyCard_(token, payload, requestId) {
     const user = gcUserObject_(record);
     if (Number(user.gPoint || 0) < card.shopPrice) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りません');
     const ownedId = Utilities.getUuid();
-    gcSheet_('OwnedCards').appendRow([ownedId, identity.email, card.cardId, 0, 'shop', new Date().toISOString(), '']);
+    gcSheet_('OwnedCards').appendRow([ownedId, identity.email, card.cardId, 0, 'shop', new Date().toISOString(), '', 0]);
     user.gPoint = Number(user.gPoint || 0) - card.shopPrice;
     user.updatedAt = new Date().toISOString();
     gcWriteUser_(record, user);
@@ -715,7 +724,7 @@ function gcSellCard_(token, payload, requestId) {
     const target = owned.find(function (item) { return item.ownedId === payload.ownedId; });
     if (!target) gcError_('NOT_OWNED', 'このカードは所持していません');
     const card = gcCardMaster_().find(function (item) { return item.cardId === target.cardId; });
-    const price = gcNumber_(identity.settings, 'sell' + card.rarity, 10, 0, 100000);
+    const price = gcNumber_(identity.settings, 'sell' + card.rarity, 10, 0, 100000) + (target.trainingSpent === null ? gcTrainingSpentEstimate_(target.trainLevel, identity.settings) : target.trainingSpent);
     const sheet = gcSheet_('OwnedCards');
     const rows = sheet.getDataRange().getValues();
     const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === target.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
@@ -760,14 +769,17 @@ function gcTrain_(token, payload, requestId) {
       if (item.kind === 'muscle') {
         const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === item.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
         if (index < 1 || !cards.some(function (card) { return card.cardId === rows[index][2] && card.type === 'rock'; })) gcError_('BAD_REQUEST', '筋トレできるカードを選んでください');
+        if (rows[index][7] === '') rows[index][7] = gcTrainingSpentEstimate_(rows[index][3], identity.settings);
         for (let n = 0; n < count; n++) {
           const price = gcNumber_(identity.settings, 'muscleCostBase', 20, 0, 100000) + gcNumber_(identity.settings, 'muscleCostStep', 2, 0, 100000) * Number(rows[index][3] || 0);
           if (Number(user.gPoint || 0) < price) break;
           user.gPoint = Number(user.gPoint || 0) - price;
           rows[index][3] = Number(rows[index][3] || 0) + 1;
+          rows[index][7] = Number(rows[index][7] || 0) + price;
           spent += price; trained++;
         }
         sheet.getRange(index + 1, 4).setValue(rows[index][3]);
+        sheet.getRange(index + 1, 8).setValue(rows[index][7]);
       } else if (item.kind === 'run') {
         for (let n = 0; n < count; n++) {
           const price = gcNumber_(identity.settings, 'runCostBase', 60, 0, 100000) + gcNumber_(identity.settings, 'runCostStep', 6, 0, 100000) * Number(user.runCount || 0);
@@ -853,7 +865,7 @@ function gcOpenPack_(token, payload, requestId) {
     const acquired = drawn.map(function (card) { return { ownedId: Utilities.getUuid(), cardId: card.cardId, trainLevel: 0, rarity: card.rarity }; });
     const now = new Date().toISOString();
     const ownedSheet = gcSheet_('OwnedCards');
-    ownedSheet.getRange(ownedSheet.getLastRow() + 1, 1, acquired.length, GC_HEADERS.OwnedCards.length).setValues(acquired.map(function (card) { return [card.ownedId, identity.email, card.cardId, 0, 'pack:' + requestId, now, '']; }));
+    ownedSheet.getRange(ownedSheet.getLastRow() + 1, 1, acquired.length, GC_HEADERS.OwnedCards.length).setValues(acquired.map(function (card) { return [card.ownedId, identity.email, card.cardId, 0, 'pack:' + requestId, now, '', 0]; }));
     user.gPoint = Number(user.gPoint || 0) - pack.price;
     user.pityCounter = pity;
     user.updatedAt = now;
