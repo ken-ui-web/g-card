@@ -82,6 +82,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .economy-price{color:#ffda6e!important;font-weight:800}
 .economy-sell{display:block;margin:10px auto 0;border:0;background:transparent;color:#c9d7ee;text-decoration:underline}
 .economy-pack,.economy-run,.economy-opened{padding:22px}
+.economy-pack__image{display:block;width:min(100%,170px);height:auto;margin:0 auto 16px;filter:drop-shadow(0 12px 13px #020717b8)}
 .economy-pack h3,.economy-run h2{margin:0 0 10px}.economy-pack p{color:#d8e4f5}
 .economy-message{padding:15px 18px;border:1px solid #ffdb6b;border-radius:12px;background:#4e3d20;color:#fff!important;font-weight:800}
 .economy-opened-card{opacity:0;transform:perspective(700px) rotateY(85deg) scale(.85);animation:economy-card-reveal .65s ease-out forwards}
