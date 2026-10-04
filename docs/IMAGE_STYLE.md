@@ -129,3 +129,9 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 `design-source/stage10/home-background-sample.png` を組み込み画像生成で1枚作り、確認用に `home-background-sample.webp`（2048×1536）も保存した。オーナーが採用。カード表面とロゴは画風・配色の参考のみ。正式画像は `public/images/bg/home.webp`。ホーム画面の文字と操作部が読めるよう、画面側で濃紺の半透明グラデーションを重ねる。
 
 > A landscape 4:3 background for the Gカード home screen: a welcoming futuristic school workshop at warm sunset, with safe tools, small gears and classroom engineering projects at the edges and a school courtyard beyond the windows. Bold clean manga/cel-shaded outlines, polished navy and antique brass, warm gold light, small electric blue and emerald accents matching the approved card and logo. Interesting architecture near the edges and upper third; broad calm dark-navy center and lower middle for legible overlaid UI. Crop-safe on landscape and portrait iPad. No people, cards, UI panels, logo, letters, numbers or watermark. One cohesive image.
+
+## 段階10・バトル背景サンプル（2026-10-04、確認待ち）
+
+ホーム背景の画風を基準に1枚生成した。元画像は `design-source/stage10/battle-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。カードを表示する中央から手前は紺色の低詳細領域とし、黄・青・緑の照明と歯車は周辺に配置した。アプリにはまだ適用していない。
+
+> Original landscape 4:3 battle-screen environment: a dramatic but friendly futuristic school tournament arena, with an empty circular stage, brass-and-navy engineering architecture, gears at the perimeter and yellow, blue and green spotlights. Match the approved home environment's cel-shaded materials and the card's bold outlines. Keep the central 60% and lower middle dark navy and low detail for overlaid cards and white UI; put lights and gears on the upper and side edges. Crop-safe on landscape and portrait iPad. No characters, playing cards, UI, letters, numbers, logos or watermark.
