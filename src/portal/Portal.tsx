@@ -112,8 +112,9 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
 
   const logout = () => { saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
 
-  const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop' || page === 'training') ? page : null;
-  const illustratedStyle = illustratedPage ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${illustratedPage}.webp")` } as CSSProperties : undefined;
+  const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop' || page === 'training' || page === 'tests') ? page : null;
+  const backgroundName = illustratedPage === 'tests' ? 'test' : illustratedPage;
+  const illustratedStyle = backgroundName ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${backgroundName}.webp")` } as CSSProperties : undefined;
 
   return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
     <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">試作対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>

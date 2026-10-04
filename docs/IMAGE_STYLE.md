@@ -148,8 +148,8 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 
 > Original landscape 4:3 training-screen environment: a welcoming school gym with age-appropriate dumbbells, ropes and simple exercise stations along the sides, opening toward a visible school running track in warm daylight. Lightly futuristic engineering details in antique brass and deep navy, subtle gears, bold clean anime cel-shaded outlines. Keep center and lower middle calm and moderately dark for overlaid UI. Crop-safe on landscape and portrait iPad. No people, cards, UI, words, letters, numbers, logos, injuries or watermark.
 
-## 段階10・テスト背景サンプル（2026-10-04、確認待ち）
+## 段階10・テスト背景（2026-10-04、採用）
 
-放課後の教室を1枚生成した。元画像は `design-source/stage10/test-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。窓から柔らかな光が入り、手前の机の右側に無地のノートと鉛筆を置いた。設問と入力欄を読みやすくするため、中央は濃紺の低詳細領域とした。アプリにはまだ適用していない。
+放課後の教室を1枚生成し、オーナーが採用した。元画像は `design-source/stage10/test-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。正式画像は `public/images/bg/test.webp`。窓から柔らかな光が入り、手前の机の右側に無地のノートと鉛筆を置いた。設問と入力欄を読みやすくするため、中央は濃紺の低詳細領域とし、テスト画面で濃紺の半透明グラデーションを重ねる。
 
 > Original landscape 4:3 quiz-screen environment: calm after-school classroom from a seated student's viewpoint, tidy wooden desk, blank notebook and pencil off to one side, soft warm daylight through windows. Restrained deep-navy metal and antique-brass trim with a small gear motif, polished anime cel-shaded environment art. Keep the central and lower-middle area dark and low detail for question text and controls; place the brightest window light toward an edge. Crop-safe on landscape and portrait iPad. No people, writing, answer symbols, cards, UI, letters, numbers, logos or watermark.
