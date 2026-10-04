@@ -112,7 +112,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
 
   const logout = () => { saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
 
-  const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop') ? page : null;
+  const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop' || page === 'training') ? page : null;
   const illustratedStyle = illustratedPage ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${illustratedPage}.webp")` } as CSSProperties : undefined;
 
   return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
