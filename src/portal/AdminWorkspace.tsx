@@ -70,7 +70,7 @@ function StudentPanel({ session }: { session: string }) {
   };
   const filtered = students?.filter((student) => `${student.className} ${student.number} ${student.name} ${student.nickname} ${student.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   return <section className="panel admin-stage-panel"><p className="eyebrow">STUDENTS</p><h2>生徒管理</h2>
-    <details className="admin-roster-import"><summary>名簿CSVを取り込む</summary><p>列名は <code>email,class,number,name</code>。既存の名簿を更新できます。</p><input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setCsv).catch(() => setMessage('CSVを読めませんでした')); }} /><button className="button button--ghost" disabled={!csv || busy} onClick={() => { void importRoster(); }}>取り込む</button></details>
+    <details className="admin-roster-import"><summary>名簿CSVを取り込む</summary><p>CSVは、学校の生徒名簿を表計算ソフトから保存したファイルです。1行目を <code>email,class,number,name</code> とし、2行目から学校メール・クラス・番号・氏名を1人ずつ記入します。</p><p>取り込んだ情報は学校側のスプレッドシートに保存されます。既存の生徒は名簿情報だけ更新し、Gポイントやカードは変わりません。GitHubには保存しません。</p><input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setCsv).catch(() => setMessage('CSVを読めませんでした')); }} /><button className="button button--ghost" disabled={!csv || busy} onClick={() => { void importRoster(); }}>取り込む</button></details>
     <label>氏名・クラス・メールで検索<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="例：3年1組" /></label>
     {!students && !message && <LoadingState text="生徒を読み込み中" />}
     <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>ニックネーム</th><th>G</th><th>最大ライフ</th><th>カード</th><th></th></tr></thead><tbody>{filtered.map((student) => <tr key={student.email}><td>{student.className}</td><td>{student.number}</td><td>{student.name || (student.role === 'admin' ? '管理者' : '—')}</td><td>{student.nickname || '未設定'}</td><td>{student.gPoint}</td><td>{student.maxLife}</td><td>{student.ownedCount}</td><td><button className="button button--ghost" onClick={() => { setMessage(''); void loadDetail(student.email); }}>詳細</button></td></tr>)}</tbody></table></div>
@@ -114,11 +114,12 @@ function ExportPanel({ session }: { session: string }) {
 
 export function AdminWorkspace({ session }: { session: string }) {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [pendingEconomy, setPendingEconomy] = useState(false);
   const tabs: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'ダッシュボード' }, { key: 'students', label: '生徒管理' },
     { key: 'tests', label: 'テスト' }, { key: 'economy', label: 'カード・ミッション' }, { key: 'exports', label: 'CSV書き出し' },
   ];
-  return <><section className="panel admin-stage-nav"><p className="eyebrow">ADMIN</p><h1>管理者メニュー</h1><div className="admin-stage-tabs">{tabs.map((item) => <button key={item.key} type="button" className={tab === item.key ? 'is-active' : ''} aria-pressed={tab === item.key} onClick={() => setTab(item.key)}>{item.label}</button>)}</div></section>
-    {tab === 'dashboard' ? <DashboardPanel session={session} /> : tab === 'students' ? <StudentPanel session={session} /> : tab === 'tests' ? <AdminTests session={session} /> : tab === 'economy' ? <AdminEconomy session={session} /> : <ExportPanel session={session} />}
+  return <><section className="panel admin-stage-nav"><p className="eyebrow">ADMIN</p><h1>管理者メニュー</h1><div className="admin-stage-tabs">{tabs.map((item) => <button key={item.key} type="button" className={tab === item.key ? 'is-active' : ''} aria-pressed={tab === item.key} onClick={() => { if (tab === 'economy' && item.key !== 'economy' && pendingEconomy && !window.confirm('保存していない設定変更があります。移動すると変更は消えます。続けますか？')) return; setTab(item.key); }}>{item.label}</button>)}</div></section>
+    {tab === 'dashboard' ? <DashboardPanel session={session} /> : tab === 'students' ? <StudentPanel session={session} /> : tab === 'tests' ? <AdminTests session={session} /> : tab === 'economy' ? <AdminEconomy session={session} onDirtyChange={setPendingEconomy} /> : <ExportPanel session={session} />}
   </>;
 }

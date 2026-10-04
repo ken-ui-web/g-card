@@ -148,6 +148,10 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .admin-setting label,.admin-pack label{display:grid;gap:6px;color:#dce7f7}
 .admin-setting input:not([type=checkbox]),.admin-pack input:not([type=checkbox]){width:100%;min-height:42px;border:1px solid #ffffff55;border-radius:8px;background:#101e42;color:white;padding:8px}
 .admin-economy select,.admin-economy-grid input:not([type=checkbox]){width:100%;min-height:42px;border:1px solid #ffffff55;border-radius:8px;background:#101e42;color:white;padding:8px}
+.admin-bulk-save{position:sticky;top:8px;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid #ffdb71;border-radius:12px;background:#111d3cf2;box-shadow:0 8px 25px #0006}
+.admin-bulk-save span{font-weight:800;color:#ffdb71}
+.admin-bulk-save small{flex-basis:100%;font-size:.88rem;color:#fff}
+.admin-economy-fields{border:0;padding:0;margin:0;min-width:0}
 .admin-setting label:has([type=checkbox]),.admin-pack label:has([type=checkbox]){display:flex;align-items:center;gap:8px}
 .learning-page,.admin-tests{position:relative;width:min(1080px,calc(100% - 48px));margin:30px auto 55px;padding:clamp(20px,4vw,38px)}
 .learning-page h1{font:clamp(26px,4vw,38px) 'Dela Gothic One',sans-serif;margin:0 0 15px}
