@@ -25,16 +25,46 @@ const GC_HEADERS = {
 };
 
 const GC_CARDS = [
-  ['G001', 'パンチ', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G001-front.webp', 50, true, true, 1, '', 0],
-  ['G002', 'キック', 'rock', 'N', '20のダメージを与える', '[{"type":"damage","amount":20}]', 1, 'G002-front.webp', 50, true, true, 2, '', 0],
-  ['C008', '火縄銃', 'scissors', 'R', '50のダメージを与える', '[{"type":"damage","amount":50}]', 0, 'C008-front.webp', 150, true, true, 3, '', 0],
-  ['P001', '手品', 'paper', 'N', '相手のカードを1枚選び、種類を【グー】に変える', '[{"type":"changeOpponentType","to":"rock"}]', 0, 'P001-front.webp', 50, true, true, 4, '', 0],
-  ['P003', '救急箱', 'paper', 'N', 'ライフを30回復', '[{"type":"heal","amount":30}]', 0, 'P003-front.webp', 50, true, true, 5, '', 0],
-  ['G006', '正拳突き', 'rock', 'R', '30のダメージを与える', '[{"type":"damage","amount":30}]', 1, 'G006-front.webp', 150, true, true, 6, '', 0],
-  ['C002', 'のこぎり', 'scissors', 'N', '30のダメージを与える', '[{"type":"damage","amount":30}]', 0, 'C002-front.webp', 50, true, true, 7, '', 0],
-  ['P002', '催眠術', 'paper', 'N', '相手のカードを1枚選び、種類を【チョキ】に変える', '[{"type":"changeOpponentType","to":"scissors"}]', 0, 'P002-front.webp', 50, true, true, 8, '', 0],
-  ['P017', 'おりがみ', 'paper', 'N', '相手のカードを1枚選び、種類を【パー】に変える', '[{"type":"changeOpponentType","to":"paper"}]', 0, 'P017-front.webp', 50, true, true, 9, '', 0],
-  ['C014', 'レーザーカッター', 'scissors', 'SSR', '60のダメージを与える', '[{"type":"damage","amount":60}]', 0, 'C014-front.webp', '', true, true, 10, '', 0],
+  ["G001", "パンチ", "rock", "N", "20ダメージ", "[{\"type\":\"damage\",\"amount\":20}]", 1, "G001-front.webp", 50, true, true, 1, "", 0],
+  ["G002", "キック", "rock", "N", "20ダメージ", "[{\"type\":\"damage\",\"amount\":20}]", 1, "G002-front.webp", 50, true, true, 2, "", 0],
+  ["G018", "人力発電", "rock", "N", "15ダメージ＋10回復", "[{\"type\":\"damage\",\"amount\":15},{\"type\":\"heal\",\"amount\":10}]", 1, "G018-front.webp", 50, true, true, 3, "", 0],
+  ["G019", "歯車", "rock", "N", "10ダメージ＋次のラウンドの自分のダメージ＋10", "[{\"type\":\"damage\",\"amount\":10},{\"type\":\"nextRoundModifier\",\"target\":\"self\",\"add\":10}]", 1, "G019-front.webp", 50, true, true, 4, "", 0],
+  ["G006", "正拳突き", "rock", "R", "30ダメージ", "[{\"type\":\"damage\",\"amount\":30}]", 1, "G006-front.webp", 150, true, true, 5, "", 0],
+  ["G007", "連続パンチ", "rock", "R", "10ダメージ×3回", "[{\"type\":\"damage\",\"amount\":10,\"hits\":3}]", 1, "G007-front.webp", 150, true, true, 6, "", 0],
+  ["G020", "てこの原理", "rock", "R", "15ダメージ。自分のライフが少なければ2倍", "[{\"type\":\"damage\",\"amount\":15,\"condition\":\"selfLifeLower\",\"multiplierIfCondition\":2}]", 1, "G020-front.webp", 150, true, true, 7, "", 0],
+  ["G017", "受け身", "rock", "R", "15ダメージ＋次の被ダメージを10減らす", "[{\"type\":\"damage\",\"amount\":15},{\"type\":\"shield\",\"mode\":\"reduce\",\"amount\":10}]", 1, "G017-front.webp", 150, true, true, 8, "", 0],
+  ["G021", "電動アシスト", "rock", "R", "15ダメージ。筋トレ効果2倍", "[{\"type\":\"damage\",\"amount\":15}]", 2, "G021-front.webp", 150, true, true, 9, "", 0],
+  ["G009", "ぶち切れパンチ", "rock", "SR", "40ダメージ", "[{\"type\":\"damage\",\"amount\":40}]", 1, "G009-front.webp", 400, true, true, 10, "", 0],
+  ["G010", "捨て身タックル", "rock", "SR", "60ダメージ。自分も25ダメージ", "[{\"type\":\"damage\",\"amount\":60},{\"type\":\"selfDamage\",\"amount\":25}]", 1, "G010-front.webp", 400, true, true, 11, "", 0],
+  ["G012", "ベアハッグ", "rock", "SR", "25ダメージ＋相手の残りカード1枚を効果なしにする", "[{\"type\":\"damage\",\"amount\":25},{\"type\":\"nullifyOpponentCard\",\"count\":1}]", 1, "G012-front.webp", 400, true, true, 12, "", 0],
+  ["G022", "パワードスーツ", "rock", "SSR", "30ダメージ。筋トレ値を＋20して計算", "[{\"type\":\"damage\",\"amount\":30}]", 1, "G022-front.webp", "", true, true, 13, "", 20],
+  ["G015", "ジャイアントスイング", "rock", "SSR", "30ダメージ＋相手は残りカードをランダムに出す", "[{\"type\":\"damage\",\"amount\":30},{\"type\":\"blindOpponent\"}]", 1, "G015-front.webp", "", true, true, 14, "", 0],
+  ["C002", "のこぎり", "scissors", "N", "30ダメージ", "[{\"type\":\"damage\",\"amount\":30}]", 0, "C002-front.webp", 50, true, true, 15, "", 0],
+  ["C003", "げんのう", "scissors", "N", "25ダメージ", "[{\"type\":\"damage\",\"amount\":25}]", 0, "C003-front.webp", 50, true, true, 16, "", 0],
+  ["C016", "くぎ", "scissors", "N", "15ダメージ。デッキにげんのうがあれば＋15", "[{\"type\":\"damage\",\"amount\":15,\"comboBonus\":{\"requiresCardInDeck\":\"C003\",\"add\":15}}]", 0, "C016-front.webp", 50, true, true, 17, "", 0],
+  ["C004", "手裏剣", "scissors", "N", "15ダメージ×2回", "[{\"type\":\"damage\",\"amount\":15,\"hits\":2}]", 0, "C004-front.webp", 50, true, true, 18, "", 0],
+  ["C008", "火縄銃", "scissors", "R", "50ダメージ", "[{\"type\":\"damage\",\"amount\":50}]", 0, "C008-front.webp", 150, true, true, 19, "", 0],
+  ["C006", "刀", "scissors", "R", "40ダメージ", "[{\"type\":\"damage\",\"amount\":40}]", 0, "C006-front.webp", 150, true, true, 20, "", 0],
+  ["C007", "毒矢", "scissors", "R", "10ダメージ＋毎ラウンド終了時に毒10ダメージ", "[{\"type\":\"damage\",\"amount\":10},{\"type\":\"poison\",\"amount\":10}]", 0, "C007-front.webp", 150, true, true, 21, "", 0],
+  ["C017", "ドローン", "scissors", "R", "20ダメージ＋相手の残りカード1枚を見る", "[{\"type\":\"damage\",\"amount\":20},{\"type\":\"revealOpponent\",\"count\":1}]", 0, "C017-front.webp", 150, true, true, 22, "", 0],
+  ["C010", "電動ドリル", "scissors", "SR", "40ダメージ。シールド貫通", "[{\"type\":\"damage\",\"amount\":40,\"pierce\":true}]", 0, "C010-front.webp", 400, true, true, 23, "", 0],
+  ["C011", "チェーンソー", "scissors", "SR", "55ダメージ", "[{\"type\":\"damage\",\"amount\":55}]", 0, "C011-front.webp", 400, true, true, 24, "", 0],
+  ["C013", "投石器", "scissors", "SR", "次のラウンド終了時に60ダメージ", "[{\"type\":\"delayedDamage\",\"amount\":60,\"afterRounds\":1}]", 0, "C013-front.webp", "", true, true, 25, "", 0],
+  ["C014", "レーザーカッター", "scissors", "SSR", "60ダメージ", "[{\"type\":\"damage\",\"amount\":60}]", 0, "C014-front.webp", "", true, true, 26, "", 0],
+  ["C015", "ロボットアーム", "scissors", "SSR", "相手の残りカードの枚数×20ダメージ", "[{\"type\":\"damagePerOpponentRemaining\",\"per\":20}]", 0, "C015-front.webp", "", true, true, 27, "", 0],
+  ["P001", "手品", "paper", "N", "相手の残りカード1枚をグーに変える", "[{\"type\":\"changeOpponentType\",\"to\":\"rock\",\"count\":1}]", 0, "P001-front.webp", 50, true, true, 28, "", 0],
+  ["P002", "催眠術", "paper", "N", "相手の残りカード1枚をチョキに変える", "[{\"type\":\"changeOpponentType\",\"to\":\"scissors\",\"count\":1}]", 0, "P002-front.webp", 50, true, true, 29, "", 0],
+  ["P017", "おりがみ", "paper", "N", "相手の残りカード1枚をパーに変える", "[{\"type\":\"changeOpponentType\",\"to\":\"paper\",\"count\":1}]", 0, "P017-front.webp", 50, true, true, 30, "", 0],
+  ["P003", "救急箱", "paper", "N", "30回復", "[{\"type\":\"heal\",\"amount\":30}]", 0, "P003-front.webp", 50, true, true, 31, "", 0],
+  ["P005", "バリア", "paper", "R", "次に受けるダメージを半分にする", "[{\"type\":\"shield\",\"mode\":\"half\"}]", 0, "P005-front.webp", 150, true, true, 32, "", 0],
+  ["P007", "封印", "paper", "R", "相手の残りカード1枚を効果なしにする", "[{\"type\":\"nullifyOpponentCard\",\"count\":1}]", 0, "P007-front.webp", 150, true, true, 33, "", 0],
+  ["P004", "変身", "paper", "R", "自分の残りカード1枚を好きな種類に変える", "[{\"type\":\"changeOwnType\",\"count\":1}]", 0, "P004-front.webp", 150, true, true, 34, "", 0],
+  ["P008", "吸収", "paper", "R", "20ダメージを与え、与えた分だけ回復", "[{\"type\":\"drain\",\"amount\":20}]", 0, "P008-front.webp", 150, true, true, 35, "", 0],
+  ["P010", "鏡", "paper", "SR", "次に受けるダメージを相手に返す", "[{\"type\":\"shield\",\"mode\":\"reflect\"}]", 0, "P010-front.webp", "", true, true, 36, "", 0],
+  ["P009", "入れ替え", "paper", "SR", "自分と相手の残りカードを1枚ずつ交換", "[{\"type\":\"swapCards\"}]", 0, "P009-front.webp", 400, true, true, 37, "", 0],
+  ["P018", "暗号化", "paper", "SR", "残りカードの種類を隠し、1枚をこっそり変えられる", "[{\"type\":\"encrypt\",\"secretTypeChange\":1}]", 0, "P018-front.webp", "", true, true, 38, "", 0],
+  ["P015", "ハッキング", "paper", "SSR", "相手の残りカードをすべてパーに変える", "[{\"type\":\"changeAllOpponentType\",\"to\":\"paper\"}]", 0, "P015-front.webp", "", true, true, 39, "", 0],
+  ["P014", "プログラミング", "paper", "SSR", "相手の次のカードを指定する", "[{\"type\":\"forceOpponentNext\"}]", 0, "P014-front.webp", "", true, true, 40, "", 0],
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 const GC_ECONOMY_SETTINGS = [
@@ -55,11 +85,13 @@ const GC_ECONOMY_SETTINGS = [
 ];
 const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true];
 const GC_FIRST_WAVE_PACK = ['first-wave', '第1弾パック', 200, 3, '{"N":68.5,"R":30,"SSR":1.5}', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 0, '', '', true];
+const GC_ALL_CARD_IDS = GC_CARDS.map(function (card) { return card[0]; });
+const GC_ALL_CARDS_PACK = ['all-cards', '全カードパック', 200, 3, '{"N":60,"R":30,"SR":8.5,"SSR":1.5}', JSON.stringify(GC_ALL_CARD_IDS), 10, '', '', true];
 const GC_STARTER_DECKS = [
-  ['sample', 'サンプルカードセット', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 100, 0],
-  ['cpu-1', 'CPU Lv1の候補', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 100, 0],
-  ['cpu-2', 'CPU Lv2の候補', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 110, 5],
-  ['cpu-3', 'CPU Lv3の候補', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 130, 10],
+  ['sample', 'サンプルカードセット', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
+  ['cpu-1', 'CPU Lv1の候補', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
+  ['cpu-2', 'CPU Lv2の候補', JSON.stringify(GC_ALL_CARD_IDS), 110, 5],
+  ['cpu-3', 'CPU Lv3の候補', JSON.stringify(GC_ALL_CARD_IDS), 130, 10],
 ];
 const GC_STARTER_MISSIONS = [
   ['daily-test', 'daily', 'submit_test', 1, 30, 'テストを1回受ける', true, 1],
@@ -137,6 +169,7 @@ function setup() {
     if (index > 0 && row[0] && String(row[4]).indexOf('"UR"') >= 0) packs.getRange(index + 1, 5).setValue(JSON.stringify(gcRarityRates_(row[4])));
   });
   if (packIds.indexOf(GC_FIRST_WAVE_PACK[0]) < 0) packs.appendRow(GC_FIRST_WAVE_PACK);
+  if (packIds.indexOf(GC_ALL_CARDS_PACK[0]) < 0) packs.appendRow(GC_ALL_CARDS_PACK);
   const decks = gcSheet_('Decks');
   if (decks.getLastRow() === 1) decks.getRange(2, 1, GC_STARTER_DECKS.length, GC_HEADERS.Decks.length).setValues(GC_STARTER_DECKS);
   else {
@@ -885,12 +918,11 @@ function gcAdminGetEconomy_(token) {
 
 function gcAdminSaveDeck_(token, payload) {
   gcSession_(token, true);
-  if (['sample', 'cpu-1', 'cpu-2', 'cpu-3'].indexOf(payload.deckId) < 0 || !Array.isArray(payload.cardIds) || payload.cardIds.length < 4 || payload.cardIds.length > 20 || new Set(payload.cardIds).size !== payload.cardIds.length ||
+  if (['sample', 'cpu-1', 'cpu-2', 'cpu-3'].indexOf(payload.deckId) < 0 || !Array.isArray(payload.cardIds) || payload.cardIds.length < 4 || payload.cardIds.length > 40 || new Set(payload.cardIds).size !== payload.cardIds.length ||
       !Number.isInteger(Number(payload.maxLife)) || Number(payload.maxLife) < 1 || Number(payload.maxLife) > 9999 ||
       !Number.isInteger(Number(payload.rockTrainLevel)) || Number(payload.rockTrainLevel) < 0 || Number(payload.rockTrainLevel) > 99) gcError_('BAD_DECK', 'デッキの設定を確認してください');
   const master = gcCardMaster_();
   if (!payload.cardIds.every(function (id) { return master.some(function (card) { return card.cardId === id && card.active; }); })) gcError_('BAD_DECK', '有効なカードから選んでください');
-  if (payload.cardIds.filter(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === 'SSR'; }); }).length > 1) gcError_('BAD_DECK', 'SSRは候補カードに1枚までです');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Decks');
     const rows = sheet.getDataRange().getValues();

@@ -23,7 +23,7 @@ function pendingCost(data: BootstrapData, items: { kind: 'muscle' | 'run'; owned
 
 function CardTile({ card, owned, children, className = '' }: { card: CardMaster; owned?: OwnedCard; children?: React.ReactNode; className?: string }) {
   const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount;
-  return <article className={`economy-card panel ${className}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div><h3>{card.name} <small>{card.rarity}</small></h3><p>{card.text}</p>{owned && card.type === 'rock' && <p>筋トレ +{owned.trainLevel}{baseDamage !== undefined ? ` · 最終ダメージ ${baseDamage + owned.trainLevel * card.trainingMultiplier}` : ''}</p>}{children}</div></article>;
+  return <article className={`economy-card panel ${className}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div><h3>{card.name} <small>{card.rarity}</small></h3><p>{card.text}</p>{owned && card.type === 'rock' && <p>筋トレ +{owned.trainLevel}{baseDamage !== undefined ? ` · 最終ダメージ ${baseDamage + (owned.trainLevel + card.trainingBonus) * card.trainingMultiplier}` : ''}</p>}{children}</div></article>;
 }
 
 export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedback; onClose: () => void }) {

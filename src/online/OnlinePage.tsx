@@ -10,6 +10,14 @@ import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock 
 import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type DeckMode, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
 
 type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
+type EncryptProof = { round: number; index: number; to: CardType; salt: string };
+const encryptKey = (roomId: string) => `g-card-encrypt:${roomId}`;
+function encryptProofs(roomId: string): EncryptProof[] {
+  try {
+    const data = JSON.parse(sessionStorage.getItem(encryptKey(roomId)) || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
 const roomFromHash = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('room') || '';
 const battleBackgroundStyle = { '--battle-bg': `url("${import.meta.env.BASE_URL}images/bg/battle.webp")` } as CSSProperties;
 
@@ -19,8 +27,48 @@ function onlineCardDamage(pick: RoundPick): number | null {
   return damage?.type === 'damage' ? damage.amount + (card.type === 'rock' ? (pick.card.trainLevel + (card.trainingBonus ?? 0)) * card.trainingMultiplier : 0) : null;
 }
 
-function HiddenBack({ type, ssr }: { type: CardType; ssr: boolean }) {
+function HiddenBack({ type, ssr }: { type: CardType | 'unknown'; ssr: boolean }) {
   return <span className="online-back-card"><Card card={getCard(ssr ? 'C014' : 'G001')} side="back" backType={type} width={72} /></span>;
+}
+function OpponentBack({ view, side, index }: { view: OnlineView; side: 0 | 1; index: number }) {
+  const enemy = side === 0 ? 1 : 0;
+  const known = view.knownTo?.[side]?.includes(index) && view.known?.[enemy]?.[index];
+  if (known) return <span className="online-back-card"><Card card={getCard(known.cardId)} side="front" width={72} /><small>{getCard(known.cardId).name}</small></span>;
+  return <HiddenBack type={view.hidden?.[enemy]?.[index] ? 'unknown' : view.types[enemy][index]} ssr={view.ssr[enemy][index]} />;
+}
+
+function TargetPicker({ view, side, selected, onSelect, type, onType, onSubmit, busy }: {
+  view: OnlineView; side: 0 | 1; selected: number[]; onSelect: (next: number[]) => void;
+  type: CardType; onType: (next: CardType) => void; onSubmit: () => void; busy: boolean;
+}) {
+  const requests = view.targetRequests ?? [];
+  const ready = requests.length > 0 && requests.every((request, index) => selected[index] !== undefined && (selected[index] >= 0 || request.optional));
+  return <div className="online-target-picker"><p>カード効果の対象を選んでください（20秒）。</p>
+    {requests.map((request, requestIndex) => {
+      const owner = request.kind === 'own' || request.kind === 'swapOwn' || request.kind === 'encrypt' ? side : side === 0 ? 1 : 0;
+      return <div key={requestIndex}><strong>{request.kind === 'swapOwn' ? '自分の交換するカード' : request.kind === 'swapOpponent' ? '相手の交換するカード' : request.kind === 'encrypt' ? '暗号化して変えるカード' : request.kind === 'own' ? '自分のカード' : '相手のカード'}</strong>
+        <div className="online-targets">{request.options.map((index) => <button className={selected[requestIndex] === index ? 'is-selected' : ''} key={index} onClick={() => { const next = [...selected]; next[requestIndex] = index; onSelect(next); }}>{view.hidden?.[owner]?.[index] ? '？' : typeLabels[view.types[owner][index]]} · {index + 1}番</button>)}
+          {request.optional && <button className={selected[requestIndex] === -1 ? 'is-selected' : ''} onClick={() => { const next = [...selected]; next[requestIndex] = -1; onSelect(next); }}>変更しない</button>}
+        </div>
+      </div>;
+    })}
+    {requests.some((request) => request.kind === 'own' || request.kind === 'encrypt') && <label>変更後の種類<select value={type} onChange={(event) => onType(event.target.value as CardType)}><option value="rock">グー</option><option value="scissors">チョキ</option><option value="paper">パー</option></select></label>}
+    <button className="button button--primary" disabled={busy || !ready} onClick={onSubmit}>効果を決定する</button>
+  </div>;
+}
+
+function OnlineDeckChoices({ view, entries, side, onPick, busy }: { view: OnlineView; entries: OnlineEntry[]; side: 0 | 1; onPick: (index: number) => void; busy: boolean }) {
+  return <div className="online-deck-grid">{entries.map((entry, index) => {
+    if (view.used[side].includes(index)) return null;
+    const card = view.known?.[side]?.[index] ?? entry;
+    const forced = view.required?.[side];
+    const blind = view.blind?.[side] === true;
+    return <button key={index} disabled={busy || forced !== null && forced !== undefined && forced !== index} onClick={() => onPick(index)}>
+      <Card card={getCard(card.cardId)} side={blind ? 'back' : 'front'} backType={blind ? 'unknown' : undefined} width={110} />
+      <strong>{blind ? 'ランダムで選択' : getCard(card.cardId).name}</strong>
+      {forced === index && <small>このカードを出します</small>}
+    </button>;
+  })}</div>;
 }
 
 function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; side: 0 | 1; names: [string, string]; onClose: () => void }) {
@@ -51,13 +99,13 @@ function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; s
   return <div className="online-presentation panel">
     {stage === 'title' ? <><p className="eyebrow">ROUND START</p><h2>ラウンド {view.round}</h2><p>お互いのカードが決まりました</p></> : stage === 'suspense' ? <><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></> : <>
       <p className="eyebrow">ROUND {view.round} REVEAL</p>
-      {stage === 'backs' && <p className="online-reveal-types" role="status">{typeLabels[view.types[0][cards[0].index]]} <span>VS</span> {typeLabels[view.types[1][cards[1].index]]}</p>}
+      {stage === 'backs' && <p className="online-reveal-types" role="status">{typeLabels[cards[0].currentType ?? view.types[0][cards[0].index]]} <span>VS</span> {typeLabels[cards[1].currentType ?? view.types[1][cards[1].index]]}</p>}
       <div className="online-reveal-grid">{cards.map((pick, index) => <div key={index}><span>{names[index]}</span>
         <div className={`flip-card online-flip-card${stage === 'flipping' || stage === 'fronts' ? ' is-flipped' : ''}`}><div className="flip-card__inner">
-          <div className="flip-card__face flip-card__face--back" aria-hidden={stage === 'fronts'}><Card card={getCard(pick.card.cardId)} side="back" backType={view.types[index as 0 | 1][pick.index]} /></div>
-          <div className="flip-card__face flip-card__face--front" aria-hidden={stage !== 'fronts'}><Card card={getCard(pick.card.cardId)} damage={onlineCardDamage(pick)} /></div>
+          <div className="flip-card__face flip-card__face--back" aria-hidden={stage === 'fronts'}><Card card={getCard(pick.card.cardId)} side="back" backType={pick.currentType ?? view.types[index as 0 | 1][pick.index]} /></div>
+          <div className="flip-card__face flip-card__face--front" aria-hidden={stage !== 'fronts'}><Card card={getCard(pick.card.cardId)} damage={view.revealDamage?.[index] ?? onlineCardDamage(pick)} /></div>
         </div></div>
-        {stage === 'backs' && <strong className="reveal-entry__type">{typeLabels[view.types[index as 0 | 1][pick.index]]}{view.winner === index ? ' · 勝ち' : view.winner === null ? ' · あいこ' : ' · 負け'}</strong>}
+        {stage === 'backs' && <strong className="reveal-entry__type">{typeLabels[pick.currentType ?? view.types[index as 0 | 1][pick.index]]}{view.winner === index ? ' · 勝ち' : view.winner === null ? ' · あいこ' : ' · 負け'}</strong>}
       </div>)}</div>
       <h2>{view.winner === null ? view.events.some((event) => event.includes('SSR')) ? 'あいこ · SSR発動！' : 'あいこ' : view.winner === side ? 'このラウンドは勝ち' : 'このラウンドは負け'}</h2>
       {stage === 'backs' ? <><p className="reveal-hint">種類と勝敗を見たら、カードをめくろう。</p><button className="button button--primary" disabled={!canFlip} onClick={() => { playSfx('flip'); setStage('flipping'); }}>{canFlip ? 'カードをめくる' : '勝敗を見てね…'}</button></> : stage === 'flipping' ? <p role="status">カードをめくっています…</p> : <><p>{view.events.join(' · ')}</p><button className="button button--primary" onClick={onClose}>{view.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></>}
@@ -86,6 +134,8 @@ export function OnlinePage() {
   const [localConnected, setLocalConnected] = useState(false);
   const [presentation, setPresentation] = useState<OnlineView | null>(null);
   const [seenRound, setSeenRound] = useState(0);
+  const [targetSelections, setTargetSelections] = useState<number[]>([]);
+  const [targetType, setTargetType] = useState<CardType>('rock');
   const actionKey = useRef(new Set<string>());
   const entered = useRef(false);
   const currentRoom = useRef(roomId);
@@ -198,13 +248,25 @@ export function OnlinePage() {
       const stored = sessionStorage.getItem(`g-card-pick:${roomId}:${view.round}`);
       if (stored) takeAction(`reveal-${view.round}`, async () => {
         const pick = JSON.parse(stored) as { index: number; salt: string };
-        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: entries[pick.index].cardId, trainLevel: entries[pick.index].trainLevel } });
+        const card = view.known?.[mySide]?.[pick.index] ?? entries[pick.index];
+        const secret = encryptProofs(roomId).find((item) => item.index === pick.index && item.round < view.round);
+        const currentType = view.hidden?.[mySide]?.[pick.index] && secret ? secret.to : view.types[mySide][pick.index];
+        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: card.cardId, trainLevel: card.trainLevel }, ...(room.meta.protocolVersion === 2 ? { currentType, combo: entries.some((item) => item.cardId === 'C003') } : {}) });
       });
     }
+    if (view.phase === 'swapReveal' && view.swapTargets && !record?.swapReveal?.[uid]) takeAction(`swap-${view.round}`, async () => {
+      const index = view.swapTargets![mySide];
+      const card = view.known?.[mySide]?.[index] ?? entries[index];
+      await set(ref(db, `${path}/rounds/${view.round}/swapReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
+    });
+    if (view.phase === 'intelReveal' && view.targetOwner === mySide && view.intelTarget !== undefined && !record?.intelReveal?.[uid]) takeAction(`intel-${view.round}`, async () => {
+      const card = view.known?.[mySide]?.[view.intelTarget!] ?? entries[view.intelTarget!];
+      await set(ref(db, `${path}/rounds/${view.round}/intelReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
+    });
     if (view.phase === 'verify' && !record?.stateHash?.[uid]) takeAction(`hash-${view.round}`, async () => {
       await set(ref(db, `${path}/rounds/${view.round}/stateHash/${uid}`), await stateDigest(view));
     });
-    if (view.phase === 'final' && !room.final?.[uid]) takeAction('final', () => set(ref(db, `${path}/final/${uid}`), { entries, salt }));
+    if (view.phase === 'final' && !room.final?.[uid]) takeAction('final', () => set(ref(db, `${path}/final/${uid}`), { entries, salt, ...(room.meta.protocolVersion === 2 ? { encryptProofs: encryptProofs(roomId) } : {}) }));
     if ((view.phase === 'finished' || view.phase === 'invalid') && session && !reward) takeAction('report', async () => {
       const result = view.phase === 'invalid' ? 'draw' : myResult(view, mySide);
       if (room.meta.teacherTest) {
@@ -296,6 +358,7 @@ export function OnlinePage() {
 
   const selectPick = async (index: number) => {
     if (!db || !room || !view || !entries || !localConnected || busy) return;
+    if (view.required?.[mySide] !== null && view.required?.[mySide] !== undefined && index !== view.required[mySide]) return;
     playSfx('select');
     setBusy(true); setError('');
     try {
@@ -306,11 +369,34 @@ export function OnlinePage() {
     finally { setBusy(false); }
   };
 
-  const chooseTarget = async (index: number) => {
+  const chooseTarget = async (selection = targetSelections, to = targetType) => {
     if (!db || !view || !localConnected || busy) return;
     playSfx('select');
     setBusy(true);
-    try { await set(ref(db, `${roomPath(roomId)}/rounds/${view.round}/choices/${uid}`), index); }
+    try {
+      if (room?.meta.protocolVersion !== 2) {
+        await set(ref(db, `${roomPath(roomId)}/rounds/${view.round}/choices/${uid}`), selection[0]);
+      } else {
+        const requests = view.targetRequests ?? [];
+        const encoded = [] as { index?: number; to?: CardType; commit?: string }[];
+        for (let i = 0; i < requests.length; i++) {
+          const request = requests[i];
+          const index = selection[i];
+          if (index === undefined || index < 0 && !request.optional) throw new Error('対象を選んでください');
+          if (request.kind === 'encrypt') {
+            const secretSalt = randomSalt();
+            const secretIndex = index < 0 ? -1 : index;
+            const secretTo = index < 0 ? 'rock' : to;
+            const commit = await sha256(`${roomId}:${view.round}:${secretIndex}:${secretTo}:${secretSalt}`);
+            const proofs = [...encryptProofs(roomId).filter((item) => item.round !== view.round), { round: view.round, index: secretIndex, to: secretTo, salt: secretSalt }];
+            sessionStorage.setItem(encryptKey(roomId), JSON.stringify(proofs));
+            encoded.push({ commit });
+          } else encoded.push({ index, ...(['own'].includes(request.kind) ? { to } : {}) });
+        }
+        await set(ref(db, `${roomPath(roomId)}/rounds/${view.round}/choices/${uid}`), JSON.stringify(encoded));
+      }
+      setTargetSelections([]);
+    }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
@@ -332,12 +418,13 @@ export function OnlinePage() {
     }
     if (view.phase === 'select' && !room.rounds?.[String(view.round)]?.commit?.[uid] && seconds >= 30) {
       const remaining = [0, 1, 2, 3].filter((index) => !view.used[mySide].includes(index));
-      if (remaining.length) takeAction(`pick-timeout-${view.round}`, () => selectPick(remaining[(room.meta.seed + view.round + mySide) % remaining.length]));
+      if (remaining.length) takeAction(`pick-timeout-${view.round}`, () => selectPick(view.required?.[mySide] ?? remaining[(room.meta.seed + view.round + mySide) % remaining.length]));
     }
     if (view.phase === 'target' && view.targetOwner === mySide && seconds >= 20) {
-      const other: 0 | 1 = mySide === 0 ? 1 : 0;
-      const remaining = [0, 1, 2, 3].filter((index) => !view.used[other].includes(index));
-      if (remaining.length) takeAction(`target-timeout-${view.round}`, () => chooseTarget(remaining[(room.meta.seed + view.round) % remaining.length]));
+      const requests = view.targetRequests;
+      const automatic = requests?.map((request) => request.options[(room.meta.seed + view.round) % request.options.length]) ??
+        [([0, 1, 2, 3].filter((index) => !view.used[mySide === 0 ? 1 : 0].includes(index)))[0]];
+      if (automatic.length && automatic.every((index) => index !== undefined)) takeAction(`target-timeout-${view.round}`, () => chooseTarget(automatic));
     }
   }, [elapsed, view, room, joined, entries, roomId, uid, selectedValid, pool, mySide, presentation, localConnected, opponentAway]);
 
@@ -357,8 +444,8 @@ export function OnlinePage() {
       {room && joined && !localConnected && view?.outcome === null && <p role="status">通信が切れています。再接続を待っています。制限時間は一時停止中です。</p>}
       {room && joined && localConnected && opponentAway && !opponentOffline && view?.outcome === null && <p role="status">相手との通信を確認中です。制限時間は一時停止中です。</p>}
       {!session ? <p>学校アカウントでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <p role="status">対戦に接続中…</p> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>自分のカードかサンプルカードを選び、同じ部門の相手と対戦します。</p><div className="online-mode"><button className="button button--ghost" aria-pressed={deckMode === 'sample'} onClick={() => chooseMode('sample')}>サンプルカード</button><button className="button button--ghost" aria-pressed={deckMode === 'owned'} disabled={account.ownedCards.length < 4} onClick={() => chooseMode('owned')}>自分のカード</button></div><div className="button-row"><button className="button button--primary" disabled={busy} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <p role="status">部屋を読み込み中…</p> : <><p>部門：{room.meta.deckMode === 'owned' ? '自分のカード' : 'サンプルカード'}{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'} VS {room.players?.[room.meta.guestUid || '']?.nickname || '相手を待っています…'}</p>
-        {!room.meta.guestUid ? <p role="status">相手を待っています。コードを友達に伝えてください。</p> : !joined ? <p role="status">対戦相手の参加を確認中…</p> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻っていません。不戦勝を確定しています…</p></div> : view?.phase === 'deck' ? <><h2>カードを4枚選ぶ</h2><p>制限時間90秒。相手には種類とSSRかどうかが見え、カード名はラウンドまで隠れます。SSRは1枚までです。</p>{room.decks?.[uid] ? <p role="status">相手の準備を待っています…</p> : <><div className="online-deck-grid">{pool.map((item) => <button key={item.id} className={selectedValid.includes(item.id) ? 'is-selected' : ''} aria-pressed={selectedValid.includes(item.id)} disabled={!selectedValid.includes(item.id) && (selectedValid.length >= 4 || getCard(item.cardId).rarity === 'SSR' && selectedSsr >= 1)} onClick={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : current.length < 4 ? [...current, item.id] : current)}><Card card={getCard(item.cardId)} width={110} /><strong>{getCard(item.cardId).name}</strong></button>)}</div><button className="button button--primary" disabled={busy || selectedValid.length !== 4 || selectedSsr > 1} onClick={() => { void submitDeck(); }}>この4枚で決定</button></>}</> : !view ? <p>対戦を読み込み中…</p> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{myResult(view, mySide) === 'win' ? '勝利！' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため報酬はありません。' : '両者の結果と報酬を照合中…'}</p></> : <><h2>ラウンド {view.round}</h2><div className="online-life"><strong>あなた {view.life[mySide]} / {view.maxLife[mySide]}</strong><strong>{opponent?.nickname || '相手'} {view.life[mySide === 0 ? 1 : 0]} / {view.maxLife[mySide === 0 ? 1 : 0]}</strong></div><p>相手の残りカード：{view.types[mySide === 0 ? 1 : 0].map((type, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <HiddenBack key={index} type={type} ssr={view.ssr[mySide === 0 ? 1 : 0][index]} />)}</p>
-          {view.phase === 'select' ? room.rounds?.[String(view.round)]?.commit?.[uid] ? <p role="status">相手のカード決定を待っています…</p> : <><p>30秒以内にカードを選んでください。</p><div className="online-deck-grid">{entries?.map((entry, index) => view.used[mySide].includes(index) ? null : <button key={index} onClick={() => { void selectPick(index); }}><Card card={getCard(entry.cardId)} width={110} /><strong>{getCard(entry.cardId).name}</strong></button>)}</div></> : view.phase === 'reveal' ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>お互いのカードを公開中…</p></div> : view.phase === 'target' && view.targetOwner === mySide ? <><p>相手の残りカードを1枚選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((type, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget(index); }}>{typeLabels[type]} · {index + 1}番</button>)}</div></> : view.phase === 'target' ? <p role="status">相手が対象を選んでいます…</p> : view.phase === 'verify' && view.reveal ? <>{!revealReady ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></div> : <><p>{view.winner === null ? 'あいこ' : view.winner === mySide ? 'このラウンドは勝ち！' : 'このラウンドは負け'}</p><div className="online-reveal-grid">{view.reveal.map((pick, side) => <div key={side}><span>{side === mySide ? 'あなた' : opponent?.nickname || '相手'}</span><Card card={getCard(pick.card.cardId)} width={170} /></div>)}</div><p>{view.events.join(' · ')}</p></>}<p role="status">次のラウンドを同期中…</p></> : <p role="status">デッキの最終確認中…</p>}</>}
+        {!room.meta.guestUid ? <p role="status">相手を待っています。コードを友達に伝えてください。</p> : !joined ? <p role="status">対戦相手の参加を確認中…</p> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻っていません。不戦勝を確定しています…</p></div> : view?.phase === 'deck' ? <><h2>カードを4枚選ぶ</h2><p>制限時間90秒。相手には種類とSSRかどうかが見え、カード名はラウンドまで隠れます。SSRは1枚までです。</p>{room.decks?.[uid] ? <p role="status">相手の準備を待っています…</p> : <><div className="online-deck-grid">{pool.map((item) => <button key={item.id} className={selectedValid.includes(item.id) ? 'is-selected' : ''} aria-pressed={selectedValid.includes(item.id)} disabled={!selectedValid.includes(item.id) && (selectedValid.length >= 4 || getCard(item.cardId).rarity === 'SSR' && selectedSsr >= 1)} onClick={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : current.length < 4 ? [...current, item.id] : current)}><Card card={getCard(item.cardId)} width={110} /><strong>{getCard(item.cardId).name}</strong></button>)}</div><button className="button button--primary" disabled={busy || selectedValid.length !== 4 || selectedSsr > 1} onClick={() => { void submitDeck(); }}>この4枚で決定</button></>}</> : !view ? <p>対戦を読み込み中…</p> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{myResult(view, mySide) === 'win' ? '勝利！' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため報酬はありません。' : '両者の結果と報酬を照合中…'}</p></> : <><h2>ラウンド {view.round}</h2><div className="online-life"><strong>あなた {view.life[mySide]} / {view.maxLife[mySide]}</strong><strong>{opponent?.nickname || '相手'} {view.life[mySide === 0 ? 1 : 0]} / {view.maxLife[mySide === 0 ? 1 : 0]}</strong></div><p>相手の残りカード：{view.types[mySide === 0 ? 1 : 0].map((_, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <OpponentBack key={index} view={view} side={mySide} index={index} />)}</p>
+          {view.phase === 'select' ? room.rounds?.[String(view.round)]?.commit?.[uid] ? <p role="status">相手のカード決定を待っています…</p> : <><p>30秒以内にカードを選んでください。</p><OnlineDeckChoices view={view} entries={entries ?? []} side={mySide} onPick={(index) => { void selectPick(index); }} busy={busy} /></> : view.phase === 'reveal' ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>お互いのカードを公開中…</p></div> : view.phase === 'target' && view.targetOwner === mySide && room.meta.protocolVersion === 2 ? <TargetPicker view={view} side={mySide} selected={targetSelections} onSelect={setTargetSelections} type={targetType} onType={setTargetType} onSubmit={() => { void chooseTarget(); }} busy={busy} /> : view.phase === 'target' && view.targetOwner === mySide ? <><p>相手の残りカードを1枚選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((_, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget([index]); }}>{typeLabels[view.types[mySide === 0 ? 1 : 0][index]]} · {index + 1}番</button>)}</div></> : view.phase === 'target' ? <p role="status">相手が対象を選んでいます…</p> : (view.phase === 'swapReveal' || view.phase === 'intelReveal') ? <p role="status">カードの情報を確認しています…</p> : view.phase === 'verify' && view.reveal ? <>{!revealReady ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></div> : <><p>{view.winner === null ? 'あいこ' : view.winner === mySide ? 'このラウンドは勝ち！' : 'このラウンドは負け'}</p><div className="online-reveal-grid">{view.reveal.map((pick, side) => <div key={side}><span>{side === mySide ? 'あなた' : opponent?.nickname || '相手'}</span><Card card={getCard(pick.card.cardId)} width={170} /></div>)}</div><p>{view.events.join(' · ')}</p></>}<p role="status">次のラウンドを同期中…</p></> : <p role="status">デッキの最終確認中…</p>}</>}
         <div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></>}
       {error && <p role="alert" className="portal-error">{error}</p>}
     </section><footer className="app-footer">Gカード · オンライン対戦</footer></main>;

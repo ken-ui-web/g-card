@@ -6,7 +6,7 @@ export type CpuLevel = 1 | 2 | 3;
 export interface PublicBack {
   instanceId: string;
   originalType: CardType;
-  currentType: CardType;
+  currentType: CardType | null;
 }
 
 export interface CpuView {
@@ -23,7 +23,7 @@ export function toCpuView(state: BattleState): CpuView {
     ownLife: state.players[1].life,
     opponentLife: state.players[0].life,
     ownCards: state.players[1].hand,
-    opponentBacks: state.players[0].hand.map(({ instanceId, originalType, currentType }) => ({ instanceId, originalType, currentType })),
+    opponentBacks: state.players[0].hand.map(({ instanceId, originalType, currentType, publicType }) => ({ instanceId, originalType, currentType: state.players[0].encrypted && !publicType ? null : currentType })),
     config: state.config,
   };
 }
@@ -42,15 +42,28 @@ function typeCounts(ids: string[]): string {
 // 候補から4枚を選ぶ。選ばれたカードと裏面の種類構成はプレイヤーと変える。
 export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: number, candidateIds = availableCards.map((card) => card.cardId)): { ids: string[]; seed: number } {
   const pool = candidateIds.filter((id, index) => candidateIds.indexOf(id) === index);
+  if (pool.length < 4) throw new Error('CPUが選べるカードが足りません');
   const combinations: string[][] = [];
-  for (let a = 0; a < pool.length - 3; a++) {
-    for (let b = a + 1; b < pool.length - 2; b++) {
-      for (let c = b + 1; c < pool.length - 1; c++) {
-        for (let d = c + 1; d < pool.length; d++) {
-          const ids = [pool[a], pool[b], pool[c], pool[d]];
-          if (ssrCount(ids) <= 1) combinations.push(ids);
-        }
+  if (pool.length <= 12) {
+    for (let a = 0; a < pool.length - 3; a++) for (let b = a + 1; b < pool.length - 2; b++)
+      for (let c = b + 1; c < pool.length - 1; c++) for (let d = c + 1; d < pool.length; d++) {
+        const ids = [pool[a], pool[b], pool[c], pool[d]];
+        if (ssrCount(ids) <= 1) combinations.push(ids);
       }
+  } else {
+    // 40枚からの全組み合わせを毎回列挙しない。シード付きで候補だけ抽出する。
+    let current = seed >>> 0;
+    const seen = new Set<string>();
+    for (let attempt = 0; attempt < 640; attempt++) {
+      const shuffled = [...pool];
+      for (let i = shuffled.length - 1; i > shuffled.length - 5; i--) {
+        current = nextRandom(current).seed;
+        const j = current % (i + 1);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const ids = shuffled.slice(-4);
+      const key = [...ids].sort().join(',');
+      if (ssrCount(ids) <= 1 && !seen.has(key)) { seen.add(key); combinations.push(ids); }
     }
   }
   const playerSet = new Set(playerCardIds);
@@ -70,7 +83,10 @@ export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: nu
     return total + (level === 3 ? 17 : 20);
   }, 0) + (typeCounts(ids).split(':').every((count) => Number(count) > 0) ? 20 : 0);
   const ranked = [...eligible].sort((a, b) => score(b) - score(a) || a.join(',').localeCompare(b.join(',')));
-  return { ids: ranked[0], seed };
+  const draw = nextRandom(seed);
+  const top = Math.min(12, ranked.length);
+  const offset = level === 3 && top > 1 ? Math.ceil(top / 2) : 0;
+  return { ids: ranked[(Math.floor(draw.value * top) + offset) % top], seed: draw.seed };
 }
 
 function randomItem<T>(items: T[], seed: number): { item: T; seed: number } {
@@ -116,7 +132,7 @@ function actionValue(state: Forecast, own: BattleCard, config: BattleConfig, mem
     const ownCards = state.ownCards.filter((card) => card.instanceId !== own.instanceId);
     const opponentBacks = state.opponentBacks.filter((card) => card.instanceId !== back.instanceId);
     const next: Forecast = { ownLife: state.ownLife, opponentLife: state.opponentLife, ownCards, opponentBacks };
-    const comparison = compareTypes(own.currentType, back.currentType);
+    const comparison = back.currentType === null ? 0 : compareTypes(own.currentType, back.currentType);
     if (comparison > 0) {
       const definition = getCard(own.cardId);
       const healing = definition.effects.find((effect) => effect.type === 'heal');
@@ -158,7 +174,7 @@ export function chooseCpuCard(view: CpuView, level: CpuLevel, seed: number): { i
       const picked = randomItem(cards, decision.seed);
       return { id: picked.item.instanceId, seed: picked.seed };
     }
-    const score = (card: BattleCard) => view.opponentBacks.filter((back) => compareTypes(card.currentType, back.currentType) > 0).length;
+    const score = (card: BattleCard) => view.opponentBacks.filter((back) => back.currentType !== null && compareTypes(card.currentType, back.currentType) > 0).length;
     const best = Math.max(...cards.map(score));
     const picked = randomItem(cards.filter((card) => score(card) === best), decision.seed);
     return { id: picked.item.instanceId, seed: picked.seed };
@@ -179,7 +195,7 @@ export function chooseCpuTarget(view: CpuView, level: CpuLevel, seed: number, to
   }
   if (level === 2) {
     const score = (back: PublicBack) => view.ownCards.reduce((sum, card) =>
-      sum + Number(compareTypes(card.currentType, to) > 0) - Number(compareTypes(card.currentType, back.currentType) > 0), 0);
+      sum + Number(compareTypes(card.currentType, to) > 0) - Number(back.currentType !== null && compareTypes(card.currentType, back.currentType) > 0), 0);
     const best = Math.max(...targets.map(score));
     const picked = randomItem(targets.filter((target) => score(target) === best), seed);
     return { id: picked.item.instanceId, seed: picked.seed };

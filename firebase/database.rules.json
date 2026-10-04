@@ -52,7 +52,19 @@
             "choices": {
               "$uid": {
                 ".write": "auth != null && auth.uid === $uid && !data.exists() && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/hostUid').val()).exists() && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/guestUid').val()).exists() && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid)",
-                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+                ".validate": "(newData.isNumber() && newData.val() >= 0 && newData.val() <= 3) || (newData.isString() && newData.val().length <= 512)"
+              }
+            },
+            "swapReveal": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid) && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/hostUid').val()).exists() && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/guestUid').val()).exists()",
+                ".validate": "newData.hasChildren(['cardId', 'trainLevel']) && newData.child('cardId').isString() && newData.child('cardId').val().length <= 12 && newData.child('trainLevel').isNumber() && newData.child('trainLevel').val() >= 0 && newData.child('trainLevel').val() <= 99"
+              }
+            },
+            "intelReveal": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().parent().parent().child('meta/guestUid').val() === auth.uid) && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/hostUid').val()).exists() && data.parent().parent().child('reveal').child(data.parent().parent().parent().parent().child('meta/guestUid').val()).exists()",
+                ".validate": "newData.hasChildren(['cardId', 'trainLevel']) && newData.child('cardId').isString() && newData.child('cardId').val().length <= 12 && newData.child('trainLevel').isNumber() && newData.child('trainLevel').val() >= 0 && newData.child('trainLevel').val() <= 99"
               }
             },
             "stateHash": {

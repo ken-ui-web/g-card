@@ -1,10 +1,26 @@
+import seeds from '../../seed/cards.json';
+
 export type CardType = 'rock' | 'scissors' | 'paper';
 export type Rarity = 'N' | 'R' | 'SR' | 'SSR';
-
 export type CardEffect =
-  | { type: 'damage'; amount: number }
+  | { type: 'damage'; amount: number; hits?: number; pierce?: boolean; condition?: 'selfLifeLower'; multiplierIfCondition?: number; comboBonus?: { requiresCardInDeck: string; add: number } }
   | { type: 'heal'; amount: number }
-  | { type: 'changeOpponentType'; to: CardType };
+  | { type: 'changeOpponentType'; to: CardType }
+  | { type: 'changeOwnType'; count: number }
+  | { type: 'changeAllOpponentType'; to: CardType }
+  | { type: 'shield'; mode: 'half' | 'reduce' | 'reflect'; amount?: number }
+  | { type: 'nextRoundModifier'; target: 'self'; add: number }
+  | { type: 'selfDamage'; amount: number }
+  | { type: 'nullifyOpponentCard'; count: number }
+  | { type: 'blindOpponent' }
+  | { type: 'poison'; amount: number }
+  | { type: 'delayedDamage'; amount: number; afterRounds: number }
+  | { type: 'revealOpponent'; count: number }
+  | { type: 'drain'; amount: number }
+  | { type: 'damagePerOpponentRemaining'; per: number }
+  | { type: 'swapCards' }
+  | { type: 'encrypt'; secretTypeChange: number }
+  | { type: 'forceOpponentNext' };
 
 export interface CardDefinition {
   cardId: string;
@@ -14,35 +30,55 @@ export interface CardDefinition {
   text: string;
   effects: CardEffect[];
   trainingMultiplier: number;
-  trainingBonus?: number;
+  trainingBonus: number;
   frontImage: string;
+  shopPrice: number | null;
+  inPack: boolean;
 }
 
-export const typeLabels: Record<CardType, string> = {
-  rock: 'グー', scissors: 'チョキ', paper: 'パー',
+export const typeLabels: Record<CardType, string> = { rock: 'グー', scissors: 'チョキ', paper: 'パー' };
+const descriptions: Record<string, string> = {
+  G001: '20ダメージ', G002: '20ダメージ', G018: '15ダメージ＋10回復',
+  G019: '10ダメージ＋次のラウンドの自分のダメージ＋10', G006: '30ダメージ',
+  G007: '10ダメージ×3回', G020: '15ダメージ。自分のライフが少なければ2倍',
+  G017: '15ダメージ＋次の被ダメージを10減らす', G021: '15ダメージ。筋トレ効果2倍',
+  G009: '40ダメージ', G010: '60ダメージ。自分も25ダメージ',
+  G012: '25ダメージ＋相手の残りカード1枚を効果なしにする',
+  G022: '30ダメージ。筋トレ値を＋20して計算',
+  G015: '30ダメージ＋相手は残りカードをランダムに出す',
+  C002: '30ダメージ', C003: '25ダメージ', C016: '15ダメージ。デッキにげんのうがあれば＋15',
+  C004: '15ダメージ×2回', C008: '50ダメージ', C006: '40ダメージ',
+  C007: '10ダメージ＋毎ラウンド終了時に毒10ダメージ',
+  C017: '20ダメージ＋相手の残りカード1枚を見る',
+  C010: '40ダメージ。シールド貫通', C011: '55ダメージ',
+  C013: '次のラウンド終了時に60ダメージ', C014: '60ダメージ',
+  C015: '相手の残りカードの枚数×20ダメージ',
+  P001: '相手の残りカード1枚をグーに変える',
+  P002: '相手の残りカード1枚をチョキに変える',
+  P017: '相手の残りカード1枚をパーに変える',
+  P003: '30回復', P005: '次に受けるダメージを半分にする',
+  P007: '相手の残りカード1枚を効果なしにする',
+  P004: '自分の残りカード1枚を好きな種類に変える',
+  P008: '20ダメージを与え、与えた分だけ回復',
+  P010: '次に受けるダメージを相手に返す',
+  P009: '自分と相手の残りカードを1枚ずつ交換',
+  P018: '残りカードの種類を隠し、1枚をこっそり変えられる',
+  P015: '相手の残りカードをすべてパーに変える',
+  P014: '相手の次のカードを指定する',
 };
 
-export const initialCards: CardDefinition[] = [
-  { cardId: 'G001', name: 'パンチ', type: 'rock', rarity: 'N', text: '20のダメージを与える', effects: [{ type: 'damage', amount: 20 }], trainingMultiplier: 1, frontImage: 'G001-front.webp' },
-  { cardId: 'G002', name: 'キック', type: 'rock', rarity: 'N', text: '20のダメージを与える', effects: [{ type: 'damage', amount: 20 }], trainingMultiplier: 1, frontImage: 'G002-front.webp' },
-  { cardId: 'C008', name: '火縄銃', type: 'scissors', rarity: 'R', text: '50のダメージを与える', effects: [{ type: 'damage', amount: 50 }], trainingMultiplier: 0, frontImage: 'C008-front.webp' },
-  { cardId: 'P001', name: '手品', type: 'paper', rarity: 'N', text: '相手のカードを1枚選び、種類を【グー】に変える', effects: [{ type: 'changeOpponentType', to: 'rock' }], trainingMultiplier: 0, frontImage: 'P001-front.webp' },
-];
-
-export const addedCards: CardDefinition[] = [
-  { cardId: 'P003', name: '救急箱', type: 'paper', rarity: 'N', text: 'ライフを30回復', effects: [{ type: 'heal', amount: 30 }], trainingMultiplier: 0, frontImage: 'P003-front.webp' },
-  { cardId: 'G006', name: '正拳突き', type: 'rock', rarity: 'R', text: '30のダメージを与える', effects: [{ type: 'damage', amount: 30 }], trainingMultiplier: 1, frontImage: 'G006-front.webp' },
-  { cardId: 'C002', name: 'のこぎり', type: 'scissors', rarity: 'N', text: '30のダメージを与える', effects: [{ type: 'damage', amount: 30 }], trainingMultiplier: 0, frontImage: 'C002-front.webp' },
-  { cardId: 'P002', name: '催眠術', type: 'paper', rarity: 'N', text: '相手のカードを1枚選び、種類を【チョキ】に変える', effects: [{ type: 'changeOpponentType', to: 'scissors' }], trainingMultiplier: 0, frontImage: 'P002-front.webp' },
-  { cardId: 'P017', name: 'おりがみ', type: 'paper', rarity: 'N', text: '相手のカードを1枚選び、種類を【パー】に変える', effects: [{ type: 'changeOpponentType', to: 'paper' }], trainingMultiplier: 0, frontImage: 'P017-front.webp' },
-  { cardId: 'C014', name: 'レーザーカッター', type: 'scissors', rarity: 'SSR', text: '60のダメージを与える', effects: [{ type: 'damage', amount: 60 }], trainingMultiplier: 0, frontImage: 'C014-front.webp' },
-];
-
-export const availableCards = [...initialCards, ...addedCards];
+export const availableCards: CardDefinition[] = seeds.map((seed) => ({
+  ...seed,
+  type: seed.type as CardType,
+  rarity: seed.rarity as Rarity,
+  effects: seed.effects as CardEffect[],
+  text: descriptions[seed.cardId],
+  frontImage: `${seed.cardId}-front.webp`,
+}));
+export const initialCards = ['G001', 'G002', 'C008', 'P001'].map((id) => availableCards.find((card) => card.cardId === id)!);
+export const addedCards = availableCards.filter((card) => !initialCards.includes(card));
 export const defaultDeckIds = ['G001', 'C008', 'P001', 'P003'];
-
 export const cardById = Object.fromEntries(availableCards.map((card) => [card.cardId, card])) as Record<string, CardDefinition>;
-
 export const ssrCount = (cardIds: string[]) => cardIds.filter((id) => cardById[id]?.rarity === 'SSR').length;
 
 export function getCard(cardId: string): CardDefinition {

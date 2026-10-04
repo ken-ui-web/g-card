@@ -56,7 +56,7 @@ async function createRoom(db: Database, uid: string, nickname: string, maxLife: 
   const battleId = crypto.randomUUID();
   const createdAt = Date.now();
   const room: OnlineRoom = {
-    meta: { battleId, deckMode, hostUid: uid, ...(teacherTest ? { teacherTest: true } : {}), seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt: createdAt + 30 * 60_000 },
+    meta: { battleId, deckMode, hostUid: uid, ...(teacherTest ? { teacherTest: true } : {}), protocolVersion: 2, seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt: createdAt + 30 * 60_000 },
     players: { [uid]: { nickname, maxLife, connected: true, lastSeen: createdAt } },
   };
   await set(ref(db, roomPath(battleId)), room);
