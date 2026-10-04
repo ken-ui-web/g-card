@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Card } from './components/Card';
 import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabels } from './data/cards';
 import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
@@ -10,6 +10,7 @@ import './styles.css';
 
 const OnlinePage = lazy(() => import('./online/OnlinePage').then((module) => ({ default: module.OnlinePage })));
 const RankingPage = lazy(() => import('./online/RankingPage').then((module) => ({ default: module.RankingPage })));
+const battleBackgroundStyle = { '--battle-bg': `url("${import.meta.env.BASE_URL}images/bg/battle.webp")` } as CSSProperties;
 
 type Screen = 'menu' | 'deck' | 'battle' | 'result';
 type BattleUi = 'handoff' | 'select' | 'thinking' | 'round-intro' | 'reveal' | 'target' | 'summary';
@@ -327,7 +328,7 @@ function App() {
   const winnerName = (winner: PlayerIndex | null) => winner === null ? 'あいこ！' : `${names[winner]}の勝ち！`;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${screen === 'battle' || screen === 'result' ? ' app-shell--battle' : ''}`} style={screen === 'battle' || screen === 'result' ? battleBackgroundStyle : undefined}>
       <header className="app-header">
         <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
         <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a></nav>
