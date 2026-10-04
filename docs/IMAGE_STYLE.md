@@ -124,8 +124,8 @@ imagegenの組み込みツールで1枚生成。`P001-front.webp` は表面の�
 
 imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金色と紺色、青と緑のアクセントで既存カードの雰囲気に合わせた。文字「Gカード」の形と透過背景を確認し、オーナーが採用。正式画像は `public/images/brand/logo.png`（1962×801）。
 
-## 段階10・ホーム背景サンプル（2026-10-04、確認待ち）
+## 段階10・ホーム背景（2026-10-04、採用）
 
-`design-source/stage10/home-background-sample.png` を組み込み画像生成で1枚作り、確認用に `home-background-sample.webp`（2048×1536）も保存した。カード表面とロゴは画風・配色の参考のみ。ホーム画面にはまだ適用していない。
+`design-source/stage10/home-background-sample.png` を組み込み画像生成で1枚作り、確認用に `home-background-sample.webp`（2048×1536）も保存した。オーナーが採用。カード表面とロゴは画風・配色の参考のみ。正式画像は `public/images/bg/home.webp`。ホーム画面の文字と操作部が読めるよう、画面側で濃紺の半透明グラデーションを重ねる。
 
 > A landscape 4:3 background for the Gカード home screen: a welcoming futuristic school workshop at warm sunset, with safe tools, small gears and classroom engineering projects at the edges and a school courtyard beyond the windows. Bold clean manga/cel-shaded outlines, polished navy and antique brass, warm gold light, small electric blue and emerald accents matching the approved card and logo. Interesting architecture near the edges and upper third; broad calm dark-navy center and lower middle for legible overlaid UI. Crop-safe on landscape and portrait iPad. No people, cards, UI panels, logo, letters, numbers or watermark. One cohesive image.
