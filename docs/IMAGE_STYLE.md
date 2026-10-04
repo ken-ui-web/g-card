@@ -135,3 +135,9 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 ホーム背景の画風を基準に1枚生成し、オーナーが採用した。元画像は `design-source/stage10/battle-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。正式画像は `public/images/bg/battle.webp`。カードを表示する中央から手前は紺色の低詳細領域とし、黄・青・緑の照明と歯車は周辺に配置した。CPU対戦・端末内対戦・オンライン対戦では、画面側で濃紺の半透明グラデーションを重ねる。
 
 > Original landscape 4:3 battle-screen environment: a dramatic but friendly futuristic school tournament arena, with an empty circular stage, brass-and-navy engineering architecture, gears at the perimeter and yellow, blue and green spotlights. Match the approved home environment's cel-shaded materials and the card's bold outlines. Keep the central 60% and lower middle dark navy and low detail for overlaid cards and white UI; put lights and gears on the upper and side edges. Crop-safe on landscape and portrait iPad. No characters, playing cards, UI, letters, numbers, logos or watermark.
+
+## 段階10・ショップ背景サンプル（2026-10-04、確認待ち）
+
+金色・紺色のカードショップを1枚生成した。元画像は `design-source/stage10/shop-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。黄・青・緑のパックは棚とショーケースに並べ、中央手前を画面の表示用に落ち着いた色とした。アプリにはまだ適用していない。
+
+> Original landscape 4:3 shop-screen environment: a welcoming futuristic school card shop, antique-brass and deep-navy counter, glass cases and shelves of softly glowing golden-yellow, electric-blue and emerald-green sealed booster packs. Calm dark-navy low-detail central and lower-middle space for app text, buttons and cards; brighter merchandise and gears on the upper and side edges. Bold clean anime cel-shaded outlines, polished enamel and brass, warm light. Crop-safe on landscape and portrait iPad. No characters, readable packaging, card fronts, UI, letters, numbers, logos or watermark.
