@@ -1,4 +1,4 @@
-import { getCard, initialCards, type CardType } from '../data/cards';
+import { getCard, initialCards, ssrCount, type CardType } from '../data/cards';
 
 export type PlayerIndex = 0 | 1;
 export type BattleMode = 'cpu' | 'local';
@@ -54,6 +54,7 @@ export interface RoundLog {
 export interface BattleState {
   mode: BattleMode;
   config: BattleConfig;
+  seed: number;
   players: [PlayerState, PlayerState];
   round: number;
   phase: 'select' | 'reveal' | 'finished';
@@ -69,27 +70,45 @@ export function compareTypes(a: CardType, b: CardType): -1 | 0 | 1 {
   return beats[a] === b ? 1 : -1;
 }
 
+// Both clients use the same seed and the life totals before resolving effects.
+export function effectOrder(
+  winner: RoundWinner,
+  cards: readonly { cardId: string; nullified?: boolean }[],
+  life: readonly number[],
+  seed: number,
+  round: number,
+): PlayerIndex[] {
+  if (winner !== null) return cards[winner].nullified ? [] : [winner];
+  const actors = ([0, 1] as PlayerIndex[]).filter((side) => !cards[side].nullified && getCard(cards[side].cardId).rarity === 'SSR');
+  if (actors.length < 2) return actors;
+  if (life[0] !== life[1]) return life[0] < life[1] ? [0, 1] : [1, 0];
+  const draw = (Math.imul((seed ^ round) >>> 0, 1664525) + 1013904223) >>> 0;
+  return draw % 2 === 0 ? [0, 1] : [1, 0];
+}
+
 export function finalDamage(card: BattleCard, config: BattleConfig): number | null {
   const definition = getCard(card.cardId);
   const effect = definition.effects.find((item) => item.type === 'damage');
   if (!effect || effect.type !== 'damage') return null;
   const base = config.damages[card.cardId] ?? effect.amount;
-  const training = card.originalType === 'rock' ? card.trainLevel * definition.trainingMultiplier : 0;
+  const training = card.originalType === 'rock' ? (card.trainLevel + (definition.trainingBonus ?? 0)) * definition.trainingMultiplier : 0;
   return Math.max(0, base + training);
 }
 
 function createDeck(player: PlayerIndex, training: number, seed: number, entries: DeckEntry[]): BattleCard[] {
   if (entries.length !== 4 || new Set(entries.map((entry) => typeof entry === 'string' ? entry : entry.ownedId)).size !== 4) throw new Error('異なる所持カードを4枚選んでください');
+  if (ssrCount(entries.map((entry) => typeof entry === 'string' ? entry : entry.cardId)) > 1) throw new Error('SSRはデッキに1枚までです');
   const deck = entries.map((entry) => {
     const card = getCard(typeof entry === 'string' ? entry : entry.cardId);
     return {
-    instanceId: `${player}-${typeof entry === 'string' ? entry : entry.ownedId}`,
-    cardId: card.cardId,
-    originalType: card.type,
-    currentType: card.type,
-    trainLevel: card.type === 'rock' ? typeof entry === 'string' ? training : entry.trainLevel : 0,
-    nullified: false,
-  }; });
+      instanceId: `${player}-${typeof entry === 'string' ? entry : entry.ownedId}`,
+      cardId: card.cardId,
+      originalType: card.type,
+      currentType: card.type,
+      trainLevel: card.type === 'rock' ? typeof entry === 'string' ? training : entry.trainLevel : 0,
+      nullified: false,
+    };
+  });
   let current = seed >>> 0;
   for (let index = deck.length - 1; index > 0; index--) {
     current = (Math.imul(current, 1664525) + 1013904223) >>> 0;
@@ -104,7 +123,7 @@ export function createBattle(mode: BattleMode, config: BattleConfig, seed = 1, d
   const max0 = Math.max(1, config.initialLife);
   const max1 = Math.max(1, mode === 'cpu' ? config.cpuMaxLife : config.initialLife);
   return {
-    mode, config,
+    mode, config, seed,
     players: [
       { life: max0, maxLife: max0, hand: createDeck(0, 0, seed ^ 0x6d2b79f5, cardIds[0]), used: [] },
       { life: max1, maxLife: max1, hand: createDeck(1, mode === 'cpu' ? config.cpuTraining : 0, seed ^ 0x9e3779b9, cardIds[1]), used: [] },
@@ -129,8 +148,9 @@ export function beginRound(state: BattleState, picks: [string, string]): BattleS
 }
 
 export function targetOptions(state: BattleState): BattleCard[] {
-  if (state.phase !== 'reveal' || !state.reveal || state.reveal.winner === null) return [];
-  const actor = state.reveal.winner;
+  if (state.phase !== 'reveal' || !state.reveal) return [];
+  const actor = effectOrder(state.reveal.winner, state.reveal.cards, state.players.map((player) => player.life), state.seed, state.round)[0];
+  if (actor === undefined) return [];
   const card = getCard(state.reveal.cards[actor].cardId);
   return card.effects.some((effect) => effect.type === 'changeOpponentType')
     ? state.players[actor === 0 ? 1 : 0].hand
@@ -146,34 +166,32 @@ export function finishRound(state: BattleState, targetId?: string): BattleState 
   ];
   const events: BattleEvent[] = [];
 
-  if (winner === null) {
-    events.push({ kind: 'tie' });
-  } else {
-    const loser: PlayerIndex = winner === 0 ? 1 : 0;
-    const played = cards[winner];
-    if (!played.nullified) {
-      for (const effect of getCard(played.cardId).effects) {
-        if (effect.type === 'damage') {
-          const amount = finalDamage(played, state.config) ?? 0;
-          players[loser].life = Math.max(0, players[loser].life - amount);
-          events.push({ kind: 'damage', actor: winner, target: loser, amount });
-        } else if (effect.type === 'heal') {
-          const before = players[winner].life;
-          const amount = Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount);
-          players[winner].life = Math.min(players[winner].maxLife, before + amount);
-          events.push({ kind: 'heal', actor: winner, amount: players[winner].life - before });
-        } else if (effect.type === 'changeOpponentType') {
-          if (players[loser].hand.length === 0) {
-            events.push({ kind: 'noTarget', actor: winner });
-          } else {
-            if (!targetId || !players[loser].hand.some((card) => card.instanceId === targetId)) {
-              throw new Error('相手の残りカードから対象を選んでください');
-            }
-            players[loser].hand = players[loser].hand.map((card) =>
-              card.instanceId === targetId ? { ...card, currentType: effect.to } : card,
-            );
-            events.push({ kind: 'change', actor: winner, target: loser, targetId, to: effect.to });
+  const actors = effectOrder(winner, cards, players.map((player) => player.life), state.seed, state.round);
+  if (winner === null) events.push({ kind: 'tie' });
+  for (const actor of actors) {
+    const loser: PlayerIndex = actor === 0 ? 1 : 0;
+    const played = cards[actor];
+    for (const effect of getCard(played.cardId).effects) {
+      if (effect.type === 'damage') {
+        const amount = finalDamage(played, state.config) ?? 0;
+        players[loser].life = Math.max(0, players[loser].life - amount);
+        events.push({ kind: 'damage', actor, target: loser, amount });
+      } else if (effect.type === 'heal') {
+        const before = players[actor].life;
+        const amount = Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount);
+        players[actor].life = Math.min(players[actor].maxLife, before + amount);
+        events.push({ kind: 'heal', actor, amount: players[actor].life - before });
+      } else if (effect.type === 'changeOpponentType') {
+        if (players[loser].hand.length === 0) {
+          events.push({ kind: 'noTarget', actor });
+        } else {
+          if (!targetId || !players[loser].hand.some((card) => card.instanceId === targetId)) {
+            throw new Error('相手の残りカードから対象を選んでください');
           }
+          players[loser].hand = players[loser].hand.map((card) =>
+            card.instanceId === targetId ? { ...card, currentType: effect.to } : card,
+          );
+          events.push({ kind: 'change', actor, target: loser, targetId, to: effect.to });
         }
       }
     }

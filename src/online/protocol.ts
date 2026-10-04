@@ -1,10 +1,10 @@
-import { compareTypes } from '../game/battle';
-import { cardById, getCard, type CardType } from '../data/cards';
+import { compareTypes, effectOrder } from '../game/battle';
+import { cardById, getCard, ssrCount, type CardType } from '../data/cards';
 
 export type DeckMode = 'sample' | 'owned';
 export type OnlineResult = 'win' | 'draw' | 'loss';
 export interface OnlineEntry { cardId: string; ownedId?: string; trainLevel: number }
-export interface PublicDeck { types: CardType[]; commit: string }
+export interface PublicDeck { types: CardType[]; ssr: boolean[]; commit: string }
 export interface RoundPick { index: number; salt: string; card: { cardId: string; trainLevel: number } }
 export interface OnlineRound {
   commit?: Record<string, string>;
@@ -27,6 +27,7 @@ export interface OnlineView {
   life: [number, number];
   maxLife: [number, number];
   types: [CardType[], CardType[]];
+  ssr: [boolean[], boolean[]];
   used: [number[], number[]];
   reveal?: [RoundPick, RoundPick];
   winner?: 0 | 1 | null;
@@ -66,7 +67,8 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
   const maxLife: [number, number] = [Number(players[0]?.maxLife || 100), Number(players[1]?.maxLife || 100)];
   const decks = uids.map((uid) => room.decks?.[uid]);
   const types: [CardType[], CardType[]] = [decks[0]?.types ? [...decks[0].types] : [], decks[1]?.types ? [...decks[1].types] : []];
-  let view: OnlineView = { phase: 'deck', round: 1, life: [...maxLife], maxLife, types, used: [[], []], events: [], outcome: null };
+  const ssr: [boolean[], boolean[]] = [decks[0]?.ssr ? [...decks[0].ssr] : [], decks[1]?.ssr ? [...decks[1].ssr] : []];
+  let view: OnlineView = { phase: 'deck', round: 1, life: [...maxLife], maxLife, types, ssr, used: [[], []], events: [], outcome: null };
   if (room.forfeit) {
     const winner = uids.indexOf(room.forfeit.winnerUid);
     const loser = uids.indexOf(room.forfeit.loserUid);
@@ -75,6 +77,7 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
   }
   if (!uids[1] || !decks[0] || !decks[1]) return view;
   if (types.some((list) => list.length !== 4 || list.some((type) => !['rock', 'scissors', 'paper'].includes(type)))) return invalid(view, 'カードの種類が正しくありません');
+  if (ssr.some((list) => list.length !== 4 || list.some((value) => typeof value !== 'boolean') || list.filter(Boolean).length > 1)) return invalid(view, 'SSRはデッキに1枚までです');
   for (let round = 1; round <= 4; round++) {
     view = { ...view, round, events: [], reveal: undefined, winner: undefined, targetOwner: undefined };
     const record = room.rounds?.[String(round)];
@@ -86,6 +89,7 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
       const pick = reveal[side];
       if (!Number.isInteger(pick.index) || pick.index < 0 || pick.index > 3 || view.used[side].includes(pick.index) ||
           !cardById[pick.card.cardId] || cardById[pick.card.cardId].type !== room.decks![uids[side]].types[pick.index] ||
+          (cardById[pick.card.cardId].rarity === 'SSR') !== ssr[side][pick.index] ||
           !Number.isInteger(pick.card.trainLevel) || pick.card.trainLevel < 0 || pick.card.trainLevel > 99 ||
           await pickCommit(room.meta.battleId, round, pick.index, pick.salt) !== record.commit[uids[side]]) return invalid(view, 'カードの公開情報が一致しません');
     }
@@ -95,30 +99,31 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
     const used: [number[], number[]] = [[...view.used[0], reveal[0].index], [...view.used[1], reveal[1].index]];
     const life: [number, number] = [...view.life];
     const nextTypes: [CardType[], CardType[]] = [[...types[0]], [...types[1]]];
-    if (winner === null) view.events.push('あいこ。効果は発動しません。');
-    else {
-      const loser = winner === 0 ? 1 : 0;
-      for (const effect of getCard(reveal[winner].card.cardId).effects) {
+    const actors = effectOrder(winner, reveal.map((pick) => pick.card), life, room.meta.seed, round);
+    if (winner === null) view.events.push(actors.length === 2 ? 'SSR同時発動！' : actors.length === 1 ? 'SSR発動！' : 'あいこ。効果は発動しません。');
+    for (const actor of actors) {
+      const loser = actor === 0 ? 1 : 0;
+      for (const effect of getCard(reveal[actor].card.cardId).effects) {
         if (effect.type === 'damage') {
-          const definition = getCard(reveal[winner].card.cardId);
-          const amount = effect.amount + (definition.type === 'rock' ? reveal[winner].card.trainLevel * definition.trainingMultiplier : 0);
+          const definition = getCard(reveal[actor].card.cardId);
+          const amount = effect.amount + (definition.type === 'rock' ? (reveal[actor].card.trainLevel + (definition.trainingBonus ?? 0)) * definition.trainingMultiplier : 0);
           life[loser] = Math.max(0, life[loser] - amount);
           view.events.push(`${amount}ダメージ`);
         } else if (effect.type === 'heal') {
-          const amount = Math.min(effect.amount, maxLife[winner] - life[winner]);
-          life[winner] += amount;
+          const amount = Math.min(effect.amount, maxLife[actor] - life[actor]);
+          life[actor] += amount;
           view.events.push(`${amount}回復`);
         } else if (effect.type === 'changeOpponentType') {
           const candidates = [0, 1, 2, 3].filter((index) => !used[loser].includes(index));
           if (candidates.length) {
-            const target = record.choices?.[uids[winner]];
-            if (target === undefined) return { ...view, used, phase: 'target', targetOwner: winner };
+            const target = record.choices?.[uids[actor]];
+            if (target === undefined) return { ...view, used, phase: 'target', targetOwner: actor };
             if (!candidates.includes(target)) return invalid(view, '手品の対象が正しくありません');
             nextTypes[loser][target] = effect.to;
             view.events.push(`相手の残りカードの種類を変更`);
           }
         }
-      }
+    }
     }
     const outcome = life[0] <= 0 || life[1] <= 0 || round === 4 ? life[0] === life[1] ? 'draw' : life[0] > life[1] ? 0 : 1 : null;
     view = { ...view, life, types: nextTypes, used, outcome };
@@ -131,7 +136,8 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
       for (let side = 0; side < 2; side++) {
         const final = room.final[uids[side]];
         if (!Array.isArray(final.entries) || final.entries.length !== 4 || await deckCommit(final.entries, final.salt) !== decks[side]!.commit ||
-            final.entries.some((entry, index) => !cardById[entry.cardId] || cardById[entry.cardId].type !== decks[side]!.types[index] || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99)) return invalid(view, 'デッキの公開情報が一致しません');
+            final.entries.some((entry, index) => !cardById[entry.cardId] || cardById[entry.cardId].type !== decks[side]!.types[index] || (cardById[entry.cardId].rarity === 'SSR') !== decks[side]!.ssr[index] || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99) ||
+            ssrCount(final.entries.map((entry) => entry.cardId)) > 1) return invalid(view, 'デッキの公開情報が一致しません');
         for (let seen = 1; seen <= round; seen++) {
           const pick = room.rounds?.[String(seen)]?.reveal?.[uids[side]];
           if (pick && (final.entries[pick.index].cardId !== pick.card.cardId || final.entries[pick.index].trainLevel !== pick.card.trainLevel)) return invalid(view, '使用カードとデッキが一致しません');

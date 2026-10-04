@@ -52,6 +52,18 @@ vm.runInContext(fs.readFileSync('gas/Code.gs', 'utf8'), context);
 vm.runInContext(fs.readFileSync('gas/Learning.gs', 'utf8'), context);
 const call = (name, ...args) => vm.runInContext(name, context)(...args);
 call('setup');
+assert.equal(sheets.get('Cards').getLastRow(), 11);
+assert.equal(call('gcCardMaster_').find((card) => card.cardId === 'C014').rarity, 'SSR');
+assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'first-wave').rarityRates.SSR, 1.5);
+// Upgrade a school sheet created by the previous version without deleting purchases or custom settings.
+sheets.get('Cards').rows = sheets.get('Cards').rows.slice(0, 6).map((row) => row.slice(0, 13));
+sheets.get('Packs').rows = sheets.get('Packs').rows.filter((row) => row[0] !== 'first-wave');
+call('setup');
+assert.equal(sheets.get('Cards').getLastRow(), 11);
+assert.equal(sheets.get('Cards').rows[0][13], 'trainingBonus');
+assert.equal(call('gcPackMaster_').filter((pack) => pack.packId === 'first-wave').length, 1);
+call('setup');
+assert.equal(sheets.get('Cards').getLastRow(), 11);
 const domain = 'school.example.jp';
 const email = `teacher@${domain}`;
 const settings = sheets.get('Settings');
@@ -62,6 +74,7 @@ sheets.get('Users').appendRow([email, 'admin', '', '', '', '先生', 500, 0, 500
 for (const cardId of ['G001', 'G002', 'C008', 'P001']) sheets.get('OwnedCards').appendRow([crypto.randomUUID(), email, cardId, 0, 'initial', new Date().toISOString(), '']);
 const token = call('gcSignSession_', email, 'admin', call('gcSettings_'));
 const id = () => crypto.randomUUID();
+assert.throws(() => call('gcBuyCard_', token, { cardId: 'C014' }, id()), /購入できません/);
 assert.throws(() => call('gcSellCard_', token, { ownedId: call('gcOwned_', email)[0].ownedId }, id()), /4枚以上/);
 
 const buyId = id();
@@ -239,4 +252,8 @@ call('gcOnlineJoin_', token, { battleId: invalidBattle, uid: 'teacherfirebaseuid
 call('gcOnlineReport_', studentToken, { battleId: invalidBattle, result: 'win', stateHash: onlineHash, deck: onlineDeck });
 assert.equal(call('gcOnlineReport_', token, { battleId: invalidBattle, result: 'loss', stateHash: 'b'.repeat(64), deck: onlineDeck }).status, 'invalid');
 assert.equal(sheets.get('BattleLog').rows.filter((row) => row[0] === invalidBattle).length, 0, '状態不一致の試合に報酬を付けない');
+const ssrOwned = [id(), id()];
+ssrOwned.forEach((ownedId) => sheets.get('OwnedCards').appendRow([ownedId, email, 'C014', 0, 'pack', new Date().toISOString(), '']));
+assert.throws(() => call('gcSaveDeck_', token, { ownedIds: [ssrOwned[0], ssrOwned[1], firstCard.ownedId, call('gcOwned_', email).find((card) => card.cardId === 'G002').ownedId] }), /SSRはデッキに1枚まで/);
+assert.throws(() => call('gcOnlineValidateDeck_', call('gcSession_', token, false), 'sample', ['C014', 'C014', 'G001', 'P001'].map((cardId) => ({ cardId, trainLevel: 0 }))), /SSRはデッキに1枚まで/);
 console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export OK');

@@ -74,7 +74,7 @@
   - チョキの裏面・パーの裏面
 - 確認用ページに4枚を表・裏で並べて表示する。
 - **✅ チェック2**：4枚の絵柄がそろっているか、それぞれのカードらしさ、表面の種類色とレア度、3種類の裏面が見分けやすいか。
-- SR・URの表面デザインは、段階4で初めて必要になったときに、完成画像1枚を作ってチェックする。
+- SR・SSRの表面デザインは、段階4で初めて必要になったときに、完成画像1枚を作ってチェックする。
 
 #### 段階3：バトルの試作（初期4枚のみ）
 - **全47枚のカード案は仮。まずは初期4枚（パンチ・キック・火縄銃・手品）だけでゲームがうまく成り立つかを確認する。**
@@ -315,7 +315,7 @@
 - 両者が選び終えると、**互いのカードの裏面が表示される**。裏面には種類（グー／チョキ／パー）が色とアイコンで表示されるため、**相手の手の種類はわかる**が、カードの中身（名前・効果）はわからない。
 - 自分のカードは、各カードの下に詳細（名前・効果・ダメージ値・筋トレ値）が表示される。
 - 各ラウンドで、残っているカードから1枚を選ぶ。両者が選ぶと公開され、じゃんけんで勝敗を決める。
-- **勝った側のカードの効果だけが発動する。** あいこの場合はカードを表にするが、どちらの効果も発動しない。
+- **勝った側のカードの効果が発動する。** あいこではSSRだけが効果を発動する。負けた側のSSRは発動しない。
 - 使ったカードは捨て札になる（再使用不可）。
 - 最終ラウンドは残り1枚のため**自動選択**とし、両者が「オープン！」ボタンを押したら公開する（勝敗は予想できるが、中身の公開を演出として楽しむ）。読み合いの中心は最終ラウンドより前のラウンド。
 - 終了条件：
@@ -332,6 +332,7 @@
 | サンプルカードセット | 管理者が指定したサンプルカード群から4枚 | 100（設定 `initialLife`） | 無効（0扱い） |
 
 - 1枚の所持カードを同じデッキに2回入れることはできない（所持している枚数まで入れられる）。
+- SSRは、同じカードの複数所持も含めてデッキに1枚まで。サンプル・CPUの候補とオンラインの確定デッキも同じ。
 - デッキ選択画面では、前回使ったデッキを初期選択状態にする。
 - 同じカードを複数持つ場合は「パンチ（ダメージ25・💪+5）」「パンチ（ダメージ20）」のように、どの1枚かを区別できる表示にする。
 
@@ -346,9 +347,10 @@
    - 両者がカードを決めた後、ラウンド番号をアニメーションで表示し、カードを隠したまま「VS」の緊張感を作ってからカードを出す。
    - 互いが選んだカードの裏面が中央で向かい合って表示される。
    - カードの種類とじゃんけんの勝敗を明確に表示する。感情的なリアクション文は表示しない。裏面は見終わるまで保持する。
+   - あいこでSSRの効果が出る場合は「SSR発動！」、両者なら「SSR同時発動！」を示す。
    - カードが表に裏返るアニメーション（3D回転）。
    - 勝った側の効果が発動する演出（ダメージ数値のポップ、ライフバーの減少、画面の揺れなど）。
-   - 効果に対象選択がある場合（例：手品）、**勝った側**が選ぶUIを表示する（オンラインは制限時間20秒、時間切れはランダム）。
+   - 効果に対象選択がある場合（例：手品）、**効果の持ち主**が選ぶUIを表示する（オンラインは制限時間20秒、時間切れはランダム）。
    - ラウンド終了時の継続効果（毒・回復など）を処理して表示する。
 5. 次のラウンドへ（準備画面に戻り、使ったカードは消えている）。
 6. 全ラウンド終了、またはライフ0で **バトル結果**（S12）へ。勝敗、残りライフ、獲得Gポイント、ミッションの進み具合を表示する。
@@ -360,21 +362,14 @@
 ### 6-5. ラウンドの解決順序（実装の正）
 
 ```
-1. 選択確定
-   - 「プログラミング」で出すカードを指定されていれば、そのカードを強制選択。
-   - 「目隠し（ジャイアントスイング）」状態のプレイヤーは、残りカードからランダムに選ばれる。
-2. 公開・じゃんけん判定
-3. 敗北→あいこ変換
-   - 負けたプレイヤーに「AI」の効果（次のラウンドで負けたらあいこ扱い）が付いていれば、あいこにする。効果は消費。
-4. 勝者のカード効果を、カードに定義された順に解決
-   - 「効果なし（封印・ベアハッグ）」状態のカードが勝った場合、効果は発動しない（じゃんけんの勝ちのみ）。
-   - あいこの場合、どちらの効果も発動しない。
-5. 前のラウンドから持ち越した「勝敗に応じた効果」（例：ブーメランの「負けても10ダメージ」）を処理
-6. KO判定（両者0以下→引き分け、片方0以下→そのプレイヤーの敗北）
-7. ラウンド終了時効果（時間差ダメージ、毒、太陽光パネルの回復）を処理（あいこのラウンドでも処理する）
-8. KO判定
-9. 「次のラウンドのみ」有効な効果の期限を進める
-10. 最終ラウンドだった場合、ライフを比較して勝敗を決定
+1. 選択確定。強制選択・目隠しは該当カードを追加する弾で対応する。
+2. 公開・じゃんけん判定。
+3. 勝敗がつけば勝者の効果を解決。負けた側のSSRは発動しない。
+4. あいこならSSRのみ発動。両者SSRの場合はライフが少ない側から、同ライフなら共通シード乱数で順番を決める。
+5. 「効果なし」のカードは発動させない。対象選択は効果の持ち主が行う。
+6. 両方の効果を解決したあとにKO判定。双方0以下なら引き分け。
+7. 将来の継続効果（毒・時間差など）を処理し、再度KO判定。
+8. 最終ラウンドなら残りライフで勝敗を決定。
 ```
 
 ### 6-6. ダメージ計算
@@ -382,18 +377,18 @@
 1つのダメージ（1ヒット）について：
 
 ```
-① 基本値 ＋ 筋トレ値 × 筋トレ倍率（グーカードのみ。サンプルカードセットでは0）
-② × 倍率系の補正（応援団×2、気合いため×2 など。複数あれば掛け合わせ）
-③ ＋ 加算系の補正（張り手−5、タックル−10 など）
+① 基本値 ＋（筋トレ値＋trainingBonus）×筋トレ倍率（グーカードのみ。サンプルの筋トレ値は0）
+② × 倍率系の補正（てこの原理など。複数あれば掛け合わせ）
+③ ＋ 加算系の補正（歯車など）
 ④ 0未満なら0
 ⑤ 相手のシールドを適用（貫通効果があれば無視）
 ⑥ 相手のライフを減らす
 ```
 
 - 複数ヒット（例：連続パンチ 10×3）は、**1ヒットごとに①〜⑥を計算する**（筋トレ値・補正もヒットごとにかかる）。
-- シールド（バリア／ファイアウォール／鏡）は**相手から受ける次の1ヒット**に適用され、そこで消費される。時間差ダメージや毒にも適用される。
+- シールド（バリア／受け身／鏡）は**相手から受ける次の1ヒット**に適用され、そこで消費される。時間差ダメージや毒にも適用される。
   - バリア：半分（端数切り捨て）
-  - ファイアウォール：0
+  - 受け身：10減らす（0未満にはならない）
   - 鏡：そのヒットのダメージを、自分ではなく攻撃した側が受ける（跳ね返したダメージはさらに跳ね返らない）
   - シールドが複数ある場合は、付与された順に1つだけ使う。
 - 自分へのダメージ（反動）にはシールドも補正もかからない。
@@ -435,10 +430,11 @@ type BattleCard = {
 | cardId | 例：`G001`（グー）、`C001`（チョキ）、`P001`（パー） |
 | name | カード名 |
 | type | `rock` / `scissors` / `paper` |
-| rarity | `N` / `R` / `SR` / `UR` |
+| rarity | `N` / `R` / `SR` / `SSR` |
 | text | 効果の説明文（生徒に表示） |
 | effects | 効果のJSON配列（7-3） |
 | trainingMultiplier | 筋トレ倍率（通常1。グー以外は0） |
+| trainingBonus | 筋トレ値に加える固定値（通常0。パワードスーツは20） |
 | image | 表面の完成画像ファイル名（例：`G001-front.webp`）。GitHubの `public/images/cards/` に置く |
 | shopPrice | ショップ価格。空欄ならショップで売らない（パック限定） |
 | inPack | パックに入るか |
@@ -453,10 +449,11 @@ type BattleCard = {
 | N（ノーマル） | 種類色の単色枠 | ショップ・パック |
 | R（レア） | 銀色のメタリック枠 | ショップ・パック |
 | SR（スーパーレア） | 金色の枠＋光が流れるアニメーション | 一部ショップ・パック |
-| UR（ウルトラレア） | 虹色ホログラム枠＋キラキラのアニメーション | パック限定 |
+| SSR | 虹色ホログラム枠＋キラキラのアニメーション | パック限定 |
 
-- 台紙・枠の違いは表面の完成画像へ組み込む（7-5、23章）。SR・URの「光が流れる」「キラキラ」の動きは、完成画像の上にCSSアニメーションを重ねて表現する。
+- 台紙・枠の違いは表面の完成画像へ組み込む（7-5、23章）。SR・SSRの「光が流れる」「キラキラ」の動きは、完成画像の上にCSSアニメーションを重ねて表現する。
 - 名前・種類を示すアイコン・効果文は表面画像に焼き込む。レア度や「グー」の文字は表記しない。動的に重ねる文字は右上の最終ダメージだけ（7-5）。
+- SSRはあいこでも発動し、デッキに1枚まで。相手にも裏面の光とSSR表示が見える。
 
 ### 7-3. 効果プリミティブ（effects JSON）
 
@@ -464,7 +461,7 @@ type BattleCard = {
 
 | type | パラメータ | 内容 |
 |---|---|---|
-| `damage` | `amount`, `hits`(=1), `pierce`(=false) | ダメージ。`pierce` はシールド無視 |
+| `damage` | `amount`, `hits`(=1), `pierce`(=false), `condition`, `multiplierIfCondition`, `comboBonus` | ダメージ。条件付き倍率と初期デッキの組み合わせボーナスに対応 |
 | `randomDamage` | `min`, `max` | ランダムダメージ（シード乱数） |
 | `damageFromLostLife` | `ratio` | 自分が失ったライフ（最大−現在）×ratio のダメージ（切り捨て） |
 | `damagePerOpponentRemaining` | `per` | 相手の残りカード枚数×per のダメージ |
@@ -475,9 +472,10 @@ type BattleCard = {
 | `changeOpponentType` | `to`, `count`(=1) | 相手の残りカードを選んで種類を変える |
 | `changeAllOpponentType` | `to` | 相手の残りカードをすべて変える |
 | `changeOwnType` | `count`(=1) | 自分の残りカードを選び、好きな種類に変える |
-| `shield` | `mode`: `half`/`zero`/`reflect` | 次に受けるダメージへのシールド |
+| `shield` | `mode`: `half`/`reduce`/`reflect`, `amount`（reduce時） | 次に受けるダメージへのシールド |
 | `nullifyOpponentCard` | `count`(=1) | 相手の残りカードを選び「効果なし」にする |
-| `revealOpponent` | なし | 以降、相手の残りカードの詳細が見える |
+| `revealOpponent` | `count`（省略時は全部） | 相手の残りカードの指定枚数の詳細が見える |
+| `encrypt` | `secretTypeChange`: 1 | 自分の残りカードの種類を隠し、1枚をこっそり変えられる |
 | `blindOpponent` | なし | 相手は以降、自分の残りカードが裏向き・シャッフルされ、ランダムに出すことになる |
 | `nextRoundModifier` | `target`: `self`/`opponent`, `multiplier`, `add`, `typeFilter` | 次のラウンドで出すカードのダメージ補正 |
 | `delayedDamage` | `amount`, `afterRounds`(=1) | 指定ラウンド後の終了時にダメージ |
@@ -486,16 +484,15 @@ type BattleCard = {
 | `retaliateNextRound` | `amount` | 次のラウンドで自分が負けても、相手にこのダメージ |
 | `forceOpponentNext` | なし | 相手の残りカードから1枚を選び、次のラウンドで出させる |
 | `swapCards` | なし | 自分の残りカード1枚と相手の残りカード1枚を交換（筋トレ値もカードと一緒に移る） |
-| `tieOnNextLoss` | なし | 次のラウンドで自分が負けたら、あいこ扱いにする |
 
-- 「選ぶ」効果は**勝った側**が対象を選ぶ。相手のカードは種類（と見えていれば詳細）しかわからない状態で、位置で選ぶ。
+- 「選ぶ」効果は**発動したカードの持ち主**が対象を選ぶ。相手のカードは種類（と見えていれば詳細）しかわからない状態で、位置で選ぶ。
 - 対象がない場合（最終ラウンドなど）は「効果の対象がありません」と表示して何もしない。
 
 ### 7-4. 筋トレ（グーのみ）
 - 筋トレはグーカード1枚（インスタンス）ごと。1回で**ダメージ＋1**。
 - 2枚目の同じカードは筋トレ値0から育てる。
-- カード上の筋トレ欄には動的な「+5」を表示する。基本攻撃力（例：20）は表面画像に含める。バトル時の実ダメージは基本攻撃力に筋トレ値を加えた値として計算する。
-- `trainingMultiplier` が2のカード（伝説の拳）は、筋トレ1回で＋2になる。
+- 表面画像には効果文の基本値を含める。動的に重ねるのは右上の最終ダメージだけで、筋トレ加算値はカード表面に別表示しない。
+- `trainingMultiplier` が2のカード（電動アシスト）は、筋トレ1回で＋2になる。
 
 ### 7-5. カードの見た目（表面レイアウト・縦3:4）
 
@@ -505,7 +502,7 @@ type BattleCard = {
 - レア度・種類名・筋トレの独立したラベルと筋トレ専用のバッジは画像に入れない。効果文に含まれる「【グー】」などの種類名は、効果を正しく伝えるため画像に含める。ダメージ効果のあるカードは右上の円を空欄にする。
 - ブラウザで表面に別画像を重ねない。**画面が描く文字は右上の最終ダメージ（基本ダメージ＋筋トレ加算、例：`25`）だけ**。筋トレ加算値を単独で表示しない。ダメージ効果のないカードは数値を重ねず、右上の円は画像内の装飾にできる。
 - 完成画像を目視して名前と効果文を確認する。
-- 種類色はグー黄／チョキ青／パー緑、レア度の表現はN単色／R銀／SR金／URホロの方針を保つ。SR・URの光の演出はCSSで追加できる。
+- 種類色はグー黄／チョキ青／パー緑、レア度の表現はN単色／R銀／SR金／SSRホロの方針を保つ。SR・SSRの光の演出はCSSで追加できる。
 - カード名や効果文が管理者設定で変わるときは、対応する完成画像も再生成・再公開する。これは文字を画像へ固定する方式の運用上の条件である。
 
 ### 7-6. カードの裏面
@@ -513,136 +510,169 @@ type BattleCard = {
 - 色だけでなく**アイコンで区別できる**こと（色覚の多様性に配慮）。
 - **画像生成で作る**（23-5）。1枚の完成した画像として作り、文字は入れない（Gのエンブレムは図形として描く）。
 - 効果で種類が変わったとき（手品など）は、裏面の画像を切り替えるアニメーションで表現する。
+- SSRの裏面は種類色とアイコンを保ったまま、透明な虹色の縁取りと光、SSR表示を重ねる。動きを減らす設定では静止する。
 
 ---
 
-## 8. カード候補一覧【仮：あくまで候補】
+## 8. カード候補一覧（40枚）
 
-> **段階3までは初期4枚（パンチ・キック・火縄銃・手品）だけを実装する。** ここにある残りのカードは候補であり、段階4でオーナーが選んだものから順番に追加する。数値・入手方法も追加時に確定する（その後も管理者画面で変更可）。
+追加仕様書 No.02 を正とする。以下の40枚が候補の全体で、現時点の実装は第1弾まで。未実装カードは購入・パック・対戦に出さない。
 
-### 8-1. グー（黄・肉弾戦・筋トレ可）
+- IDは、前の候補一覧から残ったカードは**元のIDのまま**、新しいカードには新しいIDを付けた（すでに生成した画像のファイル名を変えずに済むようにするため）。
+- 入手：N・R はショップとパック。SR は「ショップ」と書いたものだけショップでも買え、それ以外はパック限定。SSR はパック限定。
+- 価格【仮】：N 50G／R 150G／SR 400G。
 
-| ID | 名前 | レア | 効果 | 入手 | 価格 |
+### 8-1. 【グー】14枚（N4・R5・SR3・SSR2）筋トレ可
+
+| ID | 名前 | レア | 効果 | 入手 | 前の候補からの変更 |
 |---|---|---|---|---|---|
-| G001 | パンチ | N | 20のダメージ | 初期／ショップ／パック | 50 |
-| G002 | キック | N | 20のダメージ | 初期／ショップ／パック | 50 |
-| G003 | 頭突き | N | 25のダメージ。自分も5ダメージ | ショップ／パック | 50 |
-| G004 | 張り手 | N | 15のダメージ。相手の次のカードのダメージ−5 | ショップ／パック | 50 |
-| G005 | タックル | R | 30のダメージ。次のラウンドの自分のグーのダメージ−10 | ショップ／パック | 150 |
-| G006 | 正拳突き | R | 30のダメージ | ショップ／パック | 150 |
-| G007 | 連続パンチ | R | 10のダメージ×3回（筋トレ効果が3回のる） | ショップ／パック | 150 |
-| G008 | 気合いため | R | ダメージなし。次のラウンドの自分のグーのダメージ2倍 | ショップ／パック | 150 |
-| G009 | ぶち切れパンチ | SR | 40のダメージ | ショップ／パック | 400 |
-| G010 | 捨て身タックル | SR | 60のダメージ。自分も30ダメージ | ショップ／パック | 400 |
-| G011 | 根性パンチ | SR | 自分が失ったライフの半分のダメージ | パック限定 | ― |
-| G012 | ベアハッグ | SR | 20のダメージ＋相手の残りカード1枚を「効果なし」にする | ショップ／パック | 400 |
-| G013 | マッスルポーズ | SR | 0＋筋トレ値×3のダメージ（育てるほど化ける） | パック限定 | ― |
-| G014 | 百裂拳 | SR | 10〜80のランダムダメージ | パック限定 | ― |
-| G015 | ジャイアントスイング | UR | 40のダメージ＋相手は以降、自分の残りカードが見えなくなりランダムに出す | パック限定 | ― |
-| G016 | 伝説の拳 | UR | 50のダメージ。筋トレ効果が2倍 | パック限定 | ― |
+| G001 | パンチ | N | 20ダメージ | 初期／ショップ | なし |
+| G002 | キック | N | 20ダメージ | 初期／ショップ | なし |
+| G018 | 人力発電 | N | 15ダメージ＋10回復 | ショップ | **新規** |
+| G019 | 歯車 | N | 10ダメージ＋次のラウンドの自分のカードのダメージ＋10 | ショップ | **新規** |
+| G006 | 正拳突き | R | 30ダメージ | ショップ | なし |
+| G007 | 連続パンチ | R | 10ダメージ×3回（筋トレ効果も3回のる） | ショップ | なし |
+| G020 | てこの原理 | R | 15ダメージ。自分のライフが相手より少なければ2倍 | ショップ | **新規** |
+| G017 | 受け身 | R | 15ダメージ＋次に受けるダメージを10減らす | ショップ | **新規** |
+| G021 | 電動アシスト | R | 15ダメージ。筋トレ効果が2倍 | ショップ | **新規** |
+| G009 | ぶち切れパンチ | SR | 40ダメージ | ショップ | なし |
+| G010 | 捨て身タックル | SR | 60ダメージ。自分も25ダメージ | ショップ | 反動 30→25 |
+| G012 | ベアハッグ | SR | 25ダメージ＋相手の残りカード1枚を「効果なし」にする | ショップ | 20→25 |
+| G022 | パワードスーツ | SSR | 30ダメージ。筋トレ値を＋20して計算する | パック限定 | **新規** |
+| G015 | ジャイアントスイング | SSR | 30ダメージ＋相手は以降、自分の残りカードが見えなくなり、ランダムに出す | パック限定 | 40→30 |
 
-### 8-2. チョキ（青・武器・道具）
+### 8-2. 【チョキ】13枚（N4・R4・SR3・SSR2）
 
-| ID | 名前 | レア | 効果 | 入手 | 価格 |
+| ID | 名前 | レア | 効果 | 入手 | 前の候補からの変更 |
 |---|---|---|---|---|---|
-| C001 | パチンコ | N | 20のダメージ | ショップ／パック | 50 |
-| C002 | のこぎり | N | 30のダメージ | ショップ／パック | 50 |
-| C003 | げんのう | N | 30のダメージ | ショップ／パック | 50 |
-| C004 | 手裏剣 | N | 15のダメージ×2回 | ショップ／パック | 50 |
-| C005 | 弓矢 | R | 30のダメージ＋次のラウンドの終わりに10ダメージ | ショップ／パック | 150 |
-| C006 | 刀 | R | 40のダメージ | ショップ／パック | 150 |
-| C007 | 毒矢 | R | 10のダメージ＋このラウンドから毎ラウンドの終わりに10ダメージ | ショップ／パック | 150 |
-| C008 | 火縄銃 | R | 50のダメージ | 初期／ショップ／パック | 150 |
-| C009 | ブーメラン | R | 25のダメージ。次のラウンドで負けても相手に10ダメージ | ショップ／パック | 150 |
-| C010 | 電動ドリル | SR | 35のダメージ。シールドを貫通する | ショップ／パック | 400 |
-| C011 | チェーンソー | SR | 45のダメージ | ショップ／パック | 400 |
-| C012 | 大砲 | SR | 70のダメージ。自分も20ダメージ | パック限定 | ― |
-| C013 | 投石器 | SR | 次のラウンドの終わりに60ダメージ（時間差） | パック限定 | ― |
-| C014 | レーザーカッター | UR | 80のダメージ | パック限定 | ― |
-| C015 | ロボットアーム | UR | 相手の残りカードの枚数×20のダメージ | パック限定 | ― |
+| C002 | のこぎり | N | 30ダメージ | ショップ | なし |
+| C003 | げんのう | N | 25ダメージ | ショップ | 30→25（くぎとの組み合わせ役） |
+| C016 | くぎ | N | 15ダメージ。デッキに「げんのう」があれば＋15 | ショップ | **新規** |
+| C004 | 手裏剣 | N | 15ダメージ×2回 | ショップ | なし |
+| C008 | 火縄銃 | R | 50ダメージ | 初期／ショップ | なし |
+| C006 | 刀 | R | 40ダメージ | ショップ | なし |
+| C007 | 毒矢 | R | 10ダメージ＋このラウンドから毎ラウンドの終わりに10ダメージ | ショップ | なし |
+| C017 | ドローン | R | 20ダメージ＋相手の残りカード1枚の中身を見る | ショップ | **新規** |
+| C010 | 電動ドリル | SR | 40ダメージ。シールドを貫通する | ショップ | 35→40 |
+| C011 | チェーンソー | SR | 55ダメージ | ショップ | 45→55 |
+| C013 | 投石器 | SR | 次のラウンドの終わりに60ダメージ（時間差） | パック限定 | なし |
+| C014 | レーザーカッター | SSR | 60ダメージ | パック限定 | 80→60 |
+| C015 | ロボットアーム | SSR | 相手の残りカードの枚数×20ダメージ | パック限定 | なし |
 
-### 8-3. パー（緑・特殊効果）
+### 8-3. 【パー】13枚（N4・R4・SR3・SSR2）
 
-| ID | 名前 | レア | 効果 | 入手 | 価格 |
+| ID | 名前 | レア | 効果 | 入手 | 前の候補からの変更 |
 |---|---|---|---|---|---|
-| P001 | 手品 | N | 相手のカードを1枚選び、種類を【グー】に変える | 初期／ショップ／パック | 50 |
-| P002 | 催眠術 | N | 相手のカードを1枚選び、種類を【チョキ】に変える | ショップ／パック | 50 |
-| P003 | 救急箱 | N | ライフを30回復 | ショップ／パック | 50 |
-| P004 | 変身 | R | 自分の残りカード1枚を好きな種類に変える | ショップ／パック | 150 |
-| P005 | バリア | R | 次に受けるダメージを半分にする | ショップ／パック | 150 |
-| P006 | のぞき見 | R | 相手の残りカードの詳細がすべて見える | ショップ／パック | 150 |
-| P007 | 封印 | R | 相手の残りカード1枚を「効果なし」にする（じゃんけんには参加する） | ショップ／パック | 150 |
-| P008 | 吸収 | R | 20のダメージを与え、与えた分だけ回復 | ショップ／パック | 150 |
-| P009 | 入れ替え | SR | 自分の残りカード1枚と相手の残りカード1枚を交換 | ショップ／パック | 400 |
-| P010 | 鏡 | SR | 次に受けるダメージをそのまま相手に返す | パック限定 | ― |
-| P011 | 応援団 | SR | 次のラウンドの自分のカードのダメージ2倍 | ショップ／パック | 400 |
-| P012 | 太陽光パネル | SR | このラウンドから毎ラウンドの終わりに15回復 | パック限定 | ― |
-| P013 | ファイアウォール | SR | 次に受けるダメージを0にする | パック限定 | ― |
-| P014 | プログラミング | UR | 相手の残りカードから1枚選び、次のラウンドで出させる | パック限定 | ― |
-| P015 | ハッキング | UR | 相手の残りカードをすべて【パー】に変える | パック限定 | ― |
-| P016 | AI | UR | 次のラウンドで自分が負けたら、あいこ扱いにする | パック限定 | ― |
+| P001 | 手品 | N | 相手のカードを1枚選び、【グー】に変える | 初期／ショップ | なし |
+| P002 | 催眠術 | N | 相手のカードを1枚選び、【チョキ】に変える | ショップ | なし |
+| P017 | おりがみ | N | 相手のカードを1枚選び、【パー】に変える | ショップ | **新規** |
+| P003 | 救急箱 | N | 30回復 | ショップ | なし |
+| P005 | バリア | R | 次に受けるダメージを半分にする | ショップ | なし |
+| P007 | 封印 | R | 相手の残りカード1枚を「効果なし」にする | ショップ | なし |
+| P004 | 変身 | R | 自分の残りカード1枚を好きな種類に変える | ショップ | なし |
+| P008 | 吸収 | R | 20ダメージを与え、与えた分だけ回復 | ショップ | なし |
+| P010 | 鏡 | SR | 次に受けるダメージをそのまま相手に返す | パック限定 | なし |
+| P009 | 入れ替え | SR | 自分の残りカード1枚と相手の残りカード1枚を交換 | ショップ | なし |
+| P018 | 暗号化 | SR | 以降、自分の残りカードの種類が相手から見えなくなる。さらに、自分の残りカード1枚の種類を、相手に知られずに変えられる | パック限定 | **新規** |
+| P015 | ハッキング | SSR | 相手の残りカードをすべて【パー】に変える | パック限定 | なし |
+| P014 | プログラミング | SSR | 相手の残りカードから1枚選び、次のラウンドで出させる | パック限定 | なし |
 
-> パーには、相手を操作するカード（手品など）だけでなく、**いつ使っても意味のある回復・ダメージ系**（救急箱、吸収、太陽光パネル）を入れている。最終ラウンドでパーを使っても無駄になりにくくするため。
+### 8-4. 内訳
 
-### 8-4. シードデータ（effects JSON）
+| | N | R | SR | SSR | 合計 |
+|---|---|---|---|---|---|
+| グー | 4 | 5 | 3 | 2 | 14 |
+| チョキ | 4 | 4 | 3 | 2 | 13 |
+| パー | 4 | 4 | 3 | 2 | 13 |
+| 合計 | 12 | 13 | 9 | 6 | **40** |
 
-`seed/cards.json` として作成し、GASのセットアップ関数でカードマスタシートに投入する（段階5以降）。段階3の時点では、初期4枚（G001・G002・C008・P001）だけをフロントの仮データとして使う。下のJSONは、段階4で追加するときの参考データ。
+### 8-4. シードデータ
+
+`seed/cards.json` を以下の40枚に置き換える。`text`（説明文）は2章の表の「効果」を使う。`image` は `{cardId}.webp`。
 
 ```json
 [
-  {"cardId":"G001","name":"パンチ","type":"rock","rarity":"N","trainingMultiplier":1,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":20}]},
-  {"cardId":"G002","name":"キック","type":"rock","rarity":"N","trainingMultiplier":1,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":20}]},
-  {"cardId":"G003","name":"頭突き","type":"rock","rarity":"N","trainingMultiplier":1,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":25},{"type":"selfDamage","amount":5}]},
-  {"cardId":"G004","name":"張り手","type":"rock","rarity":"N","trainingMultiplier":1,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":15},{"type":"nextRoundModifier","target":"opponent","add":-5}]},
-  {"cardId":"G005","name":"タックル","type":"rock","rarity":"R","trainingMultiplier":1,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":30},{"type":"nextRoundModifier","target":"self","add":-10,"typeFilter":"rock"}]},
-  {"cardId":"G006","name":"正拳突き","type":"rock","rarity":"R","trainingMultiplier":1,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":30}]},
-  {"cardId":"G007","name":"連続パンチ","type":"rock","rarity":"R","trainingMultiplier":1,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":10,"hits":3}]},
-  {"cardId":"G008","name":"気合いため","type":"rock","rarity":"R","trainingMultiplier":1,"shopPrice":150,"inPack":true,"effects":[{"type":"nextRoundModifier","target":"self","multiplier":2,"typeFilter":"rock"}]},
-  {"cardId":"G009","name":"ぶち切れパンチ","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":40}]},
-  {"cardId":"G010","name":"捨て身タックル","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":60},{"type":"selfDamage","amount":30}]},
-  {"cardId":"G011","name":"根性パンチ","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":null,"inPack":true,"effects":[{"type":"damageFromLostLife","ratio":0.5}]},
-  {"cardId":"G012","name":"ベアハッグ","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":20},{"type":"nullifyOpponentCard","count":1}]},
-  {"cardId":"G013","name":"マッスルポーズ","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":null,"inPack":true,"effects":[{"type":"trainingScaledDamage","base":0,"perTraining":3}]},
-  {"cardId":"G014","name":"百裂拳","type":"rock","rarity":"SR","trainingMultiplier":1,"shopPrice":null,"inPack":true,"effects":[{"type":"randomDamage","min":10,"max":80}]},
-  {"cardId":"G015","name":"ジャイアントスイング","type":"rock","rarity":"UR","trainingMultiplier":1,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":40},{"type":"blindOpponent"}]},
-  {"cardId":"G016","name":"伝説の拳","type":"rock","rarity":"UR","trainingMultiplier":2,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":50}]},
+  {"cardId":"G001","name":"パンチ","type":"rock","rarity":"N","trainingMultiplier":1,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":20}]},
+  {"cardId":"G002","name":"キック","type":"rock","rarity":"N","trainingMultiplier":1,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":20}]},
+  {"cardId":"G018","name":"人力発電","type":"rock","rarity":"N","trainingMultiplier":1,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":15},{"type":"heal","amount":10}]},
+  {"cardId":"G019","name":"歯車","type":"rock","rarity":"N","trainingMultiplier":1,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":10},{"type":"nextRoundModifier","target":"self","add":10}]},
+  {"cardId":"G006","name":"正拳突き","type":"rock","rarity":"R","trainingMultiplier":1,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":30}]},
+  {"cardId":"G007","name":"連続パンチ","type":"rock","rarity":"R","trainingMultiplier":1,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":10,"hits":3}]},
+  {"cardId":"G020","name":"てこの原理","type":"rock","rarity":"R","trainingMultiplier":1,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":15,"condition":"selfLifeLower","multiplierIfCondition":2}]},
+  {"cardId":"G017","name":"受け身","type":"rock","rarity":"R","trainingMultiplier":1,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":15},{"type":"shield","mode":"reduce","amount":10}]},
+  {"cardId":"G021","name":"電動アシスト","type":"rock","rarity":"R","trainingMultiplier":2,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":15}]},
+  {"cardId":"G009","name":"ぶち切れパンチ","type":"rock","rarity":"SR","trainingMultiplier":1,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":40}]},
+  {"cardId":"G010","name":"捨て身タックル","type":"rock","rarity":"SR","trainingMultiplier":1,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":60},{"type":"selfDamage","amount":25}]},
+  {"cardId":"G012","name":"ベアハッグ","type":"rock","rarity":"SR","trainingMultiplier":1,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":25},{"type":"nullifyOpponentCard","count":1}]},
+  {"cardId":"G022","name":"パワードスーツ","type":"rock","rarity":"SSR","trainingMultiplier":1,"trainingBonus":20,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":30}]},
+  {"cardId":"G015","name":"ジャイアントスイング","type":"rock","rarity":"SSR","trainingMultiplier":1,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":30},{"type":"blindOpponent"}]},
 
-  {"cardId":"C001","name":"パチンコ","type":"scissors","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":20}]},
-  {"cardId":"C002","name":"のこぎり","type":"scissors","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":30}]},
-  {"cardId":"C003","name":"げんのう","type":"scissors","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":30}]},
-  {"cardId":"C004","name":"手裏剣","type":"scissors","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":15,"hits":2}]},
-  {"cardId":"C005","name":"弓矢","type":"scissors","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":30},{"type":"delayedDamage","amount":10,"afterRounds":1}]},
-  {"cardId":"C006","name":"刀","type":"scissors","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":40}]},
-  {"cardId":"C007","name":"毒矢","type":"scissors","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":10},{"type":"poison","amount":10}]},
-  {"cardId":"C008","name":"火縄銃","type":"scissors","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":50}]},
-  {"cardId":"C009","name":"ブーメラン","type":"scissors","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":25},{"type":"retaliateNextRound","amount":10}]},
-  {"cardId":"C010","name":"電動ドリル","type":"scissors","rarity":"SR","trainingMultiplier":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":35,"pierce":true}]},
-  {"cardId":"C011","name":"チェーンソー","type":"scissors","rarity":"SR","trainingMultiplier":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":45}]},
-  {"cardId":"C012","name":"大砲","type":"scissors","rarity":"SR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":70},{"type":"selfDamage","amount":20}]},
-  {"cardId":"C013","name":"投石器","type":"scissors","rarity":"SR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"delayedDamage","amount":60,"afterRounds":1}]},
-  {"cardId":"C014","name":"レーザーカッター","type":"scissors","rarity":"UR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":80}]},
-  {"cardId":"C015","name":"ロボットアーム","type":"scissors","rarity":"UR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damagePerOpponentRemaining","per":20}]},
+  {"cardId":"C002","name":"のこぎり","type":"scissors","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":30}]},
+  {"cardId":"C003","name":"げんのう","type":"scissors","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":25}]},
+  {"cardId":"C016","name":"くぎ","type":"scissors","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":15,"comboBonus":{"requiresCardInDeck":"C003","add":15}}]},
+  {"cardId":"C004","name":"手裏剣","type":"scissors","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"damage","amount":15,"hits":2}]},
+  {"cardId":"C008","name":"火縄銃","type":"scissors","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":50}]},
+  {"cardId":"C006","name":"刀","type":"scissors","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":40}]},
+  {"cardId":"C007","name":"毒矢","type":"scissors","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":10},{"type":"poison","amount":10}]},
+  {"cardId":"C017","name":"ドローン","type":"scissors","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"damage","amount":20},{"type":"revealOpponent","count":1}]},
+  {"cardId":"C010","name":"電動ドリル","type":"scissors","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":40,"pierce":true}]},
+  {"cardId":"C011","name":"チェーンソー","type":"scissors","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"damage","amount":55}]},
+  {"cardId":"C013","name":"投石器","type":"scissors","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"delayedDamage","amount":60,"afterRounds":1}]},
+  {"cardId":"C014","name":"レーザーカッター","type":"scissors","rarity":"SSR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damage","amount":60}]},
+  {"cardId":"C015","name":"ロボットアーム","type":"scissors","rarity":"SSR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"damagePerOpponentRemaining","per":20}]},
 
-  {"cardId":"P001","name":"手品","type":"paper","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"changeOpponentType","to":"rock","count":1}]},
-  {"cardId":"P002","name":"催眠術","type":"paper","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"changeOpponentType","to":"scissors","count":1}]},
-  {"cardId":"P003","name":"救急箱","type":"paper","rarity":"N","trainingMultiplier":0,"shopPrice":50,"inPack":true,"effects":[{"type":"heal","amount":30}]},
-  {"cardId":"P004","name":"変身","type":"paper","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"changeOwnType","count":1}]},
-  {"cardId":"P005","name":"バリア","type":"paper","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"shield","mode":"half"}]},
-  {"cardId":"P006","name":"のぞき見","type":"paper","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"revealOpponent"}]},
-  {"cardId":"P007","name":"封印","type":"paper","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"nullifyOpponentCard","count":1}]},
-  {"cardId":"P008","name":"吸収","type":"paper","rarity":"R","trainingMultiplier":0,"shopPrice":150,"inPack":true,"effects":[{"type":"drain","amount":20}]},
-  {"cardId":"P009","name":"入れ替え","type":"paper","rarity":"SR","trainingMultiplier":0,"shopPrice":400,"inPack":true,"effects":[{"type":"swapCards"}]},
-  {"cardId":"P010","name":"鏡","type":"paper","rarity":"SR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"shield","mode":"reflect"}]},
-  {"cardId":"P011","name":"応援団","type":"paper","rarity":"SR","trainingMultiplier":0,"shopPrice":400,"inPack":true,"effects":[{"type":"nextRoundModifier","target":"self","multiplier":2}]},
-  {"cardId":"P012","name":"太陽光パネル","type":"paper","rarity":"SR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"regen","amount":15}]},
-  {"cardId":"P013","name":"ファイアウォール","type":"paper","rarity":"SR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"shield","mode":"zero"}]},
-  {"cardId":"P014","name":"プログラミング","type":"paper","rarity":"UR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"forceOpponentNext"}]},
-  {"cardId":"P015","name":"ハッキング","type":"paper","rarity":"UR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"changeAllOpponentType","to":"paper"}]},
-  {"cardId":"P016","name":"AI","type":"paper","rarity":"UR","trainingMultiplier":0,"shopPrice":null,"inPack":true,"effects":[{"type":"tieOnNextLoss"}]}
+  {"cardId":"P001","name":"手品","type":"paper","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"changeOpponentType","to":"rock","count":1}]},
+  {"cardId":"P002","name":"催眠術","type":"paper","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"changeOpponentType","to":"scissors","count":1}]},
+  {"cardId":"P017","name":"おりがみ","type":"paper","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"changeOpponentType","to":"paper","count":1}]},
+  {"cardId":"P003","name":"救急箱","type":"paper","rarity":"N","trainingMultiplier":0,"trainingBonus":0,"shopPrice":50,"inPack":true,"effects":[{"type":"heal","amount":30}]},
+  {"cardId":"P005","name":"バリア","type":"paper","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"shield","mode":"half"}]},
+  {"cardId":"P007","name":"封印","type":"paper","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"nullifyOpponentCard","count":1}]},
+  {"cardId":"P004","name":"変身","type":"paper","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"changeOwnType","count":1}]},
+  {"cardId":"P008","name":"吸収","type":"paper","rarity":"R","trainingMultiplier":0,"trainingBonus":0,"shopPrice":150,"inPack":true,"effects":[{"type":"drain","amount":20}]},
+  {"cardId":"P010","name":"鏡","type":"paper","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"shield","mode":"reflect"}]},
+  {"cardId":"P009","name":"入れ替え","type":"paper","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":400,"inPack":true,"effects":[{"type":"swapCards"}]},
+  {"cardId":"P018","name":"暗号化","type":"paper","rarity":"SR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"encrypt","secretTypeChange":1}]},
+  {"cardId":"P015","name":"ハッキング","type":"paper","rarity":"SSR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"changeAllOpponentType","to":"paper"}]},
+  {"cardId":"P014","name":"プログラミング","type":"paper","rarity":"SSR","trainingMultiplier":0,"trainingBonus":0,"shopPrice":null,"inPack":true,"effects":[{"type":"forceOpponentNext"}]}
 ]
 ```
 
-（`text`（説明文）と `image`（`{cardId}.webp`）は8-1〜8-3の表から補完すること。）
+### 8-5. 追加する順番
+
+一度に全部入れず、遊びながら少しずつ増やす。弾ごとにオーナーのチェックを受ける（画像は5枚程度ずつ生成してチェック）。
+
+| 弾 | 追加するカード | ねらい |
+|---|---|---|
+| 第1弾 | 正拳突き、のこぎり、救急箱、催眠術、おりがみ、レーザーカッター（SSR） | 3種類の基本、種類を変えるカード、SSRのルールを試す |
+| 第2弾 | バリア、封印、ベアハッグ、刀、毒矢、吸収 | シールド、SSR対策、継続ダメージ、回復を試す |
+| 第3弾 | 人力発電、歯車、げんのう、くぎ、手裏剣、受け身、てこの原理、電動アシスト、連続パンチ、ドローン、変身 | 技術らしいカード、組み合わせ、逆転、筋トレとの相性 |
+| 第4弾 | ぶち切れパンチ、捨て身タックル、電動ドリル、チェーンソー、投石器、鏡、入れ替え、暗号化、パワードスーツ、ジャイアントスイング、ロボットアーム、ハッキング、プログラミング | パックの目玉（SR・SSR） |
+
+- 追加仕様書 No.01 の「試作用の仮SSRカード」（調整画面のスイッチ）は、第1弾でレーザーカッター（60ダメージ）を正式に追加した時点で役目を終える。
+
+### 8-6. 保留カード
+
+以下は今回の40枚から外した。弱いからではなく、役割がほかのカードと重なったため。**実装しない。** 将来、拡張パックや期間限定パックの候補として、SPEC.md の付録に名前と効果だけ残しておく。
+
+| ID | 名前 | 外した理由（役割を引き継いだカード） |
+|---|---|---|
+| G003 | 頭突き | 反動つきの一撃 → 捨て身タックル |
+| G004 | 張り手 | 相手の弱体化 → 受け身・バリア |
+| G005 | タックル | 強いグー → 正拳突き・ぶち切れパンチ |
+| G008 | 気合いため | 次への強化 → 歯車 |
+| G011 | 根性パンチ | 逆転 → てこの原理 |
+| G013 | マッスルポーズ | 筋トレで化ける → 連続パンチ・電動アシスト |
+| G014 | 百裂拳 | 重い一撃 → 捨て身タックル |
+| G016 | 伝説の拳 | 筋トレ×SSR → パワードスーツ |
+| C001 | パチンコ | Nの素直なダメージ → のこぎり |
+| C005 | 弓矢 | 時間差 → 投石器・毒矢 |
+| C009 | ブーメラン | 印象が弱い |
+| C012 | 大砲 | 重い一撃 → チェーンソー |
+| P006 | のぞき見 | 情報 → ドローン |
+| P011 | 応援団 | 次への強化 → 歯車 |
+| P012 | 太陽光パネル | 回復 → 救急箱・吸収 |
+| P013 | ファイアウォール | 強い守り → 鏡 |
+| P016 | AI | あいこ操作 → SSRのルールと重なる |
 
 ---
 
@@ -651,9 +681,9 @@ type BattleCard = {
 オーナーが後で決める。管理者画面「デッキ管理」で編集できるようにする。
 
 ### 9-0. 段階3（バトル試作）での扱い
-- サンプルカードセット：**初期4枚（パンチ・キック・火縄銃・手品）**。デッキは4枚なので、この4枚がそのままデッキになる。
-- CPUデッキ：Lv1〜3とも**初期4枚**。レベルの違いは思考（10章）だけ。CPUの最大ライフ・筋トレ値は試作用の調整画面で変えられるようにする（初期値はライフ100・筋トレ0）。
-- 以下の9-1・9-2は、段階4でカードを追加したあとに使う仮データ。
+- 現在のデモ第1弾では、初期4枚・救急箱・正拳突き・のこぎり・催眠術・おりがみ・レーザーカッターの10枚を候補として使う。この中から4枚を選ぶ。
+- CPUも10枚の候補から独立に4枚を選ぶ。サンプル・CPU・自分のデッキはSSRを1枚までとする。
+- 以下の9-1・9-2は、後続の弾を追加した後の構想。未実装カードは現時点の候補に出さない。
 
 ### 9-1. サンプルカードセット（仮・段階4以降）
 - 内容：パンチ、キック、正拳突き、のこぎり、刀、火縄銃、手品、救急箱（8枚）
@@ -664,7 +694,7 @@ type BattleCard = {
 
 | レベル | 名前（キャラ） | デッキ | 最大ライフ | 筋トレ値 |
 |---|---|---|---|---|
-| Lv1 | 見習いロボ | パンチ、キック、パチンコ、救急箱 | 100 | 0 |
+| Lv1 | 見習いロボ | パンチ、キック、げんのう、救急箱 | 100 | 0 |
 | Lv2 | テクノロボ | 正拳突き、刀、のこぎり、手品 | 110 | グー＋5 |
 | Lv3 | マスターロボ | ぶち切れパンチ、火縄銃、バリア、入れ替え | 130 | グー＋10 |
 
@@ -753,15 +783,15 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
 
 ### 12-3. パック（ランダム）
 - 1パック3枚。1枚ごとにレア度を抽選し、そのレア度のカードからランダムに選ぶ（パック対象カードのみ）。
-- 排出率【仮】：N 60%／R 30%／SR 8.5%／UR 1.5%。**排出率はパック購入画面に必ず表示する。**
+- 排出率【仮】：N 60%／R 30%／SR 8.5%／SSR 1.5%。**排出率はパック購入画面に必ず表示する。**
 - **天井**：SR以上が出ないまま10パック開けたら、次のパックの1枚目はSR以上が確定。SR以上が出たらカウントはリセット。残りの回数を画面に表示する（「あと3パックでSR以上確定！」）。
 - 1日の購入上限：10パック（`packDailyLimit`）。
 - 抽選は必ずGASで行う。
-- 開封演出：パックが破れる → カードが1枚ずつ裏返る。SRは金色、URは虹色に光る特別演出。この演出の間にGASの応答を待つ（待ち時間を感じさせない）。
+- 開封演出：パックが破れる → カードが1枚ずつ裏返る。SRは金色、SSRは虹色に光る特別演出。この演出の間にGASの応答を待つ（待ち時間を感じさせない）。
 - パックは複数種類を作れる（期間限定パックなど）。パックごとに収録カード・排出率・価格・販売期間を設定できる。
 
 ### 12-4. 売却（ダブりの還元）
-- 所持カードを売ってGポイントに戻せる：N 10／R 30／SR 100／UR 300【仮】。
+- 所持カードを売ってGポイントに戻せる：N 10／R 30／SR 100／SSR 300【仮】。
 - 筋トレしたカードを売るときは「筋トレの成果も消えます」と確認する。
 - 所持カードがデッキ枚数（4枚）未満になる売却はできない。
 
@@ -954,7 +984,7 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
 | onlineRewardDailyCap | 3 | オンライン報酬の1日上限回数 |
 | firstWinBonus | 20 | 本日の初勝利 |
 | packDailyLimit | 10 | パックの1日購入上限 |
-| sellPrices | 10,30,100,300 | 売却額（N,R,SR,UR） |
+| sellPrices | 10,30,100,300 | 売却額（N,R,SR,SSR） |
 | rankingEnabled | true | ランキング表示 |
 | sessionDays | 7 | セッションの有効日数 |
 | onlineEnabled | true | オンライン対戦の受付（授業中に止めたいとき用） |
@@ -1128,7 +1158,7 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
 
 - フォント（Google Fonts）：見出し「Dela Gothic One」、本文「M PLUS Rounded 1c」。
 - ライフバー：緑 → 黄 → 赤と変化。減るときは白い残像を残して遅れて縮む。
-- 演出の例：カードの3D回転、じゃんけんでぶつかる演出、ダメージ数値のポップアップ、大ダメージ時の画面の揺れ、Gポイントのコインが飛ぶ演出、URの虹色フラッシュ。
+- 演出の例：カードの3D回転、じゃんけんでぶつかる演出、ダメージ数値のポップアップ、大ダメージ時の画面の揺れ、Gポイントのコインが飛ぶ演出、SSRの虹色フラッシュ。
 - 演出は「スキップ」できる（タップで早送り）。
 - 文字は小さくしすぎない（本文16px以上）。
 
@@ -1140,7 +1170,7 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
 1. **段階1：パンチ（G001）の男の子イラストを共通に使い、表面の完成画像を3案**作る。グーの裏面は採用済み。3案をオーナーのチェックに出す。
 2. OKが出たら、そのプロンプトとスタイルを「確定版」として `docs/IMAGE_STYLE.md` に記録する。NGなら作り直して再チェック。
 3. **段階2：キック・火縄銃・手品の表面完成画像**と、チョキ・パーの裏面を確定版のスタイルで生成し、チェックを受ける。
-4. **段階4：追加カードの表面完成画像**は、確定版のスタイルで5枚程度ずつ生成し、そのたびにチェックを受ける。SR・URの表面は初めて必要になったときに1枚ずつ生成してチェックを受ける。
+4. **段階4：追加カードの表面完成画像**は、確定版のスタイルで5枚程度ずつ生成し、そのたびにチェックを受ける。SR・SSRの表面は初めて必要になったときに1枚ずつ生成してチェックを受ける。
 5. **段階5：ロゴ**を1枚生成してチェック → OKならアプリアイコン・コイン・メニューアイコンなどを生成。
 6. **段階10：背景・パック・CPUキャラなど**も、まず1枚をサンプルとして生成してチェックを受けてから、残りを生成する。
 7. オーナーのOKなしに、まとめて大量に生成しない。
@@ -1169,7 +1199,7 @@ portrait 3:4, background: {BG}
   - グー：`warm yellow and orange radial energy background`
   - チョキ：`cool blue background with metallic sparks`
   - パー：`mystic green background with soft glowing particles`
-- レア度によって追加：SR は `dramatic lighting, golden highlights`、UR は `epic cinematic lighting, rainbow light rays, sparkles, legendary atmosphere`。
+- レア度によって追加：SR は `dramatic lighting, golden highlights`、SSR は `epic cinematic lighting, rainbow light rays, sparkles, legendary atmosphere`。
 
 ### 23-3. カードごとの題材プロンプト
 

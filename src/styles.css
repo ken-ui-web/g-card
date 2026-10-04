@@ -190,7 +190,13 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 
 .card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}
 .card img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.card--ssr.card--back{overflow:visible;isolation:isolate;filter:drop-shadow(0 0 12px #a887ff) drop-shadow(0 12px 13px #030713a8)}
+.card--ssr.card--back::after{content:'';position:absolute;inset:0;border-radius:12px;background:linear-gradient(130deg,transparent 20%,#ffffff65 35%,transparent 50%);background-size:250% 100%;mix-blend-mode:screen;pointer-events:none;animation:ssr-shimmer 3.6s linear infinite}
+.card .card__ssr-border{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.card__ssr-badge{position:absolute;bottom:5%;left:50%;transform:translateX(-50%);z-index:2;padding:.12em .5em;border-radius:999px;background:#111c41e8;border:1px solid #e4ceff;color:#fff;font:900 10cqw 'Dela Gothic One',sans-serif;letter-spacing:.08em;text-shadow:0 0 7px #d8aaff;pointer-events:none}
+@keyframes ssr-shimmer{from{background-position:130% 0}to{background-position:-130% 0}}
 .card__damage{position:absolute;top:2.4%;right:2%;width:19%;aspect-ratio:1;display:grid;place-items:center;color:#16213d;font-family:'Dela Gothic One','M PLUS Rounded 1c',sans-serif;font-weight:900;font-size:8cqw;line-height:1;text-shadow:0 1px #fff0a9}
+.online-back-card{display:inline-flex;vertical-align:middle;margin:4px 5px 4px 0}
 
 .hero{min-height:410px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:28px;padding:46px 0 32px}
 .hero__copy{position:relative;z-index:2}

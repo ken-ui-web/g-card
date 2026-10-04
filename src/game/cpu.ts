@@ -1,4 +1,4 @@
-import { availableCards, getCard, type CardType } from '../data/cards';
+import { availableCards, getCard, ssrCount, type CardType } from '../data/cards';
 import { compareTypes, finalDamage, type BattleCard, type BattleConfig, type BattleState } from './battle';
 
 export type CpuLevel = 1 | 2 | 3;
@@ -46,7 +46,10 @@ export function chooseCpuDeck(playerCardIds: string[], level: CpuLevel, seed: nu
   for (let a = 0; a < pool.length - 3; a++) {
     for (let b = a + 1; b < pool.length - 2; b++) {
       for (let c = b + 1; c < pool.length - 1; c++) {
-        for (let d = c + 1; d < pool.length; d++) combinations.push([pool[a], pool[b], pool[c], pool[d]]);
+        for (let d = c + 1; d < pool.length; d++) {
+          const ids = [pool[a], pool[b], pool[c], pool[d]];
+          if (ssrCount(ids) <= 1) combinations.push(ids);
+        }
       }
     }
   }
@@ -167,7 +170,7 @@ export function chooseCpuCard(view: CpuView, level: CpuLevel, seed: number): { i
   return { id: scored[0].card.instanceId, seed };
 }
 
-export function chooseCpuTarget(view: CpuView, level: CpuLevel, seed: number): { id: string; seed: number } {
+export function chooseCpuTarget(view: CpuView, level: CpuLevel, seed: number, to: CardType = 'rock'): { id: string; seed: number } {
   const targets = view.opponentBacks;
   if (targets.length === 0) throw new Error('対象カードがありません');
   if (level === 1) {
@@ -176,7 +179,7 @@ export function chooseCpuTarget(view: CpuView, level: CpuLevel, seed: number): {
   }
   if (level === 2) {
     const score = (back: PublicBack) => view.ownCards.reduce((sum, card) =>
-      sum + Number(compareTypes(card.currentType, 'rock') > 0) - Number(compareTypes(card.currentType, back.currentType) > 0), 0);
+      sum + Number(compareTypes(card.currentType, to) > 0) - Number(compareTypes(card.currentType, back.currentType) > 0), 0);
     const best = Math.max(...targets.map(score));
     const picked = randomItem(targets.filter((target) => score(target) === best), seed);
     return { id: picked.item.instanceId, seed: picked.seed };
@@ -186,7 +189,7 @@ export function chooseCpuTarget(view: CpuView, level: CpuLevel, seed: number): {
     target,
     value: forecastValue({
       ownLife: view.ownLife, opponentLife: view.opponentLife, ownCards: view.ownCards,
-      opponentBacks: targets.map((back) => back.instanceId === target.instanceId ? { ...back, currentType: 'rock' } : back),
+      opponentBacks: targets.map((back) => back.instanceId === target.instanceId ? { ...back, currentType: to } : back),
     }, view.config, memo),
   }));
   scored.sort((a, b) => b.value - a.value || a.target.instanceId.localeCompare(b.target.instanceId));

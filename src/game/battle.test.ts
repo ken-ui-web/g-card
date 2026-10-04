@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginRound, compareTypes, createBattle, finalDamage, finishRound, targetOptions, type BattleConfig } from './battle';
+import { beginRound, compareTypes, createBattle, effectOrder, finalDamage, finishRound, targetOptions, type BattleConfig } from './battle';
 
 const config: BattleConfig = { initialLife: 100, cpuMaxLife: 100, cpuTraining: 0, damages: { G001: 20, G002: 20, C008: 50 } };
 const play = (state: ReturnType<typeof createBattle>, left: string, right: string, target?: string) =>
@@ -117,5 +117,43 @@ describe('所持カードのデッキ', () => {
     expect(finalDamage(state.players[0].hand.find((card) => card.instanceId === '0-owned-a')!, config)).toBe(25);
     expect(finalDamage(state.players[0].hand.find((card) => card.instanceId === '0-owned-b')!, config)).toBe(20);
     expect(() => createBattle('cpu', config, 1, [[owned[0], owned[0], owned[2], owned[3]], ['G001', 'G002', 'C008', 'P001']])).toThrow('異なる所持カード');
+  });
+});
+
+describe('第1弾とSSR', () => {
+  const host = ['C014', 'G001', 'P002', 'P017'];
+  const guest = ['C014', 'G002', 'P001', 'C002'];
+  const battle = () => createBattle('local', { ...config, damages: { ...config.damages, C014: 60 } }, 7, [host, guest]);
+
+  it('レーザーカッターは勝ちとあいこで発動し、負けでは発動しない', () => {
+    expect(play(battle(), 'C014', 'P001').players[1].life).toBe(40);
+    expect(play(battle(), 'C014', 'G002').players[1].life).toBe(100);
+    expect(play(battle(), 'C014', 'C002').players[1].life).toBe(40);
+  });
+
+  it('双方SSRのあいこはライフが少ない順に両方発動し、同時KOは引き分け', () => {
+    expect(effectOrder(null, [{ cardId: 'C014' }, { cardId: 'C014' }], [80, 40], 7, 1)).toEqual([1, 0]);
+    expect(effectOrder(null, [{ cardId: 'C014' }, { cardId: 'C014' }], [100, 100], 7, 1)).toEqual(effectOrder(null, [{ cardId: 'C014' }, { cardId: 'C014' }], [100, 100], 7, 1));
+    const state = battle();
+    state.players[0].life = 60;
+    state.players[1].life = 60;
+    const finished = play(state, 'C014', 'C014');
+    expect(finished.history[0].events.filter((event) => event.kind === 'damage')).toHaveLength(2);
+    expect(finished.outcome).toBe('draw');
+  });
+
+  it('効果なしSSRは発動せず、SSR2枚のデッキは拒否する', () => {
+    const state = battle();
+    state.players[0].hand.find((card) => card.cardId === 'C014')!.nullified = true;
+    expect(play(state, 'C014', 'C002').players[1].life).toBe(100);
+    const duplicate = [{ cardId: 'C014', ownedId: 'one', trainLevel: 0 }, { cardId: 'C014', ownedId: 'two', trainLevel: 0 }, { cardId: 'G001', ownedId: 'three', trainLevel: 0 }, { cardId: 'P001', ownedId: 'four', trainLevel: 0 }];
+    expect(() => createBattle('local', config, 1, [duplicate, guest])).toThrow('SSRはデッキに1枚まで');
+  });
+
+  it('催眠術とおりがみは選んだ残りカードの種類を変える', () => {
+    const hypnotized = play(battle(), 'P002', 'G002', '1-P001');
+    expect(hypnotized.players[1].hand.find((card) => card.cardId === 'P001')?.currentType).toBe('scissors');
+    const folded = play(battle(), 'P017', 'G002', '1-P001');
+    expect(folded.players[1].hand.find((card) => card.cardId === 'P001')?.currentType).toBe('paper');
   });
 });

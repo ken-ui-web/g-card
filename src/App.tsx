@@ -2,8 +2,8 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 
 import { Card } from './components/Card';
 import { SoundToggle } from './components/SoundToggle';
 import { playSfx } from './audio/sfx';
-import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabels } from './data/cards';
-import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
+import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, typeLabels } from './data/cards';
+import { beginRound, createBattle, effectOrder, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
@@ -60,11 +60,11 @@ function BackRow({ cards, title }: { cards: BattleCard[]; title: string }) {
 }
 
 function RoundEvent({ event, names }: { event: BattleEvent; names: [string, string] }) {
-  if (event.kind === 'tie') return <p className="event-line">あいこ。効果は発動しません。</p>;
+  if (event.kind === 'tie') return <p className="event-line">あいこ。</p>;
   if (event.kind === 'damage') return <p className="event-line event-line--damage"><strong>{event.amount} ダメージ！</strong> {names[event.target]}のライフが減りました。</p>;
   if (event.kind === 'heal') return <p className="event-line event-line--heal">{event.amount > 0 ? <><strong>{event.amount} 回復！</strong> {names[event.actor]}のライフが増えました。</> : `${names[event.actor]}のライフは満タンです。`}</p>;
-  if (event.kind === 'change') return <p className="event-line">{names[event.actor]}の手品！ 相手の残りカード1枚を【{typeLabels[event.to]}】に変えました。</p>;
-  return <p className="event-line">手品の対象がありません。効果は発動しません。</p>;
+  if (event.kind === 'change') return <p className="event-line">{names[event.actor]}が相手の残りカード1枚を【{typeLabels[event.to]}】に変えました。</p>;
+  return <p className="event-line">対象がありません。効果は発動しません。</p>;
 }
 
 function TuningPage({ settings, onChange }: { settings: TuningSettings; onChange: (next: TuningSettings) => void }) {
@@ -200,6 +200,8 @@ function App() {
   const startGame = async () => {
     const usingOwned = mode === 'cpu' && deckMode === 'owned';
     if (usingOwned ? ownedSelection.length !== 4 : selectedDeckIds.length !== 4) return;
+    const selectedIds = usingOwned ? ownedSelection.map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '') : selectedDeckIds;
+    if (ssrCount(selectedIds) > 1) { setDeckError('SSRはデッキに1枚までです'); return; }
     if (usingOwned) {
       const session = savedSession();
       if (!session) { setDeckError('学校アカウントでログインしてください'); return; }
@@ -241,11 +243,11 @@ function App() {
   const toggleDeckCard = (cardId: string) => {
     setSelectedDeckIds((selected) => selected.includes(cardId)
       ? selected.filter((id) => id !== cardId)
-      : selected.length < 4 ? [...selected, cardId] : selected);
+      : selected.length < 4 && ssrCount([...selected, cardId]) <= 1 ? [...selected, cardId] : selected);
   };
   const toggleOwnedCard = (ownedId: string) => setOwnedSelection((selected) => selected.includes(ownedId)
     ? selected.filter((id) => id !== ownedId)
-    : selected.length < 4 ? [...selected, ownedId] : selected);
+    : selected.length < 4 && ssrCount([...selected, ownedId].map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '')) <= 1 ? [...selected, ownedId] : selected);
 
   const reportResult = async () => {
     const session = savedSession();
@@ -306,8 +308,10 @@ function App() {
     if (!battle) return;
     const choices = targetOptions(battle);
     if (choices.length === 0) { commitRound(); return; }
-    if (mode === 'cpu' && battle.reveal?.winner === 1) {
-      const decision = chooseCpuTarget(toCpuView(battle), level, seed.current);
+    const actor = battle.reveal && effectOrder(battle.reveal.winner, battle.reveal.cards, battle.players.map((player) => player.life), battle.seed, battle.round)[0];
+    if (mode === 'cpu' && actor === 1) {
+      const effect = getCard(battle.reveal!.cards[actor].cardId).effects.find((item) => item.type === 'changeOpponentType');
+      const decision = chooseCpuTarget(toCpuView(battle), level, seed.current, effect?.type === 'changeOpponentType' ? effect.to : 'rock');
       seed.current = decision.seed;
       commitRound(decision.id);
     } else {
@@ -336,6 +340,9 @@ function App() {
   const log = battle?.history.at(-1);
   const sampleCards = availableCards.filter((card) => !account?.battleConfig?.length || account.battleConfig.find((deck) => deck.deckId === 'sample')?.cardIds.includes(card.cardId));
   const reveal = battle?.reveal;
+  const revealActors = battle && reveal ? effectOrder(reveal.winner, reveal.cards, battle.players.map((player) => player.life), battle.seed, battle.round) : [];
+  const targetActor = revealActors[0];
+  const targetEffect = targetActor === undefined || !reveal ? undefined : getCard(reveal.cards[targetActor].cardId).effects.find((effect) => effect.type === 'changeOpponentType');
   const winnerName = (winner: PlayerIndex | null) => winner === null ? 'あいこ！' : `${names[winner]}の勝ち！`;
 
   return (
@@ -361,8 +368,8 @@ function App() {
         </section>
       </>}
 
-      {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>{mode === 'cpu' && deckMode === 'owned' ? `所持カードから4枚を選びます（現在 ${ownedSelection.length} / 4 枚）。筋トレ値と最大ライフが反映されます。` : `サンプル${sampleCards.length}枚から4枚を選びます（現在 ${selectedDeckIds.length} / 4 枚）。`} 別のカードを入れるときは、まず選択中の1枚を外してください。</p>
-        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && ownedSelection.length === 4} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && selectedDeckIds.length === 4} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
+      {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>{mode === 'cpu' && deckMode === 'owned' ? `所持カードから4枚を選びます（現在 ${ownedSelection.length} / 4 枚）。筋トレ値と最大ライフが反映されます。` : `サンプル${sampleCards.length}枚から4枚を選びます（現在 ${selectedDeckIds.length} / 4 枚）。`} SSRはデッキに1枚までです。別のカードを入れるときは、まず選択中の1枚を外してください。</p>
+        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && (ownedSelection.length === 4 || card.rarity === 'SSR' && ssrCount(ownedSelection.map((id) => account.ownedCards.find((item) => item.ownedId === id)?.cardId || '')) >= 1)} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && (selectedDeckIds.length === 4 || card.rarity === 'SSR' && ssrCount(selectedDeckIds) >= 1)} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
         <div className="deck-note"><strong>勝ち方</strong><p>グーはチョキに、チョキはパーに、パーはグーに勝ちます。勝ったカードだけが効果を発動。4ラウンド後、残りライフが多い側の勝利です。</p></div>
         {deckError && <p className="portal-error" role="alert">{deckError}</p>}<div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={starting || (mode === 'cpu' && deckMode === 'owned' ? ownedSelection : selectedDeckIds).length !== 4} onClick={() => { void startGame(); }}>{starting ? '保存中…' : '対戦を始める'}</button></div>
       </section>}
@@ -377,7 +384,7 @@ function App() {
           <BackRow cards={opponent.hand} title={`${names[turn === 0 ? 1 : 0]}のカード`} />
           <div className="board-divider"><span>VS</span></div>
           <div className="hand-block"><div className="hand-block__heading"><h3>{names[turn]}のカード</h3><span>残り {current.hand.length} 枚</span></div>
-            {ui === 'thinking' ? <div className="thinking"><img className="thinking__cpu" src={`${import.meta.env.BASE_URL}images/cpu/lv${level}.webp`} alt="" /><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 ? <div className="final-open"><Card card={getCard(current.hand[0].cardId)} damage={finalDamage(current.hand[0], battle.config)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = finalDamage(instance, battle.config); return <button type="button" className="select-card" key={instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card card={card} damage={damage} /><strong>{card.name}</strong><span>{typeLabels[instance.currentType]}{instance.currentType !== instance.originalType ? '（手品で変化）' : ''} · {damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}</span><small>このカードを出す</small></button>; })}</div>}
+            {ui === 'thinking' ? <div className="thinking"><img className="thinking__cpu" src={`${import.meta.env.BASE_URL}images/cpu/lv${level}.webp`} alt="" /><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 ? <div className="final-open"><Card card={getCard(current.hand[0].cardId)} damage={finalDamage(current.hand[0], battle.config)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = finalDamage(instance, battle.config); return <button type="button" className="select-card" key={instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card card={card} damage={damage} /><strong>{card.name}</strong><span>{typeLabels[instance.currentType]}{instance.currentType !== instance.originalType ? '（効果で変化）' : ''} · {damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}</span><small>このカードを出す</small></button>; })}</div>}
           </div>
         </div>}
 
@@ -387,7 +394,7 @@ function App() {
 
         {ui === 'reveal' && reveal && <div className="reveal-panel panel">
           <p className="eyebrow">CARD REVEAL</p>
-          {revealStage === 'backs' ? <div className="reveal-verdict" role="status"><p className="reveal-verdict__types">{typeLabels[reveal.cards[0].currentType]} <span>VS</span> {typeLabels[reveal.cards[1].currentType]}</p><h2>{winnerName(reveal.winner)}</h2><p>{reveal.winner === null ? '種類は同じ。効果は発動しません。' : 'カードの表面で効果を確認しましょう。'}</p></div> : <h2>{winnerName(reveal.winner)}</h2>}
+          {revealStage === 'backs' ? <div className="reveal-verdict" role="status"><p className="reveal-verdict__types">{typeLabels[reveal.cards[0].currentType]} <span>VS</span> {typeLabels[reveal.cards[1].currentType]}</p><h2>{winnerName(reveal.winner)}</h2><p>{reveal.winner === null ? revealActors.length === 2 ? 'SSR同時発動！ ライフが少ない方から効果が出ます。' : revealActors.length === 1 ? 'SSR発動！ あいこでも効果が出ます。' : '種類は同じ。効果は発動しません。' : 'カードの表面で効果を確認しましょう。'}</p></div> : <h2>{winnerName(reveal.winner)}</h2>}
           <div className="reveal-grid">{reveal.cards.map((instance, index) => <div className={`reveal-entry ${revealStage === 'backs' ? 'is-dealt' : ''} ${revealStage === 'backs' && reveal.winner === index ? 'is-winner' : ''}`} key={instance.instanceId}>
             <span>{names[index]}</span>
             <div className={`flip-card ${revealStage !== 'backs' ? 'is-flipped' : ''}`}><div className="flip-card__inner" style={{ transitionDuration: `${950 / settings.animationSpeed}ms` }} onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === 'transform' && revealStage === 'flipping') setRevealStage('fronts'); }}>
@@ -399,7 +406,7 @@ function App() {
           <div className="button-row">{revealStage === 'backs' && <><p className="reveal-hint">種類と勝敗を見たら、カードをめくろう。</p><button type="button" className="button button--primary" disabled={!canFlip} onClick={() => { playSfx('flip'); setRevealStage('flipping'); }}>{canFlip ? 'カードをめくる' : '勝敗を見てね…'}</button></>}{revealStage === 'fronts' && <button type="button" className="button button--primary" onClick={resolveReveal}>効果を見る</button>}</div>
         </div>}
 
-        {ui === 'target' && reveal && <div className="target-panel panel"><p className="eyebrow">MAGIC EFFECT</p><h2>{names[reveal.winner!]}が対象を選ぶ</h2><p>相手の残りカードを1枚選び、種類を【グー】に変えます。カードの中身は見えません。</p><div className="target-grid">{targetOptions(battle).map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side="back" backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>手品で変化</small>}</button>)}</div><button type="button" className="button button--primary" disabled={!selectedTarget} onClick={() => commitRound(selectedTarget!)}>このカードを変える</button></div>}
+        {ui === 'target' && reveal && <div className="target-panel panel"><p className="eyebrow">CARD EFFECT</p><h2>{names[targetActor ?? 0]}が対象を選ぶ</h2><p>相手の残りカードを1枚選び、種類を【{targetEffect?.type === 'changeOpponentType' ? typeLabels[targetEffect.to] : 'グー'}】に変えます。カードの中身は見えません。</p><div className="target-grid">{targetOptions(battle).map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side="back" backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>効果で変化</small>}</button>)}</div><button type="button" className="button button--primary" disabled={!selectedTarget} onClick={() => commitRound(selectedTarget!)}>このカードを変える</button></div>}
 
         {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div key={instance.instanceId}><span>{names[index]}</span><Card card={getCard(instance.cardId)} damage={finalDamage(instance, battle.config)} width={180} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
         <div className="battle-footnote">CPU対戦はログイン中、結果画面でGポイントとミッションの進み具合を保存します。この端末での2人対戦に報酬はありません。</div>

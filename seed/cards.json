@@ -1,0 +1,686 @@
+[
+  {
+    "cardId": "G001",
+    "name": "パンチ",
+    "type": "rock",
+    "rarity": "N",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 20
+      }
+    ]
+  },
+  {
+    "cardId": "G002",
+    "name": "キック",
+    "type": "rock",
+    "rarity": "N",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 20
+      }
+    ]
+  },
+  {
+    "cardId": "G018",
+    "name": "人力発電",
+    "type": "rock",
+    "rarity": "N",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15
+      },
+      {
+        "type": "heal",
+        "amount": 10
+      }
+    ]
+  },
+  {
+    "cardId": "G019",
+    "name": "歯車",
+    "type": "rock",
+    "rarity": "N",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 10
+      },
+      {
+        "type": "nextRoundModifier",
+        "target": "self",
+        "add": 10
+      }
+    ]
+  },
+  {
+    "cardId": "G006",
+    "name": "正拳突き",
+    "type": "rock",
+    "rarity": "R",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 30
+      }
+    ]
+  },
+  {
+    "cardId": "G007",
+    "name": "連続パンチ",
+    "type": "rock",
+    "rarity": "R",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 10,
+        "hits": 3
+      }
+    ]
+  },
+  {
+    "cardId": "G020",
+    "name": "てこの原理",
+    "type": "rock",
+    "rarity": "R",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15,
+        "condition": "selfLifeLower",
+        "multiplierIfCondition": 2
+      }
+    ]
+  },
+  {
+    "cardId": "G017",
+    "name": "受け身",
+    "type": "rock",
+    "rarity": "R",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15
+      },
+      {
+        "type": "shield",
+        "mode": "reduce",
+        "amount": 10
+      }
+    ]
+  },
+  {
+    "cardId": "G021",
+    "name": "電動アシスト",
+    "type": "rock",
+    "rarity": "R",
+    "trainingMultiplier": 2,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15
+      }
+    ]
+  },
+  {
+    "cardId": "G009",
+    "name": "ぶち切れパンチ",
+    "type": "rock",
+    "rarity": "SR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 40
+      }
+    ]
+  },
+  {
+    "cardId": "G010",
+    "name": "捨て身タックル",
+    "type": "rock",
+    "rarity": "SR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 60
+      },
+      {
+        "type": "selfDamage",
+        "amount": 25
+      }
+    ]
+  },
+  {
+    "cardId": "G012",
+    "name": "ベアハッグ",
+    "type": "rock",
+    "rarity": "SR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 25
+      },
+      {
+        "type": "nullifyOpponentCard",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "G022",
+    "name": "パワードスーツ",
+    "type": "rock",
+    "rarity": "SSR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 20,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 30
+      }
+    ]
+  },
+  {
+    "cardId": "G015",
+    "name": "ジャイアントスイング",
+    "type": "rock",
+    "rarity": "SSR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 30
+      },
+      {
+        "type": "blindOpponent"
+      }
+    ]
+  },
+  {
+    "cardId": "C002",
+    "name": "のこぎり",
+    "type": "scissors",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 30
+      }
+    ]
+  },
+  {
+    "cardId": "C003",
+    "name": "げんのう",
+    "type": "scissors",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 25
+      }
+    ]
+  },
+  {
+    "cardId": "C016",
+    "name": "くぎ",
+    "type": "scissors",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15,
+        "comboBonus": {
+          "requiresCardInDeck": "C003",
+          "add": 15
+        }
+      }
+    ]
+  },
+  {
+    "cardId": "C004",
+    "name": "手裏剣",
+    "type": "scissors",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 15,
+        "hits": 2
+      }
+    ]
+  },
+  {
+    "cardId": "C008",
+    "name": "火縄銃",
+    "type": "scissors",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 50
+      }
+    ]
+  },
+  {
+    "cardId": "C006",
+    "name": "刀",
+    "type": "scissors",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 40
+      }
+    ]
+  },
+  {
+    "cardId": "C007",
+    "name": "毒矢",
+    "type": "scissors",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 10
+      },
+      {
+        "type": "poison",
+        "amount": 10
+      }
+    ]
+  },
+  {
+    "cardId": "C017",
+    "name": "ドローン",
+    "type": "scissors",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 20
+      },
+      {
+        "type": "revealOpponent",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "C010",
+    "name": "電動ドリル",
+    "type": "scissors",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 40,
+        "pierce": true
+      }
+    ]
+  },
+  {
+    "cardId": "C011",
+    "name": "チェーンソー",
+    "type": "scissors",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 55
+      }
+    ]
+  },
+  {
+    "cardId": "C013",
+    "name": "投石器",
+    "type": "scissors",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "delayedDamage",
+        "amount": 60,
+        "afterRounds": 1
+      }
+    ]
+  },
+  {
+    "cardId": "C014",
+    "name": "レーザーカッター",
+    "type": "scissors",
+    "rarity": "SSR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 60
+      }
+    ]
+  },
+  {
+    "cardId": "C015",
+    "name": "ロボットアーム",
+    "type": "scissors",
+    "rarity": "SSR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "damagePerOpponentRemaining",
+        "per": 20
+      }
+    ]
+  },
+  {
+    "cardId": "P001",
+    "name": "手品",
+    "type": "paper",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "changeOpponentType",
+        "to": "rock",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P002",
+    "name": "催眠術",
+    "type": "paper",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "changeOpponentType",
+        "to": "scissors",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P017",
+    "name": "おりがみ",
+    "type": "paper",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "changeOpponentType",
+        "to": "paper",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P003",
+    "name": "救急箱",
+    "type": "paper",
+    "rarity": "N",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 50,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "heal",
+        "amount": 30
+      }
+    ]
+  },
+  {
+    "cardId": "P005",
+    "name": "バリア",
+    "type": "paper",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "shield",
+        "mode": "half"
+      }
+    ]
+  },
+  {
+    "cardId": "P007",
+    "name": "封印",
+    "type": "paper",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "nullifyOpponentCard",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P004",
+    "name": "変身",
+    "type": "paper",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "changeOwnType",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P008",
+    "name": "吸収",
+    "type": "paper",
+    "rarity": "R",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 150,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "drain",
+        "amount": 20
+      }
+    ]
+  },
+  {
+    "cardId": "P010",
+    "name": "鏡",
+    "type": "paper",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "shield",
+        "mode": "reflect"
+      }
+    ]
+  },
+  {
+    "cardId": "P009",
+    "name": "入れ替え",
+    "type": "paper",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": 400,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "swapCards"
+      }
+    ]
+  },
+  {
+    "cardId": "P018",
+    "name": "暗号化",
+    "type": "paper",
+    "rarity": "SR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "encrypt",
+        "secretTypeChange": 1
+      }
+    ]
+  },
+  {
+    "cardId": "P015",
+    "name": "ハッキング",
+    "type": "paper",
+    "rarity": "SSR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "changeAllOpponentType",
+        "to": "paper"
+      }
+    ]
+  },
+  {
+    "cardId": "P014",
+    "name": "プログラミング",
+    "type": "paper",
+    "rarity": "SSR",
+    "trainingMultiplier": 0,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": true,
+    "effects": [
+      {
+        "type": "forceOpponentNext"
+      }
+    ]
+  }
+]

@@ -1,5 +1,5 @@
 export type CardType = 'rock' | 'scissors' | 'paper';
-export type Rarity = 'N' | 'R' | 'SR' | 'UR';
+export type Rarity = 'N' | 'R' | 'SR' | 'SSR';
 
 export type CardEffect =
   | { type: 'damage'; amount: number }
@@ -14,6 +14,7 @@ export interface CardDefinition {
   text: string;
   effects: CardEffect[];
   trainingMultiplier: number;
+  trainingBonus?: number;
   frontImage: string;
 }
 
@@ -30,12 +31,19 @@ export const initialCards: CardDefinition[] = [
 
 export const addedCards: CardDefinition[] = [
   { cardId: 'P003', name: '救急箱', type: 'paper', rarity: 'N', text: 'ライフを30回復', effects: [{ type: 'heal', amount: 30 }], trainingMultiplier: 0, frontImage: 'P003-front.webp' },
+  { cardId: 'G006', name: '正拳突き', type: 'rock', rarity: 'R', text: '30のダメージを与える', effects: [{ type: 'damage', amount: 30 }], trainingMultiplier: 1, frontImage: 'G006-front.webp' },
+  { cardId: 'C002', name: 'のこぎり', type: 'scissors', rarity: 'N', text: '30のダメージを与える', effects: [{ type: 'damage', amount: 30 }], trainingMultiplier: 0, frontImage: 'C002-front.webp' },
+  { cardId: 'P002', name: '催眠術', type: 'paper', rarity: 'N', text: '相手のカードを1枚選び、種類を【チョキ】に変える', effects: [{ type: 'changeOpponentType', to: 'scissors' }], trainingMultiplier: 0, frontImage: 'P002-front.webp' },
+  { cardId: 'P017', name: 'おりがみ', type: 'paper', rarity: 'N', text: '相手のカードを1枚選び、種類を【パー】に変える', effects: [{ type: 'changeOpponentType', to: 'paper' }], trainingMultiplier: 0, frontImage: 'P017-front.webp' },
+  { cardId: 'C014', name: 'レーザーカッター', type: 'scissors', rarity: 'SSR', text: '60のダメージを与える', effects: [{ type: 'damage', amount: 60 }], trainingMultiplier: 0, frontImage: 'C014-front.webp' },
 ];
 
 export const availableCards = [...initialCards, ...addedCards];
 export const defaultDeckIds = ['G001', 'C008', 'P001', 'P003'];
 
 export const cardById = Object.fromEntries(availableCards.map((card) => [card.cardId, card])) as Record<string, CardDefinition>;
+
+export const ssrCount = (cardIds: string[]) => cardIds.filter((id) => cardById[id]?.rarity === 'SSR').length;
 
 export function getCard(cardId: string): CardDefinition {
   const card = cardById[cardId];
