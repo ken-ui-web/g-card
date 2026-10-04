@@ -67,4 +67,18 @@ describe('オンライン対戦の公開情報', () => {
     room.rounds!['1'].choices = { host: 1 };
     expect((await deriveView(room)).phase).toBe('verify');
   });
+
+  it('30秒後の不戦勝は切断者が戻っても終了したままになる', async () => {
+    const room: OnlineRoom = {
+      meta: { battleId: 'forfeit', deckMode: 'sample', hostUid: 'host', guestUid: 'guest', seed: 1, code: '1234', createdAt: 1, expiresAt: 2 },
+      players: { host: { nickname: 'A', maxLife: 100, connected: true, lastSeen: 1 }, guest: { nickname: 'B', maxLife: 100, connected: false, lastSeen: 10 } },
+      forfeit: { winnerUid: 'host', loserUid: 'guest', at: 30_010 },
+    };
+    const result = await deriveView(room);
+    expect(result.phase).toBe('forfeit');
+    expect(myResult(result, 0)).toBe('win');
+    expect(myResult(result, 1)).toBe('loss');
+    room.players!.guest.connected = true;
+    expect((await deriveView(room)).phase).toBe('forfeit');
+  });
 });

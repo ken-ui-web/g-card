@@ -18,10 +18,11 @@ export interface OnlineRoom {
   decks?: Record<string, PublicDeck>;
   rounds?: Record<string, OnlineRound>;
   final?: Record<string, { entries: OnlineEntry[]; salt: string }>;
+  forfeit?: { winnerUid: string; loserUid: string; at: number };
   receipts?: Record<string, boolean>;
 }
 export interface OnlineView {
-  phase: 'deck' | 'select' | 'reveal' | 'target' | 'verify' | 'final' | 'finished' | 'invalid';
+  phase: 'deck' | 'select' | 'reveal' | 'target' | 'verify' | 'final' | 'finished' | 'forfeit' | 'invalid';
   round: number;
   life: [number, number];
   maxLife: [number, number];
@@ -66,6 +67,12 @@ export async function deriveView(room: OnlineRoom): Promise<OnlineView> {
   const decks = uids.map((uid) => room.decks?.[uid]);
   const types: [CardType[], CardType[]] = [decks[0]?.types ? [...decks[0].types] : [], decks[1]?.types ? [...decks[1].types] : []];
   let view: OnlineView = { phase: 'deck', round: 1, life: [...maxLife], maxLife, types, used: [[], []], events: [], outcome: null };
+  if (room.forfeit) {
+    const winner = uids.indexOf(room.forfeit.winnerUid);
+    const loser = uids.indexOf(room.forfeit.loserUid);
+    if (winner < 0 || loser < 0 || winner === loser) return invalid(view, '不戦勝の情報が正しくありません');
+    return { ...view, phase: 'forfeit', outcome: winner as 0 | 1 };
+  }
   if (!uids[1] || !decks[0] || !decks[1]) return view;
   if (types.some((list) => list.length !== 4 || list.some((type) => !['rock', 'scissors', 'paper'].includes(type)))) return invalid(view, 'カードの種類が正しくありません');
   for (let round = 1; round <= 4; round++) {

@@ -1033,6 +1033,7 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
                  reveal : { {uid}: { index, salt, card: {cardId, trainLevel, ...} } },
                  choices: { {uid}: { ... 効果の対象選択 ... } },
                  stateHash: { {uid}: "<解決後の状態のハッシュ>" } } }
+   forfeit: { winnerUid, loserUid, at }
    final   : { {uid}: { deck: [...], salt } }
 ```
 
@@ -1051,7 +1052,7 @@ CPUは**ズルをしない**（プレイヤーがそのラウンドに選んだ�
 
 ### 20-5. 切断の処理
 - `onDisconnect()` で `connected: false` と `lastSeen` を記録する。
-- 相手が30秒以上切断したら、残った側の勝ち（不戦勝）。
+- 相手が30秒以上切断したら、残った側の勝ち（不戦勝）。Firebaseのルールで経過時間と参加者を確認し、部屋に結果を確定して再接続後も再開しない。両者の結果照合ができないためGポイントは付与しない。
 
 ---
 

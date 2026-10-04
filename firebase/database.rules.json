@@ -25,6 +25,10 @@
             ".validate": "newData.hasChildren(['nickname', 'maxLife', 'connected', 'lastSeen']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 8 && newData.child('maxLife').isNumber() && newData.child('maxLife').val() >= 1 && newData.child('maxLife').val() <= 9999 && newData.child('connected').isBoolean() && newData.child('lastSeen').isNumber()"
           }
         },
+        "forfeit": {
+          ".write": "auth != null && !data.exists() && data.parent().child('meta/expiresAt').val() > now && !data.parent().child('final').exists() && newData.child('winnerUid').val() === auth.uid && ((data.parent().child('meta/hostUid').val() === auth.uid && newData.child('loserUid').val() === data.parent().child('meta/guestUid').val()) || (data.parent().child('meta/guestUid').val() === auth.uid && newData.child('loserUid').val() === data.parent().child('meta/hostUid').val())) && data.parent().child('players').child(newData.child('loserUid').val()).child('connected').val() === false && data.parent().child('players').child(newData.child('loserUid').val()).child('lastSeen').isNumber() && data.parent().child('players').child(newData.child('loserUid').val()).child('lastSeen').val() <= now - 30000",
+          ".validate": "newData.hasChildren(['winnerUid', 'loserUid', 'at']) && newData.child('winnerUid').isString() && newData.child('loserUid').isString() && newData.child('at').isNumber() && newData.child('at').val() >= now - 10000 && newData.child('at').val() <= now + 10000"
+        },
         "decks": {
           "$uid": {
             ".write": "auth != null && auth.uid === $uid && !data.exists() && (data.parent().parent().child('meta/hostUid').val() === auth.uid || data.parent().parent().child('meta/guestUid').val() === auth.uid)",
