@@ -159,3 +159,9 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 金色と紺色の密封パックを1枚生成し、オーナーが採用した。元画像は `design-source/stage10/normal-pack-sample.png`、確認用の透過WebPは同名の `.webp`（600×900）。正式画像は `public/images/packs/normal.webp`。中央の歯車型メダリオンは文字やマークを入れず空白とした。ショップ画面のパック商品に表示する。
 
 > One isolated upright 2:3 sealed standard booster pack with transparent background. Cohesive metallic foil wrapper, crimped seams, deep navy enamel, antique brass and bright gold angled trim, subtle gears and circuits, small electric-blue and emerald accents. A clean blank circular gear-shaped medallion centered on the wrapper. Bold manga/cel-shaded rendering, readable at small size, straight-on view. No writing, numbers, card faces, characters, logos, watermark, floor or external shadow.
+
+## 段階10・CPU Lv1キャラクターサンプル（2026-10-04、確認待ち）
+
+小さく丸い見習いロボットを1枚生成した。元画像は `design-source/stage10/cpu-lv1-sample.png`、確認用の透過WebPは同名の `.webp`（768×768）。紺色の本体、金色の関節、青い目、緑の小さな発光部で既存画面の配色に合わせた。アプリにはまだ適用していない。
+
+> One original full-body small round cute apprentice robot, with short arms and legs, friendly expression and novice stance. Deep-navy enamel body, antique-brass and gold trim, bright blue eyes and tiny emerald accents, subtle gear joints. Bold clean anime cel-shaded outlines, readable at 120 px, top-left light. Centered square composition with transparent background. No scenery, floor, cards, weapons, text, numbers, logos, watermark or extra limbs.
