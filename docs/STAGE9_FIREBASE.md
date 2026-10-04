@@ -42,7 +42,7 @@ Firebaseには対戦用のニックネーム・デッキ・対戦の進行情報
 
 ## 7. 確認してから生徒に公開する
 
-`onlineEnabled=0` の間、管理者の学校アカウントでは `/#/online` に管理者テストモードが表示される。同じ学校アカウントをPCとiPadなど別の端末で開けば、実際の生徒アカウントを借りずにルームコード対戦、4ラウンド、切断からの復帰を試せる。ブラウザーの通常タブ同士はFirebaseの匿名IDを共有するので使わず、別端末か通常ウィンドウとシークレットウィンドウを組み合わせる。このテスト対戦では `OnlineMatches`、`BattleLog`、Gポイント、ランキングに記録しない。報酬処理は、公開後に異なる2つの学校アカウントで行われた最初の実対戦で確認する。通信切れが30秒を超えた試合はFirebaseに不戦勝を記録し、切断した端末が戻っても再開しない。両者の結果照合ができないためG報酬は付けない。本公開時に管理者画面の「Gポイントと育成の数値」で `onlineEnabled` を `1` にする。ランキングだけ停止する場合は `rankingEnabled` を `0` にする。
+`onlineEnabled=0` の間、管理者の学校アカウントでは `/#/online` に管理者テストモードが表示される。同じ学校アカウントをPCとiPadなど別の端末で開けば、実際の生徒アカウントを借りずにルームコード対戦、4ラウンド、切断からの復帰を試せる。ブラウザーの通常タブ同士はFirebaseの匿名IDを共有するので使わず、別端末か通常ウィンドウとシークレットウィンドウを組み合わせる。このテスト対戦では `OnlineMatches`、`BattleLog`、Gポイント、ランキングに記録しない。報酬処理は、公開後に異なる2つの学校アカウントで行われた最初の実対戦で確認する。通信状態は5秒ごとに記録する。最後の記録から30秒を超えた試合はFirebaseに不戦勝を記録し、切断した端末が戻っても再開しない。通信が切れている間はカードの自動選択タイマーを止める。両者の結果照合ができないためG報酬は付けない。本公開時に管理者画面の「Gポイントと育成の数値」で `onlineEnabled` を `1` にする。ランキングだけ停止する場合は `rankingEnabled` を `0` にする。
 
 両端末に「管理者テストモードです」が出てから新しい部屋を作る。試合中は「先生A VS 先生B」と表示される。表示されない場合は管理者設定を `0` にして両端末を再読み込みし、以前のルームコードは使わない。
 
@@ -50,6 +50,6 @@ Firebaseの無料枠を守るため、Realtime Databaseへの接続はオンラ�
 
 ## 8. 不戦勝を確定するルールへ更新する
 
-Firebaseコンソールの「Realtime Database」→「ルール」を開き、[最新版のdatabase.rules.json](https://github.com/ken-ui-web/g-card/blob/main/firebase/database.rules.json) の全文に貼り替えて「公開」を押す。新しい `forfeit` ルールは、相手の切断がサーバー時刻で30秒を超えたときだけ、対戦相手本人が不戦勝を記録できるようにする。古いルールのままだと「不戦勝を確定しています…」から進まない。Apps Scriptの更新は不要。
+Firebaseコンソールの「Realtime Database」→「ルール」を開き、[最新版のdatabase.rules.json](https://github.com/ken-ui-web/g-card/blob/main/firebase/database.rules.json) の全文に貼り替えて「公開」を押す。新しい `forfeit` ルールは、相手の最後の通信確認からサーバー時刻で30秒を超えたとき、対戦相手本人が不戦勝を記録できるようにする。Firebaseの切断通知が遅れても判定できる。古いルールでは `connected: false` が必要なため、通信切れを検出できない場合がある。Apps Scriptの更新は不要。
 
 参考：[Firebaseウェブアプリ設定](https://firebase.google.com/docs/web/setup)、[匿名認証](https://firebase.google.com/docs/auth/web/anonymous-auth)、[Realtime Databaseの作成](https://firebase.google.com/docs/database/web/start)、[データベースのセキュリティルール](https://firebase.google.com/docs/database/security)、[切断検知](https://firebase.google.com/docs/database/web/offline-capabilities)。

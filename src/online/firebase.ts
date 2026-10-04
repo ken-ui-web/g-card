@@ -61,7 +61,7 @@ async function createRoom(db: Database, uid: string, nickname: string, maxLife: 
   };
   await set(ref(db, roomPath(battleId)), room);
   rememberHosted(battleId);
-  await onDisconnect(ref(db, `${roomPath(battleId)}/players/${uid}`)).update({ connected: false, lastSeen: serverTimestamp() });
+  await onDisconnect(ref(db, `${roomPath(battleId)}/players/${uid}`)).update({ connected: false });
   return battleId;
 }
 
@@ -93,6 +93,10 @@ export async function joinCodeRoom(db: Database, uid: string, code: string, deck
 
 export async function setPresence(db: Database, roomId: string, uid: string, nickname: string, maxLife: number): Promise<void> {
   const target = ref(db, `${roomPath(roomId)}/players/${uid}`);
-  await onDisconnect(target).set({ nickname, maxLife, connected: false, lastSeen: serverTimestamp() });
   await set(target, { nickname, maxLife, connected: true, lastSeen: serverTimestamp() });
+  await onDisconnect(target).update({ connected: false });
+}
+
+export async function heartbeat(db: Database, roomId: string, uid: string): Promise<void> {
+  await update(ref(db, `${roomPath(roomId)}/players/${uid}`), { lastSeen: serverTimestamp() });
 }

@@ -3,7 +3,8 @@ import { onValue, ref, remove, serverTimestamp, set, type Database } from 'fireb
 import { Card } from '../components/Card';
 import { availableCards, defaultDeckIds, getCard, typeLabels } from '../data/cards';
 import { callApi, savedSession, type BootstrapData } from '../portal/api';
-import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, joinCodeRoom, roomPath, setPresence } from './firebase';
+import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
+import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
 import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type DeckMode, type OnlineEntry, type OnlineRoom, type OnlineView } from './protocol';
 
 type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
@@ -41,12 +42,13 @@ export function OnlinePage() {
   const [error, setError] = useState('');
   const [reward, setReward] = useState<Reward | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [localConnected, setLocalConnected] = useState(false);
   const [presentation, setPresentation] = useState<OnlineView | null>(null);
   const [seenRound, setSeenRound] = useState(0);
   const actionKey = useRef(new Set<string>());
   const entered = useRef(false);
   const currentRoom = useRef(roomId);
-  const phaseClock = useRef({ key: '', since: Date.now() });
+  const phaseClock = useRef<PhaseClock>({ key: '', since: Date.now(), pausedAt: null });
   const rewardStatus = useRef('');
   const viewPhase = useRef('');
   const forfeitAttempt = useRef({ pending: false, retryAt: 0 });
@@ -55,7 +57,8 @@ export function OnlinePage() {
   const mySide: 0 | 1 = room?.meta.hostUid === uid ? 0 : 1;
   const opponentUid = room ? mySide === 0 ? room.meta.guestUid || '' : room.meta.hostUid : '';
   const opponent = room?.players?.[opponentUid];
-  const opponentOffline = opponent?.connected === false && elapsed - Number(opponent.lastSeen || 0) >= 30_000;
+  const opponentOffline = localConnected && opponentTimedOut(opponent?.lastSeen, elapsed);
+  const opponentAway = opponent?.connected === false || Boolean(opponent?.lastSeen && elapsed - opponent.lastSeen >= 10_000);
   const onlineAvailable = Boolean(account?.online?.enabled || account?.profile.role === 'admin');
   const teacherTestMode = Boolean(account?.profile.role === 'admin' && !account.online?.enabled);
 
@@ -118,8 +121,10 @@ export function OnlinePage() {
     let active = true;
     let seenConnection = false;
     const unsubscribe = onValue(ref(db, '.info/connected'), (snapshot) => {
-      if (snapshot.val() !== true) return;
+      const connected = snapshot.val() === true;
+      setLocalConnected(connected);
       if (!seenConnection) { seenConnection = true; return; }
+      if (!connected) return;
       const maxLife = room.meta.deckMode === 'owned' ? account.profile.maxLife : account.battleConfig.find((item) => item.deckId === 'sample')?.maxLife ?? 100;
       const nickname = room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname;
       void setPresence(db, roomId, uid, nickname, maxLife).catch((failure: Error) => {
@@ -128,6 +133,14 @@ export function OnlinePage() {
     });
     return () => { active = false; unsubscribe(); };
   }, [db, uid, roomId, joined, room?.meta.battleId, room?.meta.deckMode, room?.meta.hostUid, room?.meta.teacherTest, account]);
+
+  useEffect(() => {
+    if (!db || !uid || !roomId || !joined || !localConnected || ['forfeit', 'finished', 'invalid'].includes(view?.phase || '')) return;
+    const timer = window.setInterval(() => {
+      void heartbeat(db, roomId, uid).catch(() => {});
+    }, HEARTBEAT_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [db, uid, roomId, joined, localConnected, view?.phase]);
 
   const takeAction = (key: string, task: () => Promise<unknown>) => {
     if (actionKey.current.has(key)) return;
@@ -190,6 +203,7 @@ export function OnlinePage() {
   }, [db, room, uid, reward, roomId, view?.phase]);
 
   useEffect(() => { const timer = window.setInterval(() => setElapsed(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { if (view?.phase === 'forfeit') setPresentation(null); }, [view?.phase]);
   useEffect(() => {
     if (view?.phase === 'verify' && view.reveal && view.round > seenRound && !presentation) setPresentation(view);
   }, [view, seenRound, presentation]);
@@ -218,7 +232,7 @@ export function OnlinePage() {
     finally { setBusy(false); }
   };
   const submitDeck = async () => {
-    if (!db || !uid || !room || selectedValid.length !== 4 || !joined || busy) return;
+    if (!db || !uid || !room || selectedValid.length !== 4 || !joined || !localConnected || busy) return;
     setBusy(true); setError('');
     try {
       const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ...(deckMode === 'owned' ? { ownedId: id } : {}), trainLevel: item.trainLevel }; });
@@ -231,7 +245,7 @@ export function OnlinePage() {
   };
 
   const selectPick = async (index: number) => {
-    if (!db || !room || !view || !entries || busy) return;
+    if (!db || !room || !view || !entries || !localConnected || busy) return;
     setBusy(true); setError('');
     try {
       const nextSalt = randomSalt();
@@ -242,7 +256,7 @@ export function OnlinePage() {
   };
 
   const chooseTarget = async (index: number) => {
-    if (!db || !view || busy) return;
+    if (!db || !view || !localConnected || busy) return;
     setBusy(true);
     try { await set(ref(db, `${roomPath(roomId)}/rounds/${view.round}/choices/${uid}`), index); }
     catch (failure) { setError((failure as Error).message); }
@@ -252,8 +266,8 @@ export function OnlinePage() {
   useEffect(() => {
     if (!room || !view || !joined || !entries && view.phase !== 'deck' || presentation) return;
     const key = `${roomId}:${view.round}:${view.phase}`;
-    if (phaseClock.current.key !== key) phaseClock.current = { key, since: Date.now() };
-    const seconds = (elapsed - phaseClock.current.since) / 1000;
+    const seconds = phaseSeconds(phaseClock.current, key, elapsed, !localConnected || opponentAway);
+    if (!localConnected || opponentAway) return;
     if (view.phase === 'deck' && !room.decks?.[uid] && seconds >= 90) {
       if (selectedValid.length === 4) takeAction('deck-timeout', submitDeck);
       else if (pool.length >= 4) setSelected(pool.slice(0, 4).map((item) => item.id));
@@ -267,7 +281,7 @@ export function OnlinePage() {
       const remaining = [0, 1, 2, 3].filter((index) => !view.used[other].includes(index));
       if (remaining.length) takeAction(`target-timeout-${view.round}`, () => chooseTarget(remaining[(room.meta.seed + view.round) % remaining.length]));
     }
-  }, [elapsed, view, room, joined, entries, roomId, uid, selectedValid, pool, mySide, presentation]);
+  }, [elapsed, view, room, joined, entries, roomId, uid, selectedValid, pool, mySide, presentation, localConnected, opponentAway]);
 
   const leave = () => {
     currentRoom.current = ''; setRoomId(''); setRoom(null); setView(null); setReward(null); setJoined(false); setPresentation(null); setSeenRound(0); entered.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
@@ -282,6 +296,8 @@ export function OnlinePage() {
       {account?.profile.role === 'admin' && account.online?.enabled && !roomId && <p role="alert">オンライン対戦を生徒に公開中です。同じ学校アカウントで試す場合は、管理者設定の「オンライン対戦を受付」を0にして再読み込みしてください。</p>}
       {room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}
       {room && !room.meta.teacherTest && account?.profile.role === 'admin' && <p role="status">通常対戦の部屋です。同じ学校アカウント同士では参加できません。</p>}
+      {room && joined && !localConnected && view?.outcome === null && <p role="status">通信が切れています。再接続を待っています。制限時間は一時停止中です。</p>}
+      {room && joined && localConnected && opponentAway && !opponentOffline && view?.outcome === null && <p role="status">相手との通信を確認中です。制限時間は一時停止中です。</p>}
       {!session ? <p>学校アカウントでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <p role="status">対戦に接続中…</p> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>自分のカードかサンプルカードを選び、同じ部門の相手と対戦します。</p><div className="online-mode"><button className="button button--ghost" aria-pressed={deckMode === 'sample'} onClick={() => chooseMode('sample')}>サンプルカード</button><button className="button button--ghost" aria-pressed={deckMode === 'owned'} disabled={account.ownedCards.length < 4} onClick={() => chooseMode('owned')}>自分のカード</button></div><div className="button-row"><button className="button button--primary" disabled={busy} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <p role="status">部屋を読み込み中…</p> : <><p>部門：{room.meta.deckMode === 'owned' ? '自分のカード' : 'サンプルカード'}{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'} VS {room.players?.[room.meta.guestUid || '']?.nickname || '相手を待っています…'}</p>
         {!room.meta.guestUid ? <p role="status">相手を待っています。コードを友達に伝えてください。</p> : !joined ? <p role="status">対戦相手の参加を確認中…</p> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻っていません。不戦勝を確定しています…</p></div> : view?.phase === 'deck' ? <><h2>カードを4枚選ぶ</h2><p>制限時間90秒。相手には種類だけが見え、カード名はラウンドまで隠れます。</p>{room.decks?.[uid] ? <p role="status">相手の準備を待っています…</p> : <><div className="online-deck-grid">{pool.map((item) => <button key={item.id} className={selectedValid.includes(item.id) ? 'is-selected' : ''} aria-pressed={selectedValid.includes(item.id)} onClick={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : current.length < 4 ? [...current, item.id] : current)}><Card card={getCard(item.cardId)} width={110} /><strong>{getCard(item.cardId).name}</strong></button>)}</div><button className="button button--primary" disabled={busy || selectedValid.length !== 4} onClick={() => { void submitDeck(); }}>この4枚で決定</button></>}</> : !view ? <p>対戦を読み込み中…</p> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{myResult(view, mySide) === 'win' ? '勝利！' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため報酬はありません。' : '両者の結果と報酬を照合中…'}</p></> : <><h2>ラウンド {view.round}</h2><div className="online-life"><strong>あなた {view.life[mySide]} / {view.maxLife[mySide]}</strong><strong>{opponent?.nickname || '相手'} {view.life[mySide === 0 ? 1 : 0]} / {view.maxLife[mySide === 0 ? 1 : 0]}</strong></div><p>相手の残りカード：{view.types[mySide === 0 ? 1 : 0].map((type, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <span className="online-back" key={index}>{typeLabels[type]}</span>)}</p>
           {view.phase === 'select' ? room.rounds?.[String(view.round)]?.commit?.[uid] ? <p role="status">相手のカード決定を待っています…</p> : <><p>30秒以内にカードを選んでください。</p><div className="online-deck-grid">{entries?.map((entry, index) => view.used[mySide].includes(index) ? null : <button key={index} onClick={() => { void selectPick(index); }}><Card card={getCard(entry.cardId)} width={110} /><strong>{getCard(entry.cardId).name}</strong></button>)}</div></> : view.phase === 'reveal' ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>お互いのカードを公開中…</p></div> : view.phase === 'target' && view.targetOwner === mySide ? <><p>手品で変える相手の残りカードを選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((type, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget(index); }}>{typeLabels[type]} · {index + 1}番</button>)}</div></> : view.phase === 'target' ? <p role="status">相手が手品の対象を選んでいます…</p> : view.phase === 'verify' && view.reveal ? <>{!revealReady ? <div className="round-intro panel"><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></div> : <><p>{view.winner === null ? 'あいこ' : view.winner === mySide ? 'このラウンドは勝ち！' : 'このラウンドは負け'}</p><div className="online-reveal-grid">{view.reveal.map((pick, side) => <div key={side}><span>{side === mySide ? 'あなた' : opponent?.nickname || '相手'}</span><Card card={getCard(pick.card.cardId)} width={170} /></div>)}</div><p>{view.events.join(' · ')}</p></>}<p role="status">次のラウンドを同期中…</p></> : <p role="status">デッキの最終確認中…</p>}</>}
