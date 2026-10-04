@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Card } from './components/Card';
+import { SoundToggle } from './components/SoundToggle';
+import { playSfx } from './audio/sfx';
 import { availableCards, defaultDeckIds, getCard, type CardDefinition, typeLabels } from './data/cards';
 import { beginRound, createBattle, finalDamage, finishRound, targetOptions, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundLog } from './game/battle';
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
@@ -164,7 +166,7 @@ function App() {
     if (ui !== 'round-intro') return;
     const timer = window.setTimeout(() => {
       if (introStage === 'title') setIntroStage('suspense');
-      else setUi('reveal');
+      else { playSfx('flip'); setUi('reveal'); }
     }, (introStage === 'title' ? 1400 : 2200) / settings.animationSpeed);
     return () => window.clearTimeout(timer);
   }, [ui, introStage, settings.animationSpeed]);
@@ -231,6 +233,7 @@ function App() {
     setTurn(0);
     setFirstPick(null);
     setSelectedTarget(null);
+    playSfx('round');
     setUi(mode === 'local' ? 'handoff' : 'select');
     setScreen('battle');
   };
@@ -255,6 +258,7 @@ function App() {
         result: battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss',
       });
       setReward(result);
+      if ((result.awarded ?? 0) > 0) playSfx('point');
     } catch (failure) {
       reportingId.current = '';
       setRewardError((failure as Error).message);
@@ -264,6 +268,7 @@ function App() {
 
   const selectCard = (id: string) => {
     if (!battle) return;
+    playSfx('select');
     if (mode === 'cpu') {
       setFirstPick(id);
       setUi('thinking');
@@ -281,12 +286,18 @@ function App() {
     setIntroStage('title');
     setRevealStage('backs');
     setCanFlip(false);
+    playSfx('round');
     setUi('round-intro');
   };
 
   const commitRound = (targetId?: string) => {
     if (!battle) return;
-    setBattle(finishRound(battle, targetId));
+    const next = finishRound(battle, targetId);
+    const events = next.history.at(-1)?.events ?? [];
+    if (events.some((event) => event.kind === 'damage')) playSfx('damage');
+    else if (events.some((event) => event.kind === 'heal')) playSfx('heal');
+    else if (next.history.at(-1)?.winner === 0) playSfx('win');
+    setBattle(next);
     setSelectedTarget(null);
     setUi('summary');
   };
@@ -307,7 +318,7 @@ function App() {
 
   const nextRound = () => {
     if (!battle) return;
-    if (battle.outcome !== null) { setScreen('result'); return; }
+    if (battle.outcome !== null) { if (battle.outcome === 0) playSfx('win'); setScreen('result'); return; }
     setTurn(0);
     setUi(mode === 'local' ? 'handoff' : 'select');
   };
@@ -331,7 +342,7 @@ function App() {
     <main className={`app-shell${screen === 'battle' || screen === 'result' ? ' app-shell--battle' : ''}`} style={screen === 'battle' || screen === 'result' ? battleBackgroundStyle : undefined}>
       <header className="app-header">
         <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
-        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a></nav>
+        <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link" onClick={() => setScreen('menu')}>対戦メニュー</button><a className="text-link" href="#/dev/tuning">試作用の調整</a><SoundToggle /></nav>
       </header>
 
       {screen === 'menu' && <>
@@ -344,7 +355,7 @@ function App() {
             <button type="button" className={`mode-option ${mode === 'cpu' ? 'is-active' : ''}`} onClick={() => setMode('cpu')} aria-pressed={mode === 'cpu'}><span className="mode-option__icon">⚙</span><strong>CPUと対戦</strong><small>レベルを選んで1人でプレイ</small></button>
             <button type="button" className={`mode-option ${mode === 'local' ? 'is-active' : ''}`} onClick={() => setMode('local')} aria-pressed={mode === 'local'}><span className="mode-option__icon">↔</span><strong>この端末で対戦</strong><small>交代で端末を渡して2人でプレイ</small></button>
           </div>
-          {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => setLevel(value)}>Lv{value}<small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
+          {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={`${import.meta.env.BASE_URL}images/cpu/lv${value}.webp`} alt="" />Lv{value}<small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
           {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログインとサーバー更新後に選べます。</small>}</div>}
           <div className="button-row"><button type="button" className="button button--primary" onClick={() => setScreen('deck')}>カードセットを見る <span aria-hidden="true">→</span></button></div>
         </section>
@@ -366,7 +377,7 @@ function App() {
           <BackRow cards={opponent.hand} title={`${names[turn === 0 ? 1 : 0]}のカード`} />
           <div className="board-divider"><span>VS</span></div>
           <div className="hand-block"><div className="hand-block__heading"><h3>{names[turn]}のカード</h3><span>残り {current.hand.length} 枚</span></div>
-            {ui === 'thinking' ? <div className="thinking"><span className="thinking__gear">⚙</span><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 ? <div className="final-open"><Card card={getCard(current.hand[0].cardId)} damage={finalDamage(current.hand[0], battle.config)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = finalDamage(instance, battle.config); return <button type="button" className="select-card" key={instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card card={card} damage={damage} /><strong>{card.name}</strong><span>{typeLabels[instance.currentType]}{instance.currentType !== instance.originalType ? '（手品で変化）' : ''} · {damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}</span><small>このカードを出す</small></button>; })}</div>}
+            {ui === 'thinking' ? <div className="thinking"><img className="thinking__cpu" src={`${import.meta.env.BASE_URL}images/cpu/lv${level}.webp`} alt="" /><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 ? <div className="final-open"><Card card={getCard(current.hand[0].cardId)} damage={finalDamage(current.hand[0], battle.config)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = finalDamage(instance, battle.config); return <button type="button" className="select-card" key={instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card card={card} damage={damage} /><strong>{card.name}</strong><span>{typeLabels[instance.currentType]}{instance.currentType !== instance.originalType ? '（手品で変化）' : ''} · {damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}</span><small>このカードを出す</small></button>; })}</div>}
           </div>
         </div>}
 
@@ -385,7 +396,7 @@ function App() {
             </div></div>
             {revealStage === 'backs' ? <strong className="reveal-entry__type">{typeLabels[instance.currentType]}{reveal.winner === index ? ' · 勝ち' : reveal.winner === null ? ' · あいこ' : ' · 負け'}</strong> : revealStage === 'fronts' ? <strong className="reveal-entry__type">{getCard(instance.cardId).name}</strong> : null}
           </div>)}</div>
-          <div className="button-row">{revealStage === 'backs' && <><p className="reveal-hint">種類と勝敗を見たら、カードをめくろう。</p><button type="button" className="button button--primary" disabled={!canFlip} onClick={() => setRevealStage('flipping')}>{canFlip ? 'カードをめくる' : '勝敗を見てね…'}</button></>}{revealStage === 'fronts' && <button type="button" className="button button--primary" onClick={resolveReveal}>効果を見る</button>}</div>
+          <div className="button-row">{revealStage === 'backs' && <><p className="reveal-hint">種類と勝敗を見たら、カードをめくろう。</p><button type="button" className="button button--primary" disabled={!canFlip} onClick={() => { playSfx('flip'); setRevealStage('flipping'); }}>{canFlip ? 'カードをめくる' : '勝敗を見てね…'}</button></>}{revealStage === 'fronts' && <button type="button" className="button button--primary" onClick={resolveReveal}>効果を見る</button>}</div>
         </div>}
 
         {ui === 'target' && reveal && <div className="target-panel panel"><p className="eyebrow">MAGIC EFFECT</p><h2>{names[reveal.winner!]}が対象を選ぶ</h2><p>相手の残りカードを1枚選び、種類を【グー】に変えます。カードの中身は見えません。</p><div className="target-grid">{targetOptions(battle).map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side="back" backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>手品で変化</small>}</button>)}</div><button type="button" className="button button--primary" disabled={!selectedTarget} onClick={() => commitRound(selectedTarget!)}>このカードを変える</button></div>}

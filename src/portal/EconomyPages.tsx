@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom';
 import { callApi, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
 import { availableCards } from '../data/cards';
 import { PortalIcon, type PortalIconName } from './Icons';
+import { playSfx } from '../audio/sfx';
 
 type Page = 'shop' | 'training' | 'collection';
 type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; icon?: PortalIconName; missions?: EconomyState['completedMissions'] };
-type FeedbackPlan = { working: string; done: (result: EconomyState) => Omit<Feedback, 'phase' | 'balance' | 'missions'> };
+type FeedbackPlan = { working: string; workingImage?: string; done: (result: EconomyState) => Omit<Feedback, 'phase' | 'balance' | 'missions'> };
 const cardImage = (card: CardMaster) => `${import.meta.env.BASE_URL}images/cards/${card.image}`;
 
 function pendingCost(data: BootstrapData, items: { kind: 'muscle' | 'run'; ownedId?: string; count: number }[]) {
@@ -34,7 +35,7 @@ export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedba
     return () => window.clearInterval(timer);
   }, [feedback.phase]);
   return createPortal(<div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
-    {feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
+    {feedback.phase === 'working' && feedback.image ? <img className="economy-feedback__pack" src={feedback.image} alt="" /> : feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
     <p className="eyebrow">{feedback.phase === 'working' ? 'PROCESSING' : feedback.phase === 'done' ? 'COMPLETE' : 'TRY AGAIN'}</p><h2>{feedback.title}</h2>
     {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : 'サーバーからの返事を待っています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
   </div></div>, document.body);
@@ -51,6 +52,7 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
     return valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId);
   });
   const [opened, setOpened] = useState<string[]>([]);
+  const [showOpened, setShowOpened] = useState(false);
   const [opening, setOpening] = useState(false);
   const [pendingTrain, setPendingTrain] = useState<{ kind: 'muscle' | 'run'; ownedId?: string; count: number }[]>([]);
   const trainTimer = useRef<number | null>(null);
@@ -64,13 +66,15 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
     if (busyRef.current) return null;
     busyRef.current = true;
     setBusy(true); setMessage('');
-    if (plan) setFeedback({ phase: 'working', title: plan.working });
+    if (plan) setFeedback({ phase: 'working', title: plan.working, image: plan.workingImage });
     try {
       const result = await callApi<EconomyState>(action, session, payload);
       onState(result);
       setMessage(success(result));
       if (result.completedMissions?.length) setMessage((before) => `${before}　ミッション達成：${result.completedMissions!.map((item) => `${item.label} +${item.reward}G`).join('、')}`);
       if (plan) setFeedback({ ...plan.done(result), phase: 'done', balance: result.gPoint, missions: result.completedMissions });
+      if (action === 'openPack') playSfx((result.acquired ?? []).some((item) => ['SR', 'UR'].includes(cardById(item.cardId)?.rarity ?? '')) ? 'rare' : 'pack');
+      else if (action === 'buyCard' || action === 'train') playSfx('point');
       return result;
     } catch (error) { const detail = (error as Error).message; setMessage(detail); if (plan) setFeedback({ phase: 'error', title: '処理できませんでした', detail }); return null; }
     finally { busyRef.current = false; setBusy(false); }
@@ -91,6 +95,7 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
   };
   const queueTraining = (kind: 'muscle' | 'run', ownedId?: string) => {
     if (busyRef.current) return;
+    playSfx('select');
     const key = `${kind}:${ownedId ?? ''}`;
     const next = [...pendingRef.current];
     const index = next.findIndex((item) => `${item.kind}:${item.ownedId ?? ''}` === key);
@@ -103,17 +108,20 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
     trainTimer.current = window.setTimeout(() => { void flushTraining(); }, 800);
   };
 
-  const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => setFeedback(null)} />;
+  const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => { if (feedback.phase === 'done' && opened.length) setShowOpened(true); setFeedback(null); }} />;
 
   if (page === 'shop') return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">CARD SHOP</p><h1>カード購入</h1><p className="economy-balance">所持 {data.profile.gPoint.toLocaleString()} G</p>
     <h2>カードを選んで買う</h2><div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && cardImage(card)).map((card) => <CardTile key={card.cardId} card={card}><p className="economy-price">{card.shopPrice} G</p><button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button></CardTile>)}</div>
-    <h2>パックを開ける</h2><div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}><img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" /><h3>{pack.name}</h3><p>{pack.cardsPerPack}枚入り · {pack.price}G</p><p>排出率：{Object.entries(pack.rarityRates).map(([rarity, rate]) => `${rarity} ${rate}%`).join('／')}</p><p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>{pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}<button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < pack.price || data.daily.packsBought >= data.economy.packDailyLimit} onClick={() => { setOpening(true); setOpened([]); void transact('openPack', { packId: pack.packId }, (result) => { setOpened((result.acquired ?? []).map((item) => item.cardId)); return 'パックを開けました！'; }).finally(() => setOpening(false)); }}>{opening ? '開封中…' : 'パックを開ける'}</button></article>)}</div>{opened.length > 0 && <div className="economy-opened panel" role="status"><h2>出たカード</h2><div className="economy-grid">{opened.map((id, index) => { const card = cardById(id); return card ? <div className="economy-opened-card" style={{ animationDelay: `${index * 220}ms` }} key={`${id}-${index}`}><CardTile card={card} /></div> : null; })}</div></div>}
+    <h2>パックを開ける</h2><div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}><img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" /><h3>{pack.name}</h3><p>{pack.cardsPerPack}枚入り · {pack.price}G</p><p>排出率：{Object.entries(pack.rarityRates).map(([rarity, rate]) => `${rarity} ${rate}%`).join('／')}</p><p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>{pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}<button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < pack.price || data.daily.packsBought >= data.economy.packDailyLimit} onClick={() => { playSfx('pack'); setOpening(true); setOpened([]); setShowOpened(false); void transact('openPack', { packId: pack.packId }, (result) => { setOpened((result.acquired ?? []).map((item) => item.cardId)); return 'パックを開けました！'; }, { working: 'パックを開封中…', workingImage: `${import.meta.env.BASE_URL}images/packs/normal.webp`, done: (result) => ({ title: 'パック開封！', detail: `${result.acquired?.length ?? 0}枚のカードを手に入れました。閉じるとカードが表示されます。`, icon: 'shop' }) }).finally(() => setOpening(false)); }}>{opening ? '開封中…' : 'パックを開ける'}</button></article>)}</div>{showOpened && opened.length > 0 && <div className="economy-opened panel" role="status"><h2>出たカード</h2><div className="economy-grid">{opened.map((id, index) => { const card = cardById(id); return card ? <div className="economy-opened-card" style={{ animationDelay: `${index * 220}ms` }} key={`${id}-${index}`}><CardTile card={card} /></div> : null; })}</div></div>}
     {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
 
   if (page === 'training') {
     const projected = pendingCost(data, pendingTrain);
     const runCost = data.economy.runCostBase + data.economy.runCostStep * projected.runs;
-    return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">TRAINING</p><h1>トレーニング</h1><p className="economy-balance">所持 {(data.profile.gPoint - projected.cost).toLocaleString()} G · 最大ライフ {data.profile.maxLife + (projected.runs - data.profile.runCount) * data.economy.lifePerRun}</p><div className={`economy-run panel ${pendingTrain.some((item) => item.kind === 'run') ? 'is-training' : ''}`}><h2>走り込み</h2><p>1回で最大ライフ +{data.economy.lifePerRun}。次の1回：{runCost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < runCost} onClick={() => queueTraining('run')}>走り込む</button>{pendingTrain.some((item) => item.kind === 'run') && <p className="economy-inline-working" role="status">保存を準備中…</p>}</div><h2>筋トレ</h2><p>グーカード1枚ごとに育てられます。1回でダメージ +1。</p><div className="economy-grid">{data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').map((owned) => { const card = cardById(owned.cardId)!; const queued = pendingTrain.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * (owned.trainLevel + queued); return <CardTile key={owned.ownedId} card={card} owned={{ ...owned, trainLevel: owned.trainLevel + queued }} className={queued ? 'is-training' : ''}><p>次の1回：{cost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < cost} onClick={() => queueTraining('muscle', owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-inline-working" role="status">{queued}回分を保存準備中…</p>}</CardTile>; })}</div>{pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
+    return <>{feedbackOverlay}<section className="economy-page"><p className="eyebrow">TRAINING</p><h1>トレーニング</h1><p className="economy-balance">所持 {(data.profile.gPoint - projected.cost).toLocaleString()} G · 最大ライフ {data.profile.maxLife + (projected.runs - data.profile.runCount) * data.economy.lifePerRun}</p>
+      <div className={`economy-run panel ${pendingTrain.some((item) => item.kind === 'run') ? 'is-training' : ''}`}><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>1回で最大ライフ +{data.economy.lifePerRun}。次の1回：{runCost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < runCost} onClick={() => queueTraining('run')}>走り込む</button>{pendingTrain.some((item) => item.kind === 'run') && <p className="economy-inline-working" role="status">保存を準備中…</p>}</div></div>
+      <div className="economy-training-heading"><img className="economy-training-art" src={`${import.meta.env.BASE_URL}images/ui/muscle.webp`} alt="" /><div><h2>筋トレ</h2><p>グーカード1枚ごとに育てられます。1回でダメージ +1。</p></div></div>
+      <div className="economy-grid">{data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').map((owned) => { const card = cardById(owned.cardId)!; const queued = pendingTrain.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * (owned.trainLevel + queued); return <CardTile key={owned.ownedId} card={card} owned={{ ...owned, trainLevel: owned.trainLevel + queued }} className={queued ? 'is-training' : ''}><p>次の1回：{cost}G</p><button type="button" className="button button--primary" disabled={busy || data.profile.gPoint - projected.cost < cost} onClick={() => queueTraining('muscle', owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-inline-working" role="status">{queued}回分を保存準備中…</p>}</CardTile>; })}</div>{pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }
 
   const toggle = (ownedId: string) => setSelected((current) => current.includes(ownedId) ? current.filter((id) => id !== ownedId) : current.length < 4 ? [...current, ownedId] : current);

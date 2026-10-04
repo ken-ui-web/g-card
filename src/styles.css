@@ -20,6 +20,9 @@ img{user-select:none;-webkit-user-drag:none}
 .brand span{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;transform:rotate(-8deg);background:#ffd34b;color:#11203d;box-shadow:0 5px 0 #9c6711;font:26px 'Dela Gothic One',sans-serif}
 .text-link{border:0;background:none;color:#d3e0f8;font-weight:800;font-size:14px;padding:10px 0}
 .text-link:hover{color:#ffdc6f}
+.sound-toggle{flex:none;border:1px solid #ffdc6f7d;border-radius:999px;background:#ffdc6f1a;color:#ffe594;padding:7px 11px;font-size:12px;font-weight:900;white-space:nowrap}
+.sound-toggle[aria-pressed='false']{border-color:#b9c9e265;background:#ffffff0d;color:#b9c9e2}
+.online-header-actions{display:flex;align-items:center;gap:14px}
 .eyebrow{margin:0 0 12px;color:#ffd05a;letter-spacing:.14em;font-size:12px;font-weight:800}
 h1,h2,h3,p{overflow-wrap:anywhere}
 .panel{background:linear-gradient(145deg,#19254d,#131d3e);border:1px solid #ffffff26;border-radius:24px;box-shadow:0 22px 48px #03081783}
@@ -83,6 +86,13 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .economy-sell{display:block;margin:10px auto 0;border:0;background:transparent;color:#c9d7ee;text-decoration:underline}
 .economy-pack,.economy-run,.economy-opened{padding:22px}
 .economy-pack__image{display:block;width:min(100%,170px);height:auto;margin:0 auto 16px;filter:drop-shadow(0 12px 13px #020717b8)}
+.economy-run{display:flex;align-items:center;gap:20px;overflow:hidden}
+.economy-run>div{position:relative;flex:1}
+.economy-training-art{display:block;width:clamp(105px,19vw,170px);height:150px;object-fit:contain;filter:drop-shadow(0 7px 16px #0008)}
+.economy-training-art--run{width:clamp(120px,25vw,230px);height:165px}
+.economy-training-heading{display:flex;align-items:center;gap:15px;margin-top:16px}
+.economy-training-heading h2{margin:0 0 7px}
+.economy-training-heading p{margin:0;color:#d7e2f5}
 .economy-pack h3,.economy-run h2{margin:0 0 10px}.economy-pack p{color:#d8e4f5}
 .economy-message{padding:15px 18px;border:1px solid #ffdb6b;border-radius:12px;background:#4e3d20;color:#fff!important;font-weight:800}
 .economy-opened-card{opacity:0;transform:perspective(700px) rotateY(85deg) scale(.85);animation:economy-card-reveal .65s ease-out forwards}
@@ -107,6 +117,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .economy-feedback__spinner{animation:economy-feedback-spin 1.2s linear infinite}
 .economy-feedback__spinner .portal-icon,.economy-feedback__symbol .portal-icon{width:52px;height:52px}
 .economy-feedback__card{display:block;width:min(43vw,165px);max-height:220px;object-fit:contain;margin:2px auto 14px;border-radius:11px;filter:drop-shadow(0 10px 14px #0008);animation:economy-card-reveal .65s ease-out both}
+.economy-feedback__pack{display:block;width:min(42vw,180px);height:230px;object-fit:contain;margin:0 auto 10px;filter:drop-shadow(0 0 18px #ffdf7999);animation:economy-pack-float 1.2s ease-in-out infinite alternate}
+@keyframes economy-pack-float{from{transform:translateY(5px) rotate(-4deg) scale(.96)}to{transform:translateY(-7px) rotate(4deg) scale(1.05)}}
 .economy-feedback p.economy-feedback__balance{display:table;margin:14px auto 0;padding:8px 15px;border-radius:11px;background:#ffd45d;color:#17223c;font-size:18px;font-weight:900}
 .economy-feedback .economy-feedback__mission{color:#ffdb7e!important;font-weight:800}
 @keyframes economy-feedback-in{from{opacity:0;transform:translateY(22px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -198,7 +210,9 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .level-picker,.name-grid{margin-top:22px}
 .level-picker>strong{display:block;margin-bottom:10px}
 .level-picker>div{display:flex;gap:10px;flex-wrap:wrap}
-.level-picker button{min-width:118px;min-height:62px;border:1px solid #ffffff37;border-radius:12px;background:#0e1936;color:#fff;font-weight:800}
+.level-picker button{min-width:118px;min-height:62px;border:1px solid #ffffff37;border-radius:12px;background:#0e1936;color:#fff;font-weight:800;padding:8px 12px}
+.level-picker button img{display:block;width:110px;height:110px;object-fit:contain;margin:0 auto 2px;filter:drop-shadow(0 7px 8px #0008);transition:transform .2s ease}
+.level-picker button:hover img,.level-picker button[aria-pressed='true'] img{transform:translateY(-4px) scale(1.05)}
 .level-picker button[aria-pressed='true']{border:2px solid #ffd252;background:#3c3b46;color:#ffdc75}
 .level-picker button small{display:block;font-size:11px;color:#b8c8e0;font-weight:500}
 .name-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
@@ -254,6 +268,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .final-open p:not(.eyebrow),.thinking p{color:#c3d2e9;line-height:1.8}
 .thinking{text-align:center;padding:50px 15px;min-height:245px}
 .thinking__gear{display:block;font-size:42px;color:#ffda61;animation:spin 2s linear infinite}
+.thinking__cpu{display:block;width:min(38vw,170px);height:170px;object-fit:contain;margin:0 auto 5px;filter:drop-shadow(0 10px 16px #0008);animation:cpu-think 1s ease-in-out infinite alternate}
+@keyframes cpu-think{to{transform:translateY(-9px) rotate(3deg)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .handoff{padding:65px 25px;text-align:center;margin-top:20px}
 .handoff__icon{display:block;font-size:51px;color:#ffdd65;margin-bottom:10px}
@@ -329,4 +345,5 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 
 @media(max-width:900px){.hero{grid-template-columns:1fr;min-height:0;padding:38px 0 22px}.hero__cards{height:250px}.hero__cards .card{width:130px;top:0}.deck-grid,.select-grid,.back-row,.target-grid{gap:9px}.deck-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.selection-board{padding:22px}.select-card{padding:8px}.select-card>span{min-height:54px}}
 @media(max-width:650px){.app-header,.hero,.mode-panel,.deck-page,.battle-page,.result-page,.tuning-page,.app-footer{width:min(100% - 28px,480px)}.app-header{height:72px}.brand{font-size:16px}.brand span{width:39px;height:39px;font-size:21px}.app-header nav{gap:12px}.text-link{font-size:11px}.hero{padding:35px 0 14px}.hero h1{font-size:30px}.hero__copy>p:last-child{font-size:14px}.hero__cards{height:207px}.hero__cards .card{width:100px}.mode-panel,.deck-page,.tuning-page,.result-page{padding:20px 16px}.mode-grid,.name-grid,.life-grid,.result-life,.tuning-grid{grid-template-columns:1fr}.mode-option{min-height:105px;padding:16px}.deck-grid,.select-grid,.back-row,.target-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.deck-card .card{max-width:145px}.selection-board{padding:18px 12px}.back-card .card{max-width:100px}.select-card .card{max-width:140px}.select-card>span{min-height:0}.final-open{gap:15px;padding:8px;align-items:flex-start}.final-open .card{max-width:125px}.final-open h2{font-size:20px}.final-open p:not(.eyebrow){font-size:13px}.round-intro{min-height:350px}.reveal-panel,.summary-panel,.target-panel{padding:22px 12px}.flip-card{width:min(155px,39vw)}.reveal-entry__type{font-size:13px;padding:6px 9px}.summary-cards .card{width:min(150px,38vw)!important}.battle-heading h1{font-size:22px}.history-list li{grid-template-columns:37px 1fr auto;gap:8px}.history-list small{grid-column:2/-1;text-align:left}.button-row .button{flex:1}.app-footer{padding:18px 0 26px}}
+@media(max-width:650px){.level-picker button{min-width:calc(33.333% - 7px);padding:6px}.level-picker button img{width:min(21vw,82px);height:88px}.economy-run{gap:8px;padding:15px}.economy-training-art--run{width:32vw;height:125px}.economy-training-heading .economy-training-art{width:105px;height:110px}.sound-toggle{font-size:10px;padding:6px 8px}.portal-header nav{gap:5px 10px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

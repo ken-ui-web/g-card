@@ -160,8 +160,16 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 
 > One isolated upright 2:3 sealed standard booster pack with transparent background. Cohesive metallic foil wrapper, crimped seams, deep navy enamel, antique brass and bright gold angled trim, subtle gears and circuits, small electric-blue and emerald accents. A clean blank circular gear-shaped medallion centered on the wrapper. Bold manga/cel-shaded rendering, readable at small size, straight-on view. No writing, numbers, card faces, characters, logos, watermark, floor or external shadow.
 
-## 段階10・CPU Lv1キャラクターサンプル（2026-10-04、確認待ち）
+## 段階10・CPU Lv1キャラクター（2026-10-04、採用）
 
-小さく丸い見習いロボットを1枚生成した。元画像は `design-source/stage10/cpu-lv1-sample.png`、確認用の透過WebPは同名の `.webp`（768×768）。紺色の本体、金色の関節、青い目、緑の小さな発光部で既存画面の配色に合わせた。アプリにはまだ適用していない。
+小さく丸い見習いロボットを1枚生成し、オーナーが採用した。元画像は `design-source/stage10/cpu-lv1-sample.png`、確認用の透過WebPは同名の `.webp`（768×768）。正式画像は `public/images/cpu/lv1.webp`。紺色の本体、金色の関節、青い目、緑の小さな発光部で既存画面の配色に合わせた。
 
 > One original full-body small round cute apprentice robot, with short arms and legs, friendly expression and novice stance. Deep-navy enamel body, antique-brass and gold trim, bright blue eyes and tiny emerald accents, subtle gear joints. Bold clean anime cel-shaded outlines, readable at 120 px, top-left light. Centered square composition with transparent background. No scenery, floor, cards, weapons, text, numbers, logos, watermark or extra limbs.
+
+## 段階10・CPU Lv2／Lv3・筋トレ・走り込み（2026-10-04）
+
+オーナーから6項目を一括で任されたため、確認待ちを挟まず生成し、アプリへ組み込んだ。全画像は透過768×768のWebP。CPU Lv2は紺色の中型テクノロボット、Lv3は大型の金色マスターロボット。対戦メニューのレベル選択と「考え中」に表示する。元画像は `design-source/stage10/cpu-lv2-source.png` と `cpu-lv3-source.png`、正式画像は `public/images/cpu/lv2.webp` と `lv3.webp`。
+
+筋トレと走り込みは、紺色と金色のウェアを着た同じ画風の男子生徒を生成した。手足と靴の形を目視確認した。元画像は `design-source/stage10/muscle-source.png` と `running-source.png`、正式画像は `public/images/ui/muscle.webp` と `run.webp`。トレーニング画面の見出しと走り込みパネルに表示する。
+
+Web Audio APIでカード選択・ラウンド開始・裏返し・勝ち・ダメージ・回復・パック開封・レア排出・ポイント獲得の簡易効果音を実装した。効果音は初期オンで、画面上の切替を端末に保存する。パック開封は通信中にパックが動き、完了ポップアップを閉じてから獲得カードを順に表示する。

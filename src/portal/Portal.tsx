@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { SoundToggle } from '../components/SoundToggle';
 import { callApi, googleClientId, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState } from './api';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { EconomyPages } from './EconomyPages';
@@ -117,7 +118,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   const illustratedStyle = backgroundName ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${backgroundName}.webp")` } as CSSProperties : undefined;
 
   return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
-    <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">試作対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
+    <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">試作対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}<SoundToggle />{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
     {!portalConfigured ? <section className="portal-panel panel"><p className="eyebrow">STAGE 5</p><h1>ログインの接続準備中</h1><p>学校のGoogleログインとサーバーを設定すると、ここからホーム画面を使えるようになります。</p><a className="button button--primary" href="#/battle">試作対戦を開く</a></section>
       : !session ? <section className="portal-panel panel"><p className="eyebrow">WELCOME TO G CARD</p><h1>学校アカウントでログイン</h1><p>登録済みの学校Googleアカウントでログインしてください。パスワードはGカードには送られません。</p><GoogleButton onCredential={onCredential} />{busy && <p role="status">確認中…</p>}</section>
         : needsNickname ? <section className="portal-panel panel"><p className="eyebrow">FIRST STEP</p><h1>ニックネームを決めよう</h1><p>対戦やランキングで表示する名前です。8文字以内で入力してください。</p><form onSubmit={submitNickname} className="portal-form"><label>ニックネーム<input value={nickname} maxLength={8} onChange={(event) => setNickname(event.target.value)} required /></label><button className="button button--primary" disabled={busy || !nickname.trim()}>決定する</button></form></section>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
 import { Card } from '../components/Card';
+import { SoundToggle } from '../components/SoundToggle';
+import { playSfx } from '../audio/sfx';
 import { availableCards, defaultDeckIds, getCard, typeLabels } from '../data/cards';
 import { callApi, savedSession, type BootstrapData } from '../portal/api';
 import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
@@ -19,6 +21,11 @@ function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; s
     const timer = window.setTimeout(() => setStage(stage === 'title' ? 'suspense' : 'backs'), delay);
     return () => window.clearTimeout(timer);
   }, [stage]);
+  useEffect(() => {
+    if (stage === 'title') playSfx('round');
+    if (stage === 'backs') playSfx('flip');
+    if (stage === 'fronts' && view.winner !== null) playSfx(view.events.some((event) => event.includes('回復')) ? 'heal' : view.winner === side ? 'win' : 'damage');
+  }, [stage, view.events, view.winner, side]);
   const cards = view.reveal!;
   return <div className="online-presentation panel">
     {stage === 'title' ? <><p className="eyebrow">ROUND START</p><h2>ラウンド {view.round}</h2><p>お互いのカードが決まりました</p></> : stage === 'suspense' ? <><div className="round-intro__versus">VS</div><p>勝負の行方は…</p></> : <><p className="eyebrow">ROUND {view.round} REVEAL</p><div className="online-reveal-grid">{cards.map((pick, index) => <div key={index}><span>{names[index]}</span><Card card={getCard(pick.card.cardId)} side={stage === 'backs' ? 'back' : 'front'} backType={view.types[index as 0 | 1][pick.index]} width={170} /></div>)}</div><h2>{view.winner === null ? 'あいこ' : view.winner === side ? 'このラウンドは勝ち' : 'このラウンドは負け'}</h2>{stage === 'backs' ? <button className="button button--primary" onClick={() => setStage('fronts')}>カードをめくる</button> : <><p>{view.events.join(' · ')}</p><button className="button button--primary" onClick={onClose}>{view.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></>}</>}
@@ -51,6 +58,7 @@ export function OnlinePage() {
   const currentRoom = useRef(roomId);
   const phaseClock = useRef<PhaseClock>({ key: '', since: Date.now(), pausedAt: null });
   const rewardStatus = useRef('');
+  const pointSoundPlayed = useRef(false);
   const viewPhase = useRef('');
   const forfeitAttempt = useRef({ pending: false, retryAt: 0 });
   rewardStatus.current = reward?.status || '';
@@ -65,7 +73,7 @@ export function OnlinePage() {
 
   const enterRoom = (id: string) => {
     if (currentRoom.current === id) return;
-    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); forfeitAttempt.current = { pending: false, retryAt: 0 };
+    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); pointSoundPlayed.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
     window.history.replaceState(null, '', `#/online?room=${encodeURIComponent(id)}`);
   };
 
@@ -193,6 +201,13 @@ export function OnlinePage() {
   }, [session, roomId, reward?.status, room?.meta.teacherTest]);
 
   useEffect(() => {
+    if (reward?.status === 'complete' && reward.awarded > 0 && !pointSoundPlayed.current) {
+      pointSoundPlayed.current = true;
+      playSfx('point');
+    }
+  }, [reward]);
+
+  useEffect(() => {
     if (!db || !room || !uid || (view?.phase !== 'forfeit' && (!reward || !['complete', 'invalid'].includes(reward.status)))) return;
     if (!room.receipts?.[uid]) takeAction('receipt', () => set(ref(db, `${roomPath(roomId)}/receipts/${uid}`), true));
     if (room.meta.hostUid === uid && room.meta.guestUid && room.receipts?.[uid] && room.receipts?.[room.meta.guestUid]) {
@@ -247,6 +262,7 @@ export function OnlinePage() {
 
   const selectPick = async (index: number) => {
     if (!db || !room || !view || !entries || !localConnected || busy) return;
+    playSfx('select');
     setBusy(true); setError('');
     try {
       const nextSalt = randomSalt();
@@ -258,6 +274,7 @@ export function OnlinePage() {
 
   const chooseTarget = async (index: number) => {
     if (!db || !view || !localConnected || busy) return;
+    playSfx('select');
     setBusy(true);
     try { await set(ref(db, `${roomPath(roomId)}/rounds/${view.round}/choices/${uid}`), index); }
     catch (failure) { setError((failure as Error).message); }
@@ -290,8 +307,8 @@ export function OnlinePage() {
   };
 
   const revealReady = true;
-  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1', room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2']} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
-  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong><a href="#/ranking" className="text-link">ランキング</a></header>
+  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong><SoundToggle /></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1', room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2']} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
+  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong><div className="online-header-actions"><SoundToggle /><a href="#/ranking" className="text-link">ランキング</a></div></header>
     <section className="panel online-panel"><p className="eyebrow">ONLINE BATTLE</p><h1>友達とカードで対戦</h1>
       {teacherTestMode && !roomId && <p role="status">管理者テストモードです。同じ学校アカウントを別端末でも開いて対戦できます。Gポイントは増減しません。</p>}
       {account?.profile.role === 'admin' && account.online?.enabled && !roomId && <p role="alert">オンライン対戦を生徒に公開中です。同じ学校アカウントで試す場合は、管理者設定の「オンライン対戦を受付」を0にして再読み込みしてください。</p>}
