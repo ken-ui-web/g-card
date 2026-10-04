@@ -10,6 +10,7 @@ import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, t
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
 import { callApi, isGuest, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
+import { isBootstrapFresh, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './portal/bootstrapCache';
 import './styles.css';
 
 const OnlinePage = lazy(() => import('./online/OnlinePage').then((module) => ({ default: module.OnlinePage })));
@@ -153,8 +154,7 @@ function App() {
     const session = savedSession();
     if (hash !== '#/battle' || !session || (!portalConfigured && !isGuest(session))) return;
     let cancelled = false;
-    callApi<BootstrapData>('bootstrap', session).then((data) => {
-      if (cancelled) return;
+    const applyAccount = (data: BootstrapData) => {
       setAccount(data);
       const samplePool = data.battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
       if (samplePool && samplePool.length >= 4) setSelectedDeckIds((selected) => {
@@ -164,7 +164,15 @@ function App() {
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
       setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
-    }).catch(() => { if (!cancelled) setAccount(null); });
+    };
+    const cached = !isGuest(session) ? readBootstrapCache(session) : null;
+    if (cached) applyAccount(cached.data);
+    else setAccount(null);
+    if (!isBootstrapFresh(cached)) requestBootstrap(session).then((data) => {
+      if (cancelled) return;
+      if (isGuest(session) || writeBootstrapCache(session, data, Date.now(), cached?.revision ?? 0)) applyAccount(data);
+      else { const latest = readBootstrapCache(session); if (latest) applyAccount(latest.data); }
+    }).catch(() => { if (!cancelled && !cached) setAccount(null); });
     return () => { cancelled = true; };
   }, [hash]);
   useEffect(() => {
@@ -214,7 +222,11 @@ function App() {
       const session = savedSession();
       if (!session) { setDeckError('学校アカウントでログインしてください'); return; }
       setStarting(true); setDeckError('');
-      try { await callApi<EconomyState>('saveDeck', session, { ownedIds: ownedSelection }); }
+      try {
+        const saved = await callApi<EconomyState>('saveDeck', session, { ownedIds: ownedSelection });
+        setAccount((current) => current ? mergeEconomy(current, saved) : current);
+        if (!isGuest(session)) patchBootstrapCache(session, (current) => mergeEconomy(current, saved));
+      }
       catch (error) { setDeckError((error as Error).message); setStarting(false); return; }
       setStarting(false);
     }
@@ -270,6 +282,8 @@ function App() {
         result: battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss',
       });
       setReward(result);
+      setAccount((current) => current ? mergeEconomy(current, result) : current);
+      if (!isGuest(session)) patchBootstrapCache(session, (current) => mergeEconomy(current, result));
       if ((result.awarded ?? 0) > 0) playSfx('point');
     } catch (failure) {
       reportingId.current = '';

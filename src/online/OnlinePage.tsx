@@ -6,6 +6,7 @@ import { SoundToggle } from '../components/SoundToggle';
 import { playSfx } from '../audio/sfx';
 import { availableCards, defaultDeckIds, getCard, ssrCount, type CardType, typeLabels } from '../data/cards';
 import { callApi, isGuest, savedSession, type BootstrapData } from '../portal/api';
+import { isBootstrapFresh, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from '../portal/bootstrapCache';
 import { compareCards } from '../data/cardOrder';
 import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
 import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
@@ -144,6 +145,7 @@ export function OnlinePage() {
   const phaseClock = useRef<PhaseClock>({ key: '', since: Date.now(), pausedAt: null });
   const rewardStatus = useRef('');
   const pointSoundPlayed = useRef(false);
+  const rewardCacheApplied = useRef(false);
   const viewPhase = useRef('');
   const forfeitAttempt = useRef({ pending: false, retryAt: 0 });
   rewardStatus.current = reward?.status || '';
@@ -158,14 +160,19 @@ export function OnlinePage() {
 
   const enterRoom = (id: string) => {
     if (currentRoom.current === id) return;
-    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); pointSoundPlayed.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
+    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); pointSoundPlayed.current = false; rewardCacheApplied.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
     window.history.replaceState(null, '', `#/online?room=${encodeURIComponent(id)}`);
   };
 
   useEffect(() => {
     if (!session || !firebaseConfigured) return;
     let active = true;
-    Promise.all([callApi<BootstrapData>('bootstrap', session), connectFirebase()]).then(([profile, connection]) => {
+    const cached = readBootstrapCache(session);
+    const profileRequest = isBootstrapFresh(cached) ? Promise.resolve(cached!.data) : requestBootstrap(session).then((profile) => {
+      writeBootstrapCache(session, profile, Date.now(), cached?.revision ?? 0);
+      return readBootstrapCache(session)?.data ?? profile;
+    });
+    Promise.all([profileRequest, connectFirebase()]).then(([profile, connection]) => {
       if (!active) return;
       setAccount(profile); setDb(connection.db); setUid(connection.uid);
       if (!roomId) return;
@@ -303,6 +310,12 @@ export function OnlinePage() {
       playSfx('point');
     }
   }, [reward]);
+
+  useEffect(() => {
+    if (!session || !reward || rewardCacheApplied.current || !['complete', 'invalid'].includes(reward.status) || room?.meta.teacherTest) return;
+    rewardCacheApplied.current = true;
+    patchBootstrapCache(session, (current) => ({ ...current, profile: { ...current.profile, gPoint: reward.gPoint }, daily: { ...current.daily, onlineRewards: reward.onlineRewards } }), true);
+  }, [session, reward, room?.meta.teacherTest]);
 
   useEffect(() => {
     if (!db || !room || !uid || (view?.phase !== 'forfeit' && (!reward || !['complete', 'invalid'].includes(reward.status)))) return;
