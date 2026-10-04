@@ -41,7 +41,7 @@ export function OnlinePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reward, setReward] = useState<Reward | null>(null);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(() => Date.now());
   const [localConnected, setLocalConnected] = useState(false);
   const [presentation, setPresentation] = useState<OnlineView | null>(null);
   const [seenRound, setSeenRound] = useState(0);
