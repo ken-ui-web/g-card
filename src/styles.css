@@ -32,7 +32,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .button:disabled{cursor:wait;opacity:.55;box-shadow:none}
 
 .portal-shell{padding-bottom:24px}
-.portal-shell--home{background-image:linear-gradient(180deg,#071127b8 0%,#07142ca8 48%,#071127e0 100%),var(--home-bg);background-position:center;background-size:cover;background-repeat:no-repeat}
+.portal-shell--illustrated{background-image:linear-gradient(180deg,#071127b8 0%,#07142ca8 48%,#071127e0 100%),var(--portal-bg);background-position:center;background-size:cover;background-repeat:no-repeat}
 .portal-brand img{display:block;width:155px;max-height:64px;object-fit:contain;object-position:left center}
 .portal-header nav{flex-wrap:wrap;justify-content:flex-end;gap:10px 22px}
 .portal-panel,.portal-overview,.portal-dashboard,.portal-menu,.portal-error{position:relative;width:min(1080px,calc(100% - 48px));margin-inline:auto}

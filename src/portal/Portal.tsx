@@ -112,10 +112,10 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
 
   const logout = () => { saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
 
-  const showHomeBackground = page === 'home' && Boolean(session && bootstrap && !needsNickname);
-  const homeBackgroundStyle = showHomeBackground ? { '--home-bg': `url("${import.meta.env.BASE_URL}images/bg/home.webp")` } as CSSProperties : undefined;
+  const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop') ? page : null;
+  const illustratedStyle = illustratedPage ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${illustratedPage}.webp")` } as CSSProperties : undefined;
 
-  return <main className={`app-shell portal-shell${showHomeBackground ? ' portal-shell--home' : ''}`} style={homeBackgroundStyle}>
+  return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
     <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">試作対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
     {!portalConfigured ? <section className="portal-panel panel"><p className="eyebrow">STAGE 5</p><h1>ログインの接続準備中</h1><p>学校のGoogleログインとサーバーを設定すると、ここからホーム画面を使えるようになります。</p><a className="button button--primary" href="#/battle">試作対戦を開く</a></section>
       : !session ? <section className="portal-panel panel"><p className="eyebrow">WELCOME TO G CARD</p><h1>学校アカウントでログイン</h1><p>登録済みの学校Googleアカウントでログインしてください。パスワードはGカードには送られません。</p><GoogleButton onCredential={onCredential} />{busy && <p role="status">確認中…</p>}</section>
