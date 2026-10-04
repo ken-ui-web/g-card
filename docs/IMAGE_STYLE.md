@@ -141,3 +141,9 @@ imagegenの組み込みツールで透過PNGを1枚生成。歯車形のG、金�
 金色・紺色のカードショップを1枚生成し、オーナーが採用した。元画像は `design-source/stage10/shop-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。正式画像は `public/images/bg/shop.webp`。黄・青・緑のパックは棚とショーケースに並べ、中央手前を画面の表示用に落ち着いた色とした。ショップ画面では濃紺の半透明グラデーションを重ねる。
 
 > Original landscape 4:3 shop-screen environment: a welcoming futuristic school card shop, antique-brass and deep-navy counter, glass cases and shelves of softly glowing golden-yellow, electric-blue and emerald-green sealed booster packs. Calm dark-navy low-detail central and lower-middle space for app text, buttons and cards; brighter merchandise and gears on the upper and side edges. Bold clean anime cel-shaded outlines, polished enamel and brass, warm light. Crop-safe on landscape and portrait iPad. No characters, readable packaging, card fronts, UI, letters, numbers, logos or watermark.
+
+## 段階10・トレーニング背景サンプル（2026-10-04、確認待ち）
+
+学校の体育館と屋外のトラックを一体の場面として1枚生成した。元画像は `design-source/stage10/training-background-sample.png`、確認用WebPは同名の `.webp`（2048×1536）。筋トレ器具を左右に、走る場所を奥に置き、中央手前は画面表示のため紺色の低詳細領域とした。アプリにはまだ適用していない。
+
+> Original landscape 4:3 training-screen environment: a welcoming school gym with age-appropriate dumbbells, ropes and simple exercise stations along the sides, opening toward a visible school running track in warm daylight. Lightly futuristic engineering details in antique brass and deep navy, subtle gears, bold clean anime cel-shaded outlines. Keep center and lower middle calm and moderately dark for overlaid UI. Crop-safe on landscape and portrait iPad. No people, cards, UI, words, letters, numbers, logos, injuries or watermark.
