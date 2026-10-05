@@ -244,6 +244,7 @@ function gcDispatch_(request) {
     case 'adminGetEconomy': return gcAdminGetEconomy_(request.session);
     case 'adminSaveDeck': return gcAdminSaveDeck_(request.session, request.payload || {});
     case 'getBattleConfig': return gcBattleConfig_(request.session);
+    case 'getPublicBattleConfig': return gcPublicBattleConfig_();
     case 'listTests': return gcListTests_(request.session);
     case 'getTest': return gcGetTest_(request.session, request.payload || {});
     case 'submitTest': return gcSubmitTest_(request.session, request.payload || {}, request.requestId);
@@ -514,6 +515,11 @@ function gcMissionState_(email, today) {
 function gcBattleConfig_(token) {
   gcSession_(token, false);
   return gcBattleConfigRows_();
+}
+
+function gcPublicBattleConfig_() {
+  const deckIds = ['sample', 'cpu-1', 'cpu-2', 'cpu-3'];
+  return gcBattleConfigRows_().filter(function (deck) { return deckIds.indexOf(deck.deckId) !== -1; });
 }
 
 function gcBattleConfigRows_() {

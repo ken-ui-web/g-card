@@ -66,10 +66,7 @@ function bootstrap(state: GuestState): BootstrapData {
     profile: { nickname: state.nickname, role: 'student', gPoint: state.gPoint, maxLife: 100 + state.runCount * 5, runCount: state.runCount, pityCounter: state.pityCounter },
     needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, streakBonus: 100 }, ownedCards: state.ownedCards,
     cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: item.shopPrice, inPack: item.inPack, active: true, sortOrder: order.indexOf(item.type) * 100 + index })),
-    lastDeck: state.lastDeck, packs, battleConfig: [
-      { deckId: 'sample', name: 'サンプルカードセット', cardIds: allIds, maxLife: 100, rockTrainLevel: 0 },
-      ...[1, 2, 3].map((level) => ({ deckId: `cpu-${level}`, name: `CPU Lv${level}`, cardIds: allIds, maxLife: level === 1 ? 100 : level === 2 ? 110 : 130, rockTrainLevel: level === 1 ? 0 : level === 2 ? 5 : 10 })),
-    ], missions: state.missions, daily: state.daily,
+    lastDeck: state.lastDeck, packs, battleConfig: [], missions: state.missions, daily: state.daily,
     economy: { enabled: true, muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5, cpuRewardDailyCap: 3, packDailyLimit: 10, sellPrices },
     learning: { enabled: false }, unreadTests: 0, pendingReflections: 0, online: { enabled: false, rankingEnabled: false, rewardDailyCap: 0 },
   };

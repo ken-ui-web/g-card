@@ -3,7 +3,7 @@ import { loadBattleConfig } from './battleConfig';
 import { callApi } from './api';
 import { patchBootstrapCache } from './bootstrapCache';
 
-vi.mock('./api', () => ({ callApi: vi.fn() }));
+vi.mock('./api', () => ({ callApi: vi.fn(), isGuest: (session: string) => session === 'guest:local' }));
 vi.mock('./bootstrapCache', () => ({ patchBootstrapCache: vi.fn() }));
 
 const oldCards = Array.from({ length: 40 }, (_, index) => `old-${index}`);
@@ -27,5 +27,13 @@ describe('対戦設定の取得', () => {
   it('候補設定が欠けた応答を対戦に使わない', async () => {
     vi.mocked(callApi).mockResolvedValue([]);
     await expect(loadBattleConfig('school-session')).rejects.toThrow('対戦設定');
+  });
+
+  it('ゲストも管理者が保存した公開対戦設定を取得する', async () => {
+    vi.mocked(callApi).mockResolvedValue(fresh);
+    const result = await loadBattleConfig('guest:local');
+    expect(callApi).toHaveBeenCalledWith('getPublicBattleConfig', null);
+    expect(result.find((deck) => deck.deckId === 'sample')?.cardIds).toHaveLength(4);
+    expect(patchBootstrapCache).not.toHaveBeenCalled();
   });
 });

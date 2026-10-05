@@ -160,13 +160,6 @@ function App() {
     let cancelled = false;
     const applyAccount = (data: BootstrapData) => {
       setAccount(data);
-      if (isGuest(session)) {
-        const samplePool = data.battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
-        if (samplePool && samplePool.length >= 4) setSelectedDeckIds((selected) => {
-          const valid = selected.filter((id) => samplePool.includes(id));
-          return valid.length === 4 ? valid : samplePool.slice(0, 4);
-        });
-      }
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
       setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
@@ -179,19 +172,17 @@ function App() {
       if (isGuest(session) || writeBootstrapCache(session, data, Date.now(), cached?.revision ?? 0)) applyAccount(data);
       else { const latest = readBootstrapCache(session); if (latest) applyAccount(latest.data); }
     }).catch(() => { if (!cancelled && !cached) setAccount(null); });
-    if (!isGuest(session)) {
-      setLiveBattleConfig(null);
-      setBattleConfigError('');
-      void loadBattleConfig(session).then((decks) => {
-        if (cancelled) return;
-        setLiveBattleConfig(decks);
-        const samplePool = decks.find((deck) => deck.deckId === 'sample')!.cardIds;
-        setSelectedDeckIds((selected) => {
-          const valid = selected.filter((id) => samplePool.includes(id));
-          return valid.length === 4 ? valid : samplePool.slice(0, 4);
-        });
-      }).catch((error: Error) => { if (!cancelled) setBattleConfigError(error.message); });
-    }
+    setLiveBattleConfig(null);
+    setBattleConfigError('');
+    void loadBattleConfig(session).then((decks) => {
+      if (cancelled) return;
+      setLiveBattleConfig(decks);
+      const samplePool = decks.find((deck) => deck.deckId === 'sample')!.cardIds;
+      setSelectedDeckIds((selected) => {
+        const valid = selected.filter((id) => samplePool.includes(id));
+        return valid.length === 4 ? valid : samplePool.slice(0, 4);
+      });
+    }).catch((error: Error) => { if (!cancelled) setBattleConfigError(error.message); });
     return () => { cancelled = true; };
   }, [hash, configReload]);
   useEffect(() => {
@@ -233,11 +224,13 @@ function App() {
   }, [ui, battle, firstPick, level, settings.animationSpeed]);
 
   const startGame = async () => {
-    const battleConfig = isGuest(savedSession()) ? account?.battleConfig : liveBattleConfig;
+    const battleConfig = liveBattleConfig;
     if (!account || !battleConfig) { setDeckError('対戦設定を確認中です。読み込みが終わってから始めてください。'); return; }
     const usingOwned = mode === 'cpu' && deckMode === 'owned';
     if (usingOwned ? ownedSelection.length !== 4 : selectedDeckIds.length !== 4) return;
     const selectedIds = usingOwned ? ownedSelection.map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '') : selectedDeckIds;
+    const samplePool = battleConfig.find((deck) => deck.deckId === 'sample')!.cardIds;
+    if (!usingOwned && !selectedIds.every((id) => samplePool.includes(id))) { setDeckError('サンプルカードの設定が変わりました。対戦メニューを開き直してください。'); return; }
     if (ssrCount(selectedIds) > 1) { setDeckError('SSRはデッキに1枚までです'); return; }
     if (usingOwned) {
       const session = savedSession();
@@ -400,7 +393,7 @@ function App() {
   const opponent = battle?.players[turn === 0 ? 1 : 0];
   const log = battle?.history.at(-1);
   const activeSession = savedSession();
-  const battleConfig = activeSession && isGuest(activeSession) ? account?.battleConfig : liveBattleConfig;
+  const battleConfig = liveBattleConfig;
   const samplePool = battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds ?? [];
   const sampleCards = availableCards.filter((card) => samplePool.includes(card.cardId));
   const reveal = battle?.reveal;
@@ -418,7 +411,7 @@ function App() {
       {screen === 'menu' && <>
         <section className="hero">
           <div className="hero__copy"><p className="eyebrow">G CARD BATTLE</p><h1>見せるのは手の形。<br /><em>勝負はカードの中身。</em></h1><p>サンプルカードか、自分が持っているカードから4枚を選んで対戦できます。</p></div>
-          <div className="hero__cards">{availableCards.filter((card) => selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
+          <div className="hero__cards">{availableCards.filter((card) => samplePool.includes(card.cardId) && selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
         </section>
         <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦はログイン中、勝利報酬を受け取れます。ゲストの記録はこの端末に保存されます。</p></div></div>
           <div className="mode-grid">
