@@ -6,7 +6,7 @@ import { LoadingState } from '../components/LoadingState';
 
 type Tab = 'dashboard' | 'students' | 'tests' | 'economy' | 'exports';
 type Dashboard = { date: string; students: number; logins: number; testAttempts: number; reflectionSubmissions: number; pointsIssued: number; pointsSpent: number };
-type Student = { email: string; role: string; className: string; number: string; name: string; nickname: string; gPoint: number; maxLife: number; ownedCount: number };
+type Student = { email: string; role: string; className: string; number: string; name: string; gPoint: number; maxLife: number; ownedCount: number };
 type Detail = { student: Student; ownedCards: { ownedId: string; cardId: string; name: string; trainLevel: number; source: string }[]; pointHistory: { delta: number; reason: string; note: string; balanceAfter: number; at: string }[] };
 type ExportPage = { headers: string[]; rows: unknown[][]; total: number; nextCursor: number | null };
 
@@ -54,13 +54,6 @@ function StudentPanel({ session }: { session: string }) {
     } catch (failure) { setMessage((failure as Error).message); }
     finally { setBusy(false); }
   };
-  const resetNickname = async () => {
-    if (!detail || busy || !window.confirm(`${detail.student.name || detail.student.email} のニックネームをリセットしますか？ 次回ログイン時に再設定されます。`)) return;
-    setBusy(true); setMessage('保存中…');
-    try { await callApi('adminResetNickname', session, { email: detail.student.email }); setMessage('ニックネームをリセットしました。'); await Promise.all([loadStudents(), loadDetail(detail.student.email)]); }
-    catch (failure) { setMessage((failure as Error).message); }
-    finally { setBusy(false); }
-  };
   const importRoster = async () => {
     if (!csv || busy) return;
     setBusy(true); setMessage('名簿を確認中…');
@@ -68,13 +61,13 @@ function StudentPanel({ session }: { session: string }) {
     catch (failure) { setMessage((failure as Error).message); }
     finally { setBusy(false); }
   };
-  const filtered = students?.filter((student) => `${student.className} ${student.number} ${student.name} ${student.nickname} ${student.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const filtered = students?.filter((student) => `${student.className} ${student.number} ${student.name} ${student.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   return <section className="panel admin-stage-panel"><p className="eyebrow">STUDENTS</p><h2>生徒管理</h2>
     <details className="admin-roster-import"><summary>名簿CSVを取り込む</summary><p>CSVは、学校の生徒名簿を表計算ソフトから保存したファイルです。1行目を <code>email,class,number,name</code> とし、2行目から学校メール・クラス・番号・氏名を1人ずつ記入します。</p><p>取り込んだ情報は学校側のスプレッドシートに保存されます。既存の生徒は名簿情報だけ更新し、Gポイントやカードは変わりません。GitHubには保存しません。</p><input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setCsv).catch(() => setMessage('CSVを読めませんでした')); }} /><button className="button button--ghost" disabled={!csv || busy} onClick={() => { void importRoster(); }}>取り込む</button></details>
     <label>氏名・クラス・メールで検索<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="例：3年1組" /></label>
     {!students && !message && <LoadingState text="生徒を読み込み中" />}
-    <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>ニックネーム</th><th>G</th><th>最大ライフ</th><th>カード</th><th></th></tr></thead><tbody>{filtered.map((student) => <tr key={student.email}><td>{student.className}</td><td>{student.number}</td><td>{student.name || (student.role === 'admin' ? '管理者' : '—')}</td><td>{student.nickname || '未設定'}</td><td>{student.gPoint}</td><td>{student.maxLife}</td><td>{student.ownedCount}</td><td><button className="button button--ghost" onClick={() => { setMessage(''); void loadDetail(student.email); }}>詳細</button></td></tr>)}</tbody></table></div>
-    {detail && <div className="admin-student-detail"><div className="admin-stage-heading"><h3>{detail.student.name || '管理者'} の詳細</h3><button className="button button--ghost" onClick={() => setDetail(null)}>閉じる</button></div><p>{detail.student.email} · 所持 {detail.student.gPoint}G · 最大ライフ {detail.student.maxLife}</p><div className="admin-adjust"><label>Gポイントの増減額<input type="number" min="-100000" max="100000" value={delta} placeholder="例：20 または -20" onChange={(event) => { setDelta(event.target.value); adjustId.current = null; }} /></label><label>調整理由（必須）<input maxLength={200} value={reason} placeholder="例：授業での特別報酬" onChange={(event) => { setReason(event.target.value); adjustId.current = null; }} /></label><button className="button button--primary" disabled={busy || !delta || reason.trim().length < 5} onClick={() => { void adjust(); }}>Gポイントを調整</button></div><button className="button button--ghost" disabled={busy || !detail.student.nickname} onClick={() => { void resetNickname(); }}>ニックネームをリセット</button><h4>所持カード</h4>{detail.ownedCards.length ? <div className="admin-card-list">{detail.ownedCards.map((card) => <span key={card.ownedId}>{card.name} · 筋トレ {card.trainLevel}</span>)}</div> : <p>所持カードはありません。</p>}<h4>最近のGポイント履歴</h4><div className="learning-table-wrap"><table><thead><tr><th>日時</th><th>内容</th><th>増減</th><th>残高</th></tr></thead><tbody>{detail.pointHistory.map((entry, index) => <tr key={`${entry.at}-${index}`}><td>{entry.at ? new Date(entry.at).toLocaleString('ja-JP') : '—'}</td><td>{reasonNames[entry.reason] || entry.reason}{entry.note && <small>：{entry.note}</small>}</td><td>{entry.delta > 0 ? '+' : ''}{entry.delta}</td><td>{entry.balanceAfter}</td></tr>)}</tbody></table></div></div>}
+    <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>G</th><th>最大ライフ</th><th>カード</th><th></th></tr></thead><tbody>{filtered.map((student) => <tr key={student.email}><td>{student.className}</td><td>{student.number}</td><td>{student.name || (student.role === 'admin' ? '管理者' : '未登録')}</td><td>{student.gPoint}</td><td>{student.maxLife}</td><td>{student.ownedCount}</td><td><button className="button button--ghost" onClick={() => { setMessage(''); void loadDetail(student.email); }}>詳細</button></td></tr>)}</tbody></table></div>
+    {detail && <div className="admin-student-detail"><div className="admin-stage-heading"><h3>{detail.student.name || '管理者'} の詳細</h3><button className="button button--ghost" onClick={() => setDetail(null)}>閉じる</button></div><p>{detail.student.email} · 所持 {detail.student.gPoint}G · 最大ライフ {detail.student.maxLife}</p><div className="admin-adjust"><label>Gポイントの増減額<input type="number" min="-100000" max="100000" value={delta} placeholder="例：20 または -20" onChange={(event) => { setDelta(event.target.value); adjustId.current = null; }} /></label><label>調整理由（必須）<input maxLength={200} value={reason} placeholder="例：授業での特別報酬" onChange={(event) => { setReason(event.target.value); adjustId.current = null; }} /></label><button className="button button--primary" disabled={busy || !delta || reason.trim().length < 5} onClick={() => { void adjust(); }}>Gポイントを調整</button></div><h4>所持カード</h4>{detail.ownedCards.length ? <div className="admin-card-list">{detail.ownedCards.map((card) => <span key={card.ownedId}>{card.name} · 筋トレ {card.trainLevel}</span>)}</div> : <p>所持カードはありません。</p>}<h4>最近のGポイント履歴</h4><div className="learning-table-wrap"><table><thead><tr><th>日時</th><th>内容</th><th>増減</th><th>残高</th></tr></thead><tbody>{detail.pointHistory.map((entry, index) => <tr key={`${entry.at}-${index}`}><td>{entry.at ? new Date(entry.at).toLocaleString('ja-JP') : '—'}</td><td>{reasonNames[entry.reason] || entry.reason}{entry.note && <small>：{entry.note}</small>}</td><td>{entry.delta > 0 ? '+' : ''}{entry.delta}</td><td>{entry.balanceAfter}</td></tr>)}</tbody></table></div></div>}
     {message && <p role="status" className="economy-message">{message}</p>}
   </section>;
 }

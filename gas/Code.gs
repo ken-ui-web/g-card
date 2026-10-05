@@ -225,7 +225,6 @@ function gcDispatch_(request) {
   switch (request.action) {
     case 'login': return gcLogin_(request.payload || {});
     case 'bootstrap': return gcBootstrap_(request.session);
-    case 'setNickname': return gcSetNickname_(request.session, request.payload || {});
     case 'adminImportRoster': return gcImportRoster_(request.session, request.payload || {});
     case 'buyCard': return gcBuyCard_(request.session, request.payload || {}, request.requestId);
     case 'sellCard': return gcSellCard_(request.session, request.payload || {}, request.requestId);
@@ -261,7 +260,6 @@ function gcDispatch_(request) {
     case 'adminListStudents': return gcAdminListStudents_(request.session);
     case 'adminStudentDetail': return gcAdminStudentDetail_(request.session, request.payload || {});
     case 'adminAdjustPoints': return gcAdminAdjustPoints_(request.session, request.payload || {}, request.requestId);
-    case 'adminResetNickname': return gcAdminResetNickname_(request.session, request.payload || {}, request.requestId);
     case 'adminExportData': return gcAdminExportData_(request.session, request.payload || {});
     default: gcError_('NOT_IMPLEMENTED', 'この機能はまだ利用できません');
   }
@@ -380,6 +378,7 @@ function gcSession_(token, requireAdmin) {
   if (requireAdmin && !admin) gcError_('FORBIDDEN', '管理者のみ利用できます');
   const record = gcFindUser_(email);
   if (!record) gcError_('LOGIN_REQUIRED', 'ログインしてください');
+  if (!admin && !String(record.values[4] || '').trim()) gcError_('NAME_REQUIRED', '名簿の氏名が未登録です。先生に伝えてください');
   return { email: email, admin: admin, record: record, settings: settings };
 }
 
@@ -411,8 +410,8 @@ function gcLogin_(payload) {
       return gcFindUser_(email);
     });
   }
-  const user = gcUserObject_(record);
-  return { session: gcSignSession_(email, admin ? 'admin' : 'student', settings), needsNickname: !user.nickname, role: admin ? 'admin' : 'student' };
+  if (!admin && !String(record.values[4] || '').trim()) gcError_('NAME_REQUIRED', '名簿の氏名が未登録です。先生に伝えてください');
+  return { session: gcSignSession_(email, admin ? 'admin' : 'student', settings), needsNickname: false, role: admin ? 'admin' : 'student' };
 }
 
 function gcPointLog_(email, delta, reason, refId, balance) {
@@ -426,33 +425,22 @@ function gcPointLogEntry_(email, reason, refId) {
   return rows.find(function (row) { return String(row[0]).toLowerCase() === email && row[2] === reason && gcDateKey_(row[3]) === refId; }) || null;
 }
 
-function gcSetNickname_(token, payload) {
-  const identity = gcSession_(token, false);
-  const nickname = String(payload.nickname || '').trim();
-  if (!nickname || Array.from(nickname).length > 8 || /^[=+\-@]/.test(nickname) || /[<>\r\n\t]/.test(nickname) || /ばか|しね|死ね/i.test(nickname)) gcError_('INVALID_NICKNAME', 'ニックネームは8文字以内で入力してください');
-  return gcWithLock_(function () {
-    const record = gcFindUser_(identity.email);
-    if (!record) gcError_('LOGIN_REQUIRED', 'ログインしてください');
-    const user = gcUserObject_(record);
-    if (user.nickname) gcError_('ALREADY_SET', 'ニックネームは先生に変更を相談してください');
-    user.nickname = nickname;
-    if (user.welcomeGiven !== true) {
-      const owned = gcSheet_('OwnedCards');
-      const now = new Date().toISOString();
-      const existing = gcOwned_(identity.email).map(function (card) { return card.cardId; });
-      const rows = GC_INITIAL_CARDS.filter(function (cardId) { return existing.indexOf(cardId) < 0; }).map(function (cardId) { return [Utilities.getUuid(), identity.email, cardId, 0, 'initial', now, '', 0]; });
-      if (rows.length) owned.getRange(owned.getLastRow() + 1, 1, rows.length, GC_HEADERS.OwnedCards.length).setValues(rows);
-      const bonus = Number(identity.settings.welcomeBonus) || 100;
-      const prior = gcPointLogEntry_(identity.email, 'welcome', 'initial');
-      if (!prior) gcPointLog_(identity.email, bonus, 'welcome', 'initial', Number(user.gPoint || 0) + bonus);
-      user.gPoint = prior ? Number(prior[4]) : Number(user.gPoint || 0) + bonus;
-      user.totalEarned = Number(user.totalEarned || 0) + bonus;
-      user.welcomeGiven = true;
-    }
-    user.updatedAt = new Date().toISOString();
-    gcWriteUser_(record, user);
-    return { needsNickname: false };
-  });
+function gcEnsureWelcome_(identity, user) {
+  if (user.welcomeGiven === true) return;
+  const owned = gcSheet_('OwnedCards');
+  const now = new Date().toISOString();
+  const existing = gcOwned_(identity.email).map(function (card) { return card.cardId; });
+  const rows = GC_INITIAL_CARDS.filter(function (cardId) { return existing.indexOf(cardId) < 0; }).map(function (cardId) { return [Utilities.getUuid(), identity.email, cardId, 0, 'initial', now, '', 0]; });
+  if (rows.length) owned.getRange(owned.getLastRow() + 1, 1, rows.length, GC_HEADERS.OwnedCards.length).setValues(rows);
+  const prior = gcPointLogEntry_(identity.email, 'welcome', 'initial');
+  if (!prior) {
+    const bonus = Number(identity.settings.welcomeBonus) || 100;
+    user.gPoint = Number(user.gPoint || 0) + bonus;
+    user.totalEarned = Number(user.totalEarned || 0) + bonus;
+    gcPointLog_(identity.email, bonus, 'welcome', 'initial', user.gPoint);
+  }
+  user.welcomeGiven = true;
+  user.updatedAt = now;
 }
 
 function gcToday_() { return Utilities.formatDate(new Date(), GC_TZ, 'yyyy-MM-dd'); }
@@ -545,13 +533,14 @@ function gcBootstrap_(token) {
   const today = gcToday_();
   let user = gcUserObject_(identity.record);
   let bonus = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
-  if (user.nickname && gcDateKey_(user.lastLoginDate) !== today) {
+  if (user.welcomeGiven !== true || gcDateKey_(user.lastLoginDate) !== today) {
     bonus = gcWithLock_(function () {
       const record = gcFindUser_(identity.email);
       const user = gcUserObject_(record);
       const outcome = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
+      gcEnsureWelcome_(identity, user);
       const previous = gcDateKey_(user.lastLoginDate);
-      if (user.nickname && previous !== today) {
+      if (previous !== today) {
         const consecutive = previous && gcDayNumber_(today) - gcDayNumber_(previous) === 1;
         const streak = consecutive ? Number(user.loginStreak || 0) + 1 : 1;
         const award = (Number(identity.settings.loginBonus) || 10) + (streak % 7 === 0 ? Number(identity.settings.loginStreakBonus) || 100 : 0);
@@ -564,20 +553,19 @@ function gcBootstrap_(token) {
         user.loginStreak = streak;
         user.lastLoginDate = today;
         user.updatedAt = new Date().toISOString();
-        gcWriteUser_(record, user);
         gcAwardMissions_(identity, user, { login: 1 });
-        gcWriteUser_(record, user);
         outcome.awarded = !prior;
         outcome.amount = prior ? 0 : award;
         outcome.streak = streak;
       }
+      gcWriteUser_(record, user);
       return outcome;
     });
     user = gcUserObject_(gcFindUser_(identity.email));
   }
   return {
-      profile: { nickname: String(user.nickname || ''), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
-      needsNickname: !user.nickname,
+      profile: { nickname: String(user.name || (identity.admin ? user.nickname || '先生' : '')).trim(), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
+      needsNickname: false,
       loginBonus: Object.assign({}, bonus, { dailyAmount: gcNumber_(identity.settings, 'loginBonus', 10, 0, 100000), streakBonus: gcNumber_(identity.settings, 'loginStreakBonus', 100, 0, 100000) }),
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
@@ -1157,25 +1145,6 @@ function gcAdminAdjustPoints_(token, payload, requestId) {
   });
 }
 
-function gcAdminResetNickname_(token, payload, requestId) {
-  const identity = gcSession_(token, true);
-  const id = gcRequestId_(requestId);
-  const email = String(payload.email || '').trim().toLowerCase();
-  return gcWithLock_(function () {
-    const record = gcFindUser_(email);
-    if (!record) gcError_('NOT_FOUND', '利用者が見つかりません');
-    const user = gcUserObject_(record);
-    const audit = gcSheet_('AdminActions');
-    const previous = gcAdminRows_('AdminActions').find(function (row) { return row[0] === id; });
-    if (previous) return { email: email, nickname: String(user.nickname || ''), alreadyApplied: true };
-    const before = String(user.nickname || '');
-    if (!before) return { email: email, nickname: '', alreadyApplied: false };
-    audit.appendRow([id, identity.email, email, 'reset_nickname', before, '', new Date().toISOString()]);
-    user.nickname = ''; user.updatedAt = new Date().toISOString(); gcWriteUser_(record, user);
-    return { email: email, nickname: '', alreadyApplied: false };
-  });
-}
-
 function gcAdminExportData_(token, payload) {
   gcSession_(token, true);
   const table = String(payload.table || '');
@@ -1345,7 +1314,7 @@ function gcGetRanking_(token) {
     counts[row[3]][email] = (counts[row[3]][email] || 0) + 1;
   });
   const nicknames = {};
-  gcAdminRows_('Users').forEach(function (row) { nicknames[String(row[0]).toLowerCase()] = String(row[5] || 'プレイヤー'); });
+  gcAdminRows_('Users').forEach(function (row) { nicknames[String(row[0]).toLowerCase()] = String(row[4] || (row[1] === 'admin' ? row[5] || '先生' : 'プレイヤー')).trim(); });
   const ranking = function (mode) {
     return Object.keys(counts[mode]).map(function (email) { return { email: email, nickname: nicknames[email] || 'プレイヤー', wins: counts[mode][email] }; })
       .sort(function (a, b) { return b.wins - a.wins || a.nickname.localeCompare(b.nickname) || a.email.localeCompare(b.email); })

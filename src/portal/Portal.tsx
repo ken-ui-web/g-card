@@ -105,7 +105,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
     const data = await callApi<BootstrapData>('bootstrap', activeSession);
     if (!isGuest(activeSession)) writeBootstrapCache(activeSession, data);
     setBootstrap(data);
-    setNeedsNickname(data.needsNickname);
+    setNeedsNickname(isGuest(activeSession) && data.needsNickname);
   };
 
   const applyEconomy = (state: EconomyState) => {
@@ -123,7 +123,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
     let cancelled = false;
     let running = false;
     const cached = !isGuest(session) ? readBootstrapCache(session) : null;
-    if (cached) { setBootstrap(cached.data); setNeedsNickname(cached.data.needsNickname); }
+    if (cached) { setBootstrap(cached.data); setNeedsNickname(false); }
     const refresh = () => {
       if (running || document.visibilityState === 'hidden') return;
       const snapshot = !isGuest(session) ? readBootstrapCache(session) : null;
@@ -134,7 +134,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
         if (cancelled) return;
         if (isGuest(session) || writeBootstrapCache(session, data, Date.now(), snapshot?.revision ?? 0)) {
           setBootstrap(data);
-          setNeedsNickname(data.needsNickname);
+          setNeedsNickname(isGuest(session) && data.needsNickname);
           setError('');
         } else {
           const latest = readBootstrapCache(session);
@@ -142,7 +142,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
         }
       }).catch((failure: Error & { code?: string }) => {
         if (cancelled) return;
-        if (failure.code === 'LOGIN_REQUIRED') { clearBootstrapCache(); saveSession(null); setSession(null); setBootstrap(null); }
+        if (failure.code === 'LOGIN_REQUIRED' || failure.code === 'NAME_REQUIRED') { clearBootstrapCache(); saveSession(null); setSession(null); setBootstrap(null); }
         setError(failure.message);
       }).finally(() => { running = false; if (!cancelled) setRefreshing(false); });
     };
@@ -160,7 +160,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
       clearBootstrapCache(); setBootstrap(null);
       saveSession(result.session);
       setSession(result.session);
-      setNeedsNickname(result.needsNickname);
+      setNeedsNickname(false);
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }, []);
@@ -172,10 +172,11 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
 
   const submitNickname = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session) return;
+    if (!session || !isGuest(session) || busy) return;
     setBusy(true); setError('');
     try {
       await callApi('setNickname', session, { nickname });
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
       await loadBootstrap(session);
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
@@ -190,9 +191,9 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
     <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}<SoundToggle />{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
     {refreshing && bootstrap && <p className="portal-sync" role="status"><span className="portal-sync__spinner" />前回の記録を表示中 · 最新の記録を確認中…</p>}
-    {!session ? <section className="portal-panel panel"><p className="eyebrow">WELCOME TO G CARD</p><h1>Gカードを始める</h1>{portalConfigured && <><p>学校アカウントでログインすると、記録を学校に保存できます。</p><GoogleButton onCredential={onCredential} /></>}<div className="guest-entry"><button type="button" className="button button--ghost" disabled={busy} onClick={onGuest}>ゲストとして遊ぶ</button><p>ゲストのカード・Gポイント・対戦記録はこの端末だけに保存されます。端末のデータを消すと復元できません。</p></div>{busy && <LoadingState text="ログインを確認中" />}</section>
-        : needsNickname ? <section className="portal-panel panel"><p className="eyebrow">FIRST STEP</p><h1>ニックネームを決めよう</h1><p>対戦やランキングで表示する名前です。8文字以内で入力してください。</p><form onSubmit={submitNickname} className="portal-form"><label>ニックネーム<input value={nickname} maxLength={8} onChange={(event) => setNickname(event.target.value)} required /></label><button className="button button--primary" disabled={busy || !nickname.trim()}>決定する</button></form></section>
-          : !bootstrap ? <section className="portal-panel panel"><LoadingState text="ホームを読み込み中" /></section>
+    {!session ? <section className="portal-panel panel"><p className="eyebrow">WELCOME TO G CARD</p><h1>Gカードを始める</h1>{busy ? <><LoadingState text="学校アカウントを確認中" /><p>初回は学校の記録を準備するため、少し時間がかかることがあります。</p></> : <>{portalConfigured && <><p>学校アカウントでログインすると、記録を学校に保存できます。</p><GoogleButton onCredential={onCredential} /></>}<div className="guest-entry"><button type="button" className="button button--ghost" onClick={onGuest}>ゲストとして遊ぶ</button><p>ゲストのカード・Gポイント・対戦記録はこの端末だけに保存されます。端末のデータを消すと復元できません。</p></div></>}</section>
+        : needsNickname && isGuest(session) ? <section className="portal-panel panel"><p className="eyebrow">FIRST STEP</p><h1>ニックネームを決めよう</h1><p>ゲスト対戦で表示する名前です。8文字以内で入力してください。</p><form onSubmit={submitNickname} className="portal-form"><label>ニックネーム<input value={nickname} maxLength={8} disabled={busy} onChange={(event) => setNickname(event.target.value)} required /></label><button className="button button--primary" disabled={busy || !nickname.trim()}>{busy && <span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />}{busy ? '保存中…' : '決定する'}</button></form>{busy && <LoadingState text="ゲストのカードを準備中" />}</section>
+          : !bootstrap ? <section className="portal-panel panel"><LoadingState text={session && !isGuest(session) ? '学校の記録とカードを準備中' : 'ホームを読み込み中'} /></section>
             : page === 'admin' ? bootstrap.profile.role === 'admin' && session ? <AdminWorkspace session={session} /> : <section className="portal-panel panel"><h1>管理者のみ利用できます</h1><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : (page === 'tests' || page === 'reflections') && session ? isGuest(session) ? <section className="portal-panel panel"><h1>学校アカウント専用です</h1><p>テストと振り返りは学校アカウントでログインすると使えます。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section> : learningReady ? <LearningPages page={page} session={session} onPoints={applyLearning} /> : <section className="portal-panel panel"><h1>先生の公開待ち</h1><p>テストと振り返り連携は、先生の準備が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : page !== 'home' && session ? economyReady ? guestShopNeeded && !guestShopConfig ? <section className="portal-panel panel">{guestShopError ? <><h1>ショップ設定を読み込めません</h1><p className="portal-error" role="alert">{guestShopError}</p><button type="button" className="button button--primary" onClick={() => { setGuestShopError(''); void refreshGuestShop().catch((failure: Error) => setGuestShopError(failure.message)); }}>再読み込み</button></> : <LoadingState text="ショップ設定を読み込み中" />}</section> : <EconomyPages page={page as 'shop' | 'training' | 'collection'} session={session} data={economyData!} onState={applyEconomy} onRefreshShop={isGuest(session) ? refreshGuestShop : undefined} /> : <section className="portal-panel panel"><h1>サーバーの更新待ち</h1><p>先生によるGカードの更新が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
