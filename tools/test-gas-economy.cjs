@@ -84,6 +84,7 @@ const inactiveRow = sheets.get('Cards').rows.findIndex((row) => row[0] === inact
 sheets.get('Cards').getRange(inactiveRow + 1, 11).setValue(false);
 call('gcClearMasterCache_', 'Cards');
 assert.equal(call('gcCardMaster_').find((card) => card.cardId === inactiveCard).active, false);
+assert.equal(call('gcDispatch_', { action: 'getPublicShopConfig' }).cards.find((card) => card.cardId === inactiveCard).active, false, 'ゲストのショップ設定は管理者が保存した販売可否を返す');
 assert.doesNotThrow(() => call('gcAdminSaveDeck_', token, { ...sample, cardIds: ['G001', 'G002', 'C008', inactiveCard] }), '販売停止中のカードもサンプル候補に保存できる');
 assert.equal(call('gcDispatch_', { action: 'getBattleConfig', session: token }).find((deck) => deck.deckId === 'sample').cardIds.length, 4, '対戦専用APIは管理者が保存した最新の4枚を返す');
 assert.deepEqual(call('gcDispatch_', { action: 'getPublicBattleConfig' }).find((deck) => deck.deckId === 'sample').cardIds, ['G001', 'G002', 'C008', inactiveCard], 'ゲスト用APIも管理者が保存した同じ4枚を返す');

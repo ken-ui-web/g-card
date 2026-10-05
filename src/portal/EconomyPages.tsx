@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { callApi, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
+import { callApi, isGuest, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
 import { availableCards } from '../data/cards';
 import { compareCards } from '../data/cardOrder';
 import { PortalIcon, type PortalIconName } from './Icons';
@@ -48,7 +48,7 @@ export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedba
   </div></div>, document.body);
 }
 
-export function EconomyPages({ page, session, data, onState }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void }) {
+export function EconomyPages({ page, session, data, onState, onRefreshShop }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void; onRefreshShop?: () => Promise<unknown> }) {
   const [collectionTab, setCollectionTab] = useState<'deck' | 'catalog'>('deck');
   const [compactCards, setCompactCards] = useState(() => { try { return localStorage.getItem(cardSizeKey) === 'compact'; } catch { return false; } });
   const [busy, setBusy] = useState(false);
@@ -79,6 +79,7 @@ export function EconomyPages({ page, session, data, onState }: { page: Page; ses
     setBusy(true); setMessage('');
     setFeedback({ phase: 'working', title: plan?.working ?? '記録を保存中…', image: plan?.workingImage });
     try {
+      if (isGuest(session) && (action === 'buyCard' || action === 'openPack')) await onRefreshShop?.();
       const result = await callApi<EconomyState>(action, session, payload);
       onState(result);
       setMessage(success(result));

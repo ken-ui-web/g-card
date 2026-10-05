@@ -1,5 +1,5 @@
 import { availableCards } from '../data/cards';
-import type { BootstrapData, EconomyState, MissionState, OwnedCard, PackMaster } from './api';
+import type { BootstrapData, EconomyState, MissionState, OwnedCard, PublicShopConfig } from './api';
 
 const key = 'g-card-guest-v1';
 const starter = ['G001', 'G002', 'C008', 'P001'];
@@ -11,10 +11,23 @@ const missionTemplates: MissionState[] = [
   { missionId: 'daily-train', period: 'daily', condition: 'train', targetCount: 1, reward: 10, label: 'トレーニングを1回する', progress: 0, completed: false },
 ];
 const sellPrices = { N: 10, R: 30, SR: 100, SSR: 300 };
-const allIds = availableCards.map((card) => card.cardId);
-const packs: PackMaster[] = [
-  { packId: 'all-cards', name: '全カードパック', price: 200, cardsPerPack: 3, rarityRates: { N: 60, R: 30, SR: 8.5, SSR: 1.5 }, cardPool: allIds, pityCount: 10 },
-];
+let activeShopConfig: PublicShopConfig | null = null;
+export function clearGuestShopConfig() { activeShopConfig = null; }
+export function installGuestShopConfig(config: PublicShopConfig) {
+  if (!config || !Array.isArray(config.cards) || !Array.isArray(config.packs) ||
+      availableCards.some((card) => !config.cards.some((item) => item.cardId === card.cardId)) ||
+      !Number.isInteger(config.packDailyLimit) || !config.sellPrices) throw new Error('ショップ設定を確認できません。もう一度読み込んでください。');
+  activeShopConfig = config;
+}
+export function applyGuestShopConfig(data: BootstrapData, config: PublicShopConfig): BootstrapData {
+  const byId = new Map(config.cards.map((card) => [card.cardId, card]));
+  return {
+    ...data,
+    cardMaster: data.cardMaster.map((card) => ({ ...card, ...byId.get(card.cardId) })),
+    packs: config.packs,
+    economy: { ...data.economy, packDailyLimit: config.packDailyLimit, sellPrices: config.sellPrices },
+  };
+}
 type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
 
 function fresh(): GuestState {
@@ -38,7 +51,7 @@ function read(): GuestState {
   return state;
 }
 function write(state: GuestState) { localStorage.setItem(key, JSON.stringify(state)); }
-export function createGuest() { read(); }
+export function createGuest() { clearGuestShopConfig(); read(); }
 function awardMission(state: GuestState, condition: string, count: number) {
   const completed: { label: string; reward: number }[] = [];
   state.missions.forEach((mission) => {
@@ -62,14 +75,15 @@ function bootstrap(state: GuestState): BootstrapData {
     state.gPoint += award; state.lastLoginDate = today(); bonus = { awarded: true, amount: award, streak: state.loginStreak };
     write(state);
   }
-  return {
+  const data: BootstrapData = {
     profile: { nickname: state.nickname, role: 'student', gPoint: state.gPoint, maxLife: 100 + state.runCount * 5, runCount: state.runCount, pityCounter: state.pityCounter },
     needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, streakBonus: 100 }, ownedCards: state.ownedCards,
-    cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: item.shopPrice, inPack: item.inPack, active: true, sortOrder: order.indexOf(item.type) * 100 + index })),
-    lastDeck: state.lastDeck, packs, battleConfig: [], missions: state.missions, daily: state.daily,
+    cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: null, inPack: false, active: false, sortOrder: order.indexOf(item.type) * 100 + index })),
+    lastDeck: state.lastDeck, packs: [], battleConfig: [], missions: state.missions, daily: state.daily,
     economy: { enabled: true, muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5, cpuRewardDailyCap: 3, packDailyLimit: 10, sellPrices },
     learning: { enabled: false }, unreadTests: 0, pendingReflections: 0, online: { enabled: false, rankingEnabled: false, rewardDailyCap: 0 },
   };
+  return activeShopConfig ? applyGuestShopConfig(data, activeShopConfig) : data;
 }
 
 export function guestAction(action: string, payload: Record<string, unknown>, requestId: string): BootstrapData | EconomyState | object {
@@ -85,15 +99,17 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
   let extra: Partial<EconomyState> = {};
   if (action === 'buyCard') {
     const selected = card(String(payload.cardId));
-    if (selected.shopPrice === null || state.gPoint < selected.shopPrice) throw new Error('Gポイントが足りません');
-    state.gPoint -= selected.shopPrice;
+    const sale = activeShopConfig?.cards.find((item) => item.cardId === selected.cardId);
+    if (!sale?.active || sale.shopPrice === null || selected.rarity === 'SSR') throw new Error('このカードは購入できません');
+    if (state.gPoint < sale.shopPrice) throw new Error('Gポイントが足りません');
+    state.gPoint -= sale.shopPrice;
     const acquired = { ownedId: crypto.randomUUID(), cardId: selected.cardId, trainLevel: 0, trainingSpent: 0, source: 'shop' };
     state.ownedCards.push(acquired); extra = { acquired: [acquired] };
   } else if (action === 'sellCard') {
     if (state.ownedCards.length <= 4) throw new Error('カードは4枚以上残してください');
     const target = state.ownedCards.find((item) => item.ownedId === payload.ownedId);
     if (!target) throw new Error('このカードは所持していません');
-    state.gPoint += sellPrices[card(target.cardId).rarity] + (target.trainingSpent ?? 0);
+    state.gPoint += (activeShopConfig?.sellPrices[card(target.cardId).rarity] ?? sellPrices[card(target.cardId).rarity]) + (target.trainingSpent ?? 0);
     state.ownedCards = state.ownedCards.filter((item) => item.ownedId !== target.ownedId);
     if (state.lastDeck.includes(target.ownedId)) state.lastDeck = [];
   } else if (action === 'train') {
@@ -122,20 +138,25 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
     if (!Array.isArray(ids) || ids.length !== 4 || new Set(ids).size !== 4 || !ids.every((id) => state.ownedCards.some((item) => item.ownedId === id)) || ids.filter((id) => card(state.ownedCards.find((item) => item.ownedId === id)!.cardId).rarity === 'SSR').length > 1) throw new Error('デッキを確認してください');
     state.lastDeck = ids;
   } else if (action === 'openPack') {
-    const pack = packs.find((item) => item.packId === payload.packId);
-    if (!pack || state.gPoint < pack.price || state.daily.packsBought >= 10) throw new Error('パックを購入できません');
-    state.gPoint -= pack.price; state.daily.packsBought++;
+    const pack = activeShopConfig?.packs.find((item) => item.packId === payload.packId);
+    if (!pack || !activeShopConfig || state.gPoint < pack.price || state.daily.packsBought >= activeShopConfig.packDailyLimit) throw new Error('パックを購入できません');
+    const pool = availableCards.filter((item) => pack.cardPool.includes(item.cardId) && activeShopConfig!.cards.some((setting) => setting.cardId === item.cardId && setting.active && setting.inPack));
+    const rates = Object.entries(pack.rarityRates).map(([rarity, rate]) => ({ rarity, rate, cards: pool.filter((item) => item.rarity === rarity) }));
+    if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 || !rates.length || rates.some((item) => !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0) || Math.abs(rates.reduce((sum, item) => sum + item.rate, 0) - 100) > .001 || pack.pityCount > 0 && !pool.some((item) => item.rarity === 'SR' || item.rarity === 'SSR')) throw new Error('パックの設定を先生に確認してください');
     const acquired: OwnedCard[] = [];
     for (let index = 0; index < pack.cardsPerPack; index++) {
-      const roll = Math.random() * 100;
-      const rarity = state.pityCounter >= 10 && index === 0 ? 'SR' : roll < 1.5 ? 'SSR' : roll < 10 ? 'SR' : roll < 40 ? 'R' : 'N';
-      const pool = availableCards.filter((item) => item.rarity === rarity && item.inPack);
-      const selected = pool[Math.floor(Math.random() * pool.length)];
+      const guaranteed = index === 0 && pack.pityCount > 0 && state.pityCounter >= pack.pityCount;
+      const choices = guaranteed ? rates.filter((item) => item.rarity === 'SR' || item.rarity === 'SSR') : rates;
+      let roll = Math.random() * choices.reduce((sum, item) => sum + item.rate, 0);
+      let picked = choices[choices.length - 1];
+      for (const item of choices) { roll -= item.rate; if (roll < 0) { picked = item; break; } }
+      const selected = picked.cards[Math.floor(Math.random() * picked.cards.length)];
       const owned = { ownedId: crypto.randomUUID(), cardId: selected.cardId, trainLevel: 0, trainingSpent: 0, source: 'pack' };
       state.ownedCards.push(owned); acquired.push(owned);
     }
     state.pityCounter = acquired.some((item) => ['SR', 'SSR'].includes(card(item.cardId).rarity)) ? 0 : state.pityCounter + 1;
-    extra = { acquired, pityRemaining: Math.max(0, 10 - state.pityCounter) };
+    state.gPoint -= pack.price; state.daily.packsBought++;
+    extra = { acquired, pityRemaining: pack.pityCount ? Math.max(0, pack.pityCount - state.pityCounter) : null };
   } else if (action === 'reportBattle') {
     const battleId = String(payload.battleId ?? '');
     if (!/^[a-f0-9-]{20,64}$/i.test(battleId)) throw new Error('対戦結果を確認してください');

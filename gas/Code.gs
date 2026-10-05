@@ -245,6 +245,7 @@ function gcDispatch_(request) {
     case 'adminSaveDeck': return gcAdminSaveDeck_(request.session, request.payload || {});
     case 'getBattleConfig': return gcBattleConfig_(request.session);
     case 'getPublicBattleConfig': return gcPublicBattleConfig_();
+    case 'getPublicShopConfig': return gcPublicShopConfig_();
     case 'listTests': return gcListTests_(request.session);
     case 'getTest': return gcGetTest_(request.session, request.payload || {});
     case 'submitTest': return gcSubmitTest_(request.session, request.payload || {}, request.requestId);
@@ -520,6 +521,17 @@ function gcBattleConfig_(token) {
 function gcPublicBattleConfig_() {
   const deckIds = ['sample', 'cpu-1', 'cpu-2', 'cpu-3'];
   return gcBattleConfigRows_().filter(function (deck) { return deckIds.indexOf(deck.deckId) !== -1; });
+}
+
+function gcPublicShopConfig_() {
+  const settings = gcSettings_();
+  const today = gcToday_();
+  return {
+    cards: gcCardMaster_().map(function (card) { return { cardId: card.cardId, shopPrice: card.shopPrice, active: card.active, inPack: card.inPack }; }),
+    packs: gcPackMaster_().filter(function (pack) { return (!pack.startAt || pack.startAt <= today) && (!pack.endAt || pack.endAt >= today); }),
+    packDailyLimit: gcNumber_(settings, 'packDailyLimit', 10, 0, 1000),
+    sellPrices: { N: gcNumber_(settings, 'sellN', 10, 0, 100000), R: gcNumber_(settings, 'sellR', 30, 0, 100000), SR: gcNumber_(settings, 'sellSR', 100, 0, 100000), SSR: gcNumber_(settings, 'sellSSR', 300, 0, 100000) },
+  };
 }
 
 function gcBattleConfigRows_() {

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { SoundToggle } from '../components/SoundToggle';
 import { LoadingState } from '../components/LoadingState';
-import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState } from './api';
+import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState, type PublicShopConfig } from './api';
 import { clearBootstrapCache, isBootstrapFresh, isBootstrapFromToday, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './bootstrapCache';
-import { createGuest } from './guest';
+import { applyGuestShopConfig, clearGuestShopConfig, createGuest } from './guest';
+import { loadGuestShopConfig } from './publicShopConfig';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { EconomyPages } from './EconomyPages';
 import { AdminWorkspace } from './AdminWorkspace';
@@ -73,10 +74,32 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [guestShopConfig, setGuestShopConfig] = useState<PublicShopConfig | null>(null);
+  const [guestShopError, setGuestShopError] = useState('');
   const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
   const economyReady = Boolean(bootstrap?.economy?.enabled && bootstrap.packs && bootstrap.battleConfig);
   const learningReady = Boolean(bootstrap?.learning?.enabled);
   const dailyCurrent = !session || isGuest(session) || isBootstrapFromToday(readBootstrapCache(session));
+  const guestShopNeeded = isGuest(session) && (page === 'shop' || page === 'collection');
+  const economyData = bootstrap && guestShopConfig && isGuest(session) ? applyGuestShopConfig(bootstrap, guestShopConfig) : bootstrap;
+
+  const refreshGuestShop = async () => {
+    const config = await loadGuestShopConfig();
+    setGuestShopConfig(config);
+    setGuestShopError('');
+    return config;
+  };
+
+  useEffect(() => {
+    if (!guestShopNeeded) return;
+    let cancelled = false;
+    clearGuestShopConfig();
+    setGuestShopConfig(null);
+    setGuestShopError('');
+    void loadGuestShopConfig().then((config) => { if (!cancelled) setGuestShopConfig(config); })
+      .catch((failure: Error) => { if (!cancelled) setGuestShopError(failure.message); });
+    return () => { cancelled = true; };
+  }, [guestShopNeeded, page, session]);
 
   const loadBootstrap = async (activeSession: string) => {
     const data = await callApi<BootstrapData>('bootstrap', activeSession);
@@ -143,7 +166,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   }, []);
 
   const onGuest = () => {
-    try { createGuest(); clearBootstrapCache(); setBootstrap(null); saveSession(guestSession); setError(''); setSession(guestSession); }
+    try { createGuest(); setGuestShopConfig(null); clearBootstrapCache(); setBootstrap(null); saveSession(guestSession); setError(''); setSession(guestSession); }
     catch { setError('この端末では保存できません。ブラウザーの保存設定を確認してください。'); }
   };
 
@@ -158,7 +181,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
     finally { setBusy(false); }
   };
 
-  const logout = () => { clearBootstrapCache(); saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
+  const logout = () => { clearGuestShopConfig(); setGuestShopConfig(null); clearBootstrapCache(); saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
 
   const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop' || page === 'training' || page === 'tests') ? page : null;
   const backgroundName = illustratedPage === 'tests' ? 'test' : illustratedPage;
@@ -172,7 +195,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
           : !bootstrap ? <section className="portal-panel panel"><LoadingState text="ホームを読み込み中" /></section>
             : page === 'admin' ? bootstrap.profile.role === 'admin' && session ? <AdminWorkspace session={session} /> : <section className="portal-panel panel"><h1>管理者のみ利用できます</h1><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : (page === 'tests' || page === 'reflections') && session ? isGuest(session) ? <section className="portal-panel panel"><h1>学校アカウント専用です</h1><p>テストと振り返りは学校アカウントでログインすると使えます。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section> : learningReady ? <LearningPages page={page} session={session} onPoints={applyLearning} /> : <section className="portal-panel panel"><h1>先生の公開待ち</h1><p>テストと振り返り連携は、先生の準備が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
-              : page !== 'home' && session ? economyReady ? <EconomyPages page={page as 'shop' | 'training' | 'collection'} session={session} data={bootstrap} onState={applyEconomy} /> : <section className="portal-panel panel"><h1>サーバーの更新待ち</h1><p>先生によるGカードの更新が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
+              : page !== 'home' && session ? economyReady ? guestShopNeeded && !guestShopConfig ? <section className="portal-panel panel">{guestShopError ? <><h1>ショップ設定を読み込めません</h1><p className="portal-error" role="alert">{guestShopError}</p><button type="button" className="button button--primary" onClick={() => { setGuestShopError(''); void refreshGuestShop().catch((failure: Error) => setGuestShopError(failure.message)); }}>再読み込み</button></> : <LoadingState text="ショップ設定を読み込み中" />}</section> : <EconomyPages page={page as 'shop' | 'training' | 'collection'} session={session} data={economyData!} onState={applyEconomy} onRefreshShop={isGuest(session) ? refreshGuestShop : undefined} /> : <section className="portal-panel panel"><h1>サーバーの更新待ち</h1><p>先生によるGカードの更新が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : <><section className="portal-overview panel"><div><p className="eyebrow">MY HOME</p><h1>{bootstrap.profile.nickname}さん</h1></div><div className="portal-stats"><strong><PortalIcon name="coin" />{bootstrap.profile.gPoint.toLocaleString()} G</strong><strong><PortalIcon name="life" />最大ライフ {bootstrap.profile.maxLife}</strong></div></section>
                 <section className="portal-dashboard">
                   <div className="portal-bonus panel"><h2>ログインボーナス</h2>

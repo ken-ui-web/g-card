@@ -23,6 +23,12 @@ export interface Profile {
 export interface OwnedCard { ownedId: string; cardId: string; trainLevel: number; trainingSpent?: number | null; source?: string }
 export interface CardMaster { cardId: string; name: string; type: string; rarity: string; image: string; text: string; effects: { type: string; amount?: number }[]; trainingMultiplier: number; trainingBonus: number; shopPrice: number | null; inPack: boolean; active: boolean }
 export interface PackMaster { packId: string; name: string; price: number; cardsPerPack: number; rarityRates: Record<string, number>; cardPool: string[]; pityCount: number }
+export interface PublicShopConfig {
+  cards: { cardId: string; shopPrice: number | null; active: boolean; inPack: boolean }[];
+  packs: PackMaster[];
+  packDailyLimit: number;
+  sellPrices: Record<string, number>;
+}
 export interface BattleDeckConfig { deckId: string; name: string; cardIds: string[]; maxLife: number; rockTrainLevel: number }
 export interface MissionState { missionId: string; period: string; condition: string; targetCount: number; reward: number; label: string; progress: number; completed: boolean }
 export interface EconomyState {
