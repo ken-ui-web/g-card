@@ -168,6 +168,26 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .admin-bulk-save small{flex-basis:100%;font-size:.88rem;color:#fff}
 .admin-economy-fields{border:0;padding:0;margin:0;min-width:0}
 .admin-setting label:has([type=checkbox]),.admin-pack label:has([type=checkbox]){display:flex;align-items:center;gap:8px}
+.admin-deck-list{display:grid;gap:12px;margin-top:16px}
+.admin-economy .admin-deck-editor{min-width:0;padding:0;border:1px solid #ffffff38;border-radius:12px;background:#0d1835}
+.admin-economy .admin-deck-editor>summary{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px;color:#fff;list-style-position:inside}
+.admin-deck-editor>summary span{font-size:.82rem;font-weight:600;color:#ffdb71;text-align:right}
+.admin-deck-editor>p{margin:0;padding:0 16px;color:#cbd9ec;line-height:1.55}
+.admin-deck-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:16px}
+.admin-deck-settings label{display:grid;gap:6px;color:#dce7f7}
+.admin-deck-group{padding:0 16px 18px}
+.admin-deck-group h4{margin:7px 0 9px;color:#ffdb71}
+.admin-deck-group h4 small{color:#bdcbe1;font-weight:500}
+.admin-deck-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:7px}
+.admin-deck-card{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:10px 11px;border:1px solid #ffffff26;border-radius:9px;background:#182749;color:#f7f9ff;cursor:pointer}
+.admin-deck-card:has(input:checked){border-color:#ffdb71;background:#24304e}
+.admin-deck-card input{flex:none;width:19px;height:19px;margin:2px 0 0;accent-color:#ffcf4a}
+.admin-deck-card__text{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 7px;min-width:0;line-height:1.45}
+.admin-deck-card__text strong{white-space:nowrap}
+.admin-deck-card__text>span{color:#d0dcee;overflow-wrap:anywhere}
+.admin-deck-card__rarity{padding:1px 5px;border-radius:4px;background:#d9e1ee;color:#172340;font-size:.72rem;line-height:1.3}
+.admin-deck-card__rarity--r{background:#9edbff}.admin-deck-card__rarity--sr{background:#e9b7ff}.admin-deck-card__rarity--ssr{background:#ffdb71}
+@media(max-width:600px){.admin-economy .admin-deck-editor>summary{align-items:flex-start;flex-direction:column}.admin-deck-cards{grid-template-columns:1fr}}
 .learning-page,.admin-tests{position:relative;width:min(1080px,calc(100% - 48px));margin:30px auto 55px;padding:clamp(20px,4vw,38px)}
 .learning-page h1{font:clamp(26px,4vw,38px) 'Dela Gothic One',sans-serif;margin:0 0 15px}
 .learning-page h2,.admin-tests h2{margin:0 0 12px}.learning-page>p,.admin-tests>p{color:#d6e2f5;line-height:1.7}

@@ -78,6 +78,16 @@ sheets.get('Users').appendRow([email, 'admin', '', '', '', '先生', 500, 0, 500
 for (const cardId of ['G001', 'G002', 'C008', 'P001']) sheets.get('OwnedCards').appendRow([crypto.randomUUID(), email, cardId, 0, 'initial', new Date().toISOString(), '']);
 const token = call('gcSignSession_', email, 'admin', call('gcSettings_'));
 const id = () => crypto.randomUUID();
+const sample = call('gcBattleConfigRows_').find((deck) => deck.deckId === 'sample');
+const inactiveCard = 'P014';
+const inactiveRow = sheets.get('Cards').rows.findIndex((row) => row[0] === inactiveCard);
+sheets.get('Cards').getRange(inactiveRow + 1, 11).setValue(false);
+call('gcClearMasterCache_', 'Cards');
+assert.equal(call('gcCardMaster_').find((card) => card.cardId === inactiveCard).active, false);
+assert.doesNotThrow(() => call('gcAdminSaveDeck_', token, { ...sample, cardIds: ['G001', 'G002', 'C008', inactiveCard] }), '販売停止中のカードもサンプル候補に保存できる');
+call('gcAdminSaveDeck_', token, sample);
+sheets.get('Cards').getRange(inactiveRow + 1, 11).setValue(true);
+call('gcClearMasterCache_', 'Cards');
 assert.throws(() => call('gcBuyCard_', token, { cardId: 'C014' }, id()), /購入できません/);
 assert.throws(() => call('gcSellCard_', token, { ownedId: call('gcOwned_', email)[0].ownedId }, id()), /4枚以上/);
 

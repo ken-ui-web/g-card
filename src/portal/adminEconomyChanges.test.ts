@@ -36,4 +36,13 @@ describe('管理者の一括保存', () => {
     draft.settings[0].value = '-1';
     expect(validateEconomyChanges(draft, collectEconomyChanges(saved, draft))).toContain('筋トレ基本価格');
   });
+
+  it('販売停止中のカードもサンプル・CPU候補に保存できる', () => {
+    const draft = structuredClone(saved);
+    draft.cards[0].active = false;
+    for (const cardId of ['G002', 'C008', 'P001']) draft.cards.push({ ...draft.cards[0], cardId });
+    draft.decks[0].cardIds = ['G001', 'G002', 'C008', 'P001'];
+    const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'decks');
+    expect(validateEconomyChanges(draft, changes)).toBeNull();
+  });
 });

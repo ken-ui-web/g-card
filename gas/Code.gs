@@ -934,7 +934,7 @@ function gcAdminSaveDeck_(token, payload) {
       !Number.isInteger(Number(payload.maxLife)) || Number(payload.maxLife) < 1 || Number(payload.maxLife) > 9999 ||
       !Number.isInteger(Number(payload.rockTrainLevel)) || Number(payload.rockTrainLevel) < 0 || Number(payload.rockTrainLevel) > 99) gcError_('BAD_DECK', 'デッキの設定を確認してください');
   const master = gcCardMaster_();
-  if (!payload.cardIds.every(function (id) { return master.some(function (card) { return card.cardId === id && card.active; }); })) gcError_('BAD_DECK', '有効なカードから選んでください');
+  if (!payload.cardIds.every(function (id) { return master.some(function (card) { return card.cardId === id; }); })) gcError_('BAD_DECK', '登録済みのカードから選んでください');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Decks');
     const rows = sheet.getDataRange().getValues();

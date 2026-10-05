@@ -92,7 +92,7 @@ export function validateEconomyChanges(draft: AdminData, changes: EconomyChange[
     }
     if (change.group === 'decks') {
       const deck = draft.decks.find((item) => item.deckId === change.id)!;
-      if (deck.cardIds.length < 4 || deck.cardIds.length > 40 || new Set(deck.cardIds).size !== deck.cardIds.length || deck.cardIds.some((id) => !cards.get(id)?.active) || !integer(deck.maxLife, 1, 9999) || !integer(deck.rockTrainLevel, 0, 99)) return `${deck.name}のカードと数値を確認してください。`;
+      if (deck.cardIds.length < 4 || deck.cardIds.length > 40 || new Set(deck.cardIds).size !== deck.cardIds.length || deck.cardIds.some((id) => !cards.has(id)) || !integer(deck.maxLife, 1, 9999) || !integer(deck.rockTrainLevel, 0, 99)) return `${deck.name}のカードと数値を確認してください。`;
     }
   }
   return null;
