@@ -9,7 +9,8 @@ import { beginRound, choiceRequests, createBattle, effectOrder, finishRound, sho
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
 import { Portal } from './portal/Portal';
-import { callApi, isGuest, portalConfigured, savedSession, type BootstrapData, type EconomyState } from './portal/api';
+import { callApi, isGuest, portalConfigured, savedSession, type BattleDeckConfig, type BootstrapData, type EconomyState } from './portal/api';
+import { loadBattleConfig } from './portal/battleConfig';
 import { isBootstrapFresh, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './portal/bootstrapCache';
 import './styles.css';
 
@@ -125,6 +126,9 @@ function App() {
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(defaultDeckIds);
   const [deckMode, setDeckMode] = useState<'sample' | 'owned'>('sample');
   const [account, setAccount] = useState<BootstrapData | null>(null);
+  const [liveBattleConfig, setLiveBattleConfig] = useState<BattleDeckConfig[] | null>(null);
+  const [battleConfigError, setBattleConfigError] = useState('');
+  const [configReload, setConfigReload] = useState(0);
   const [ownedSelection, setOwnedSelection] = useState<string[]>([]);
   const [reward, setReward] = useState<EconomyState | null>(null);
   const [rewardError, setRewardError] = useState('');
@@ -145,7 +149,7 @@ function App() {
   const seed = useRef(Date.now() >>> 0);
 
   useEffect(() => {
-    const update = () => setHash(window.location.hash);
+    const update = () => { setLiveBattleConfig(null); setHash(window.location.hash); };
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
@@ -156,11 +160,13 @@ function App() {
     let cancelled = false;
     const applyAccount = (data: BootstrapData) => {
       setAccount(data);
-      const samplePool = data.battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
-      if (samplePool && samplePool.length >= 4) setSelectedDeckIds((selected) => {
-        const valid = selected.filter((id) => samplePool.includes(id));
-        return valid.length === 4 ? valid : samplePool.slice(0, 4);
-      });
+      if (isGuest(session)) {
+        const samplePool = data.battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
+        if (samplePool && samplePool.length >= 4) setSelectedDeckIds((selected) => {
+          const valid = selected.filter((id) => samplePool.includes(id));
+          return valid.length === 4 ? valid : samplePool.slice(0, 4);
+        });
+      }
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
       setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
@@ -173,8 +179,21 @@ function App() {
       if (isGuest(session) || writeBootstrapCache(session, data, Date.now(), cached?.revision ?? 0)) applyAccount(data);
       else { const latest = readBootstrapCache(session); if (latest) applyAccount(latest.data); }
     }).catch(() => { if (!cancelled && !cached) setAccount(null); });
+    if (!isGuest(session)) {
+      setLiveBattleConfig(null);
+      setBattleConfigError('');
+      void loadBattleConfig(session).then((decks) => {
+        if (cancelled) return;
+        setLiveBattleConfig(decks);
+        const samplePool = decks.find((deck) => deck.deckId === 'sample')!.cardIds;
+        setSelectedDeckIds((selected) => {
+          const valid = selected.filter((id) => samplePool.includes(id));
+          return valid.length === 4 ? valid : samplePool.slice(0, 4);
+        });
+      }).catch((error: Error) => { if (!cancelled) setBattleConfigError(error.message); });
+    }
     return () => { cancelled = true; };
-  }, [hash]);
+  }, [hash, configReload]);
   useEffect(() => {
     if (ui === 'round-intro' || ui === 'reveal') window.scrollTo(0, 0);
   }, [ui]);
@@ -214,6 +233,8 @@ function App() {
   }, [ui, battle, firstPick, level, settings.animationSpeed]);
 
   const startGame = async () => {
+    const battleConfig = isGuest(savedSession()) ? account?.battleConfig : liveBattleConfig;
+    if (!account || !battleConfig) { setDeckError('対戦設定を確認中です。読み込みが終わってから始めてください。'); return; }
     const usingOwned = mode === 'cpu' && deckMode === 'owned';
     if (usingOwned ? ownedSelection.length !== 4 : selectedDeckIds.length !== 4) return;
     const selectedIds = usingOwned ? ownedSelection.map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '') : selectedDeckIds;
@@ -236,8 +257,8 @@ function App() {
       const owned = account!.ownedCards.find((card) => card.ownedId === id)!;
       return { cardId: owned.cardId, ownedId: id, trainLevel: owned.trainLevel };
     }) : selectedDeckIds;
-    const cpuConfig = account?.battleConfig?.find((deck) => deck.deckId === `cpu-${level}`);
-    const sampleConfig = account?.battleConfig?.find((deck) => deck.deckId === 'sample');
+    const cpuConfig = battleConfig.find((deck) => deck.deckId === `cpu-${level}`);
+    const sampleConfig = battleConfig.find((deck) => deck.deckId === 'sample');
     const cpuPool = cpuConfig?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
     const cpuDeck = mode === 'cpu' ? chooseCpuDeck(ownEntries.map((entry) => typeof entry === 'string' ? entry : entry.cardId), level, seed.current, cpuPool && cpuPool.length >= 4 ? cpuPool : undefined) : null;
     if (cpuDeck) seed.current = cpuDeck.seed;
@@ -378,7 +399,10 @@ function App() {
   const current = battle?.players[turn];
   const opponent = battle?.players[turn === 0 ? 1 : 0];
   const log = battle?.history.at(-1);
-  const sampleCards = availableCards.filter((card) => !account?.battleConfig?.length || account.battleConfig.find((deck) => deck.deckId === 'sample')?.cardIds.includes(card.cardId));
+  const activeSession = savedSession();
+  const battleConfig = activeSession && isGuest(activeSession) ? account?.battleConfig : liveBattleConfig;
+  const samplePool = battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds ?? [];
+  const sampleCards = availableCards.filter((card) => samplePool.includes(card.cardId));
   const reveal = battle?.reveal;
   const revealActors = battle && reveal ? effectOrder(reveal.winner, reveal.cards, battle.players.map((player) => player.life), battle.seed, battle.round) : [];
   const currentRequest = battle ? choiceRequests(battle)[choiceStep] : undefined;
@@ -403,7 +427,9 @@ function App() {
           </div>
           {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={`${import.meta.env.BASE_URL}images/cpu/lv${value}.webp`} alt="" />Lv{value}<small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
           {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログイン後に選べます。</small>}</div>}
-          <div className="button-row"><button type="button" className="button button--primary" onClick={() => setScreen('deck')}>カードセットを見る <span aria-hidden="true">→</span></button></div>
+          {battleConfigError && <p className="portal-error" role="alert">{battleConfigError} <button type="button" className="button button--ghost" onClick={() => { setLiveBattleConfig(null); setConfigReload((current) => current + 1); }}>再読み込み</button></p>}
+          {!activeSession && <p>対戦するには、ホームで学校アカウントまたはゲストとしてログインしてください。</p>}
+          <div className="button-row">{!activeSession ? <a className="button button--primary" href="#/home">ホームでログイン</a> : <button type="button" className="button button--primary" disabled={!account || !battleConfig} onClick={() => setScreen('deck')}>{!account || !battleConfig ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />対戦設定を読み込み中…</> : <>カードセットを見る <span aria-hidden="true">→</span></>}</button>}</div>
         </section>
       </>}
 
