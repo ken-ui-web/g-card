@@ -401,7 +401,7 @@ function gcLogin_(payload) {
   const email = gcValidateGoogle_(payload.idToken, settings);
   const admin = gcAdminEmails_(settings).indexOf(email) >= 0;
   let record = gcFindUser_(email);
-  if (!record && !admin) gcError_('NOT_IN_ROSTER', 'このアカウントは登録されていません。先生に伝えてください');
+  if (!record && !admin) gcError_('NOT_IN_ROSTER', 'Googleで選択された ' + email + ' は名簿に登録されていません。先生に伝えてください');
   if (!record && admin) {
     record = gcWithLock_(function () {
       const existing = gcFindUser_(email);
