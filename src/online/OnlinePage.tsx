@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
 import { Card } from '../components/Card';
+import { BrandIdentity } from '../components/BrandIdentity';
 import { OnlineBattleBoard } from './OnlineBattleBoard';
 import { LoadingState } from '../components/LoadingState';
 import { SoundToggle } from '../components/SoundToggle';
@@ -432,8 +433,8 @@ export function OnlinePage() {
     window.history.replaceState(null, '', '#/online');
   };
 
-  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong><SoundToggle /></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1', room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2']} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
-  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><a href="#/home" className="text-link">← ホーム</a><strong>オンライン対戦</strong><div className="online-header-actions"><SoundToggle /><a href="#/ranking" className="text-link">ランキング</a></div></header>
+  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><SoundToggle /></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1', room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2']} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
+  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><div className="online-header-actions"><SoundToggle /><a href="#/ranking" className="text-link">ランキング</a></div></header>
     <section className="panel online-panel"><p className="eyebrow">ONLINE BATTLE</p><h1>友達とカードで対戦</h1>
       {teacherTestMode && !roomId && <p role="status">管理者テストモードです。同じ学校アカウントを別端末でも開いて対戦できます。Gポイントは増減しません。</p>}
       {account?.profile.role === 'admin' && account.online?.enabled && !roomId && <p role="alert">オンライン対戦を生徒に公開中です。同じ学校アカウントで試す場合は、管理者設定の「オンライン対戦を受付」を0にして再読み込みしてください。</p>}

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { callApi, isGuest, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard } from './api';
+import { callApi, isGuest, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard, type PackMaster } from './api';
 import { availableCards } from '../data/cards';
 import { compareCards } from '../data/cardOrder';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
+import { formatPackChance, packContents } from './packContents';
 
 type Page = 'shop' | 'training' | 'collection';
-type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; icon?: PortalIconName; missions?: EconomyState['completedMissions'] };
+type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; icon?: PortalIconName; acquired?: CardMaster[]; missions?: EconomyState['completedMissions'] };
 type FeedbackPlan = { working: string; workingImage?: string; done: (result: EconomyState) => Omit<Feedback, 'phase' | 'balance' | 'missions'> };
 const cardImage = (card: CardMaster) => `${import.meta.env.BASE_URL}images/cards/${card.image}?v=${import.meta.env.VITE_BUILD_VERSION || 'dev'}`;
 const cardSizeKey = 'g-card-card-size-v1';
@@ -33,6 +34,26 @@ function CardTile({ card, owned, children, className = '' }: { card: CardMaster;
   return <article className={`economy-card panel economy-card--${card.rarity.toLowerCase()} ${className}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div><h3>{card.name} <span className={`economy-rarity economy-rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</span></h3><p>{card.text}</p>{owned && card.type === 'rock' && <p>筋トレ +{owned.trainLevel}{baseDamage !== undefined ? ` · 最終ダメージ ${baseDamage + (owned.trainLevel + card.trainingBonus) * card.trainingMultiplier}` : ''}</p>}{children}</div></article>;
 }
 
+function PackContentsDialog({ pack, cards, onClose }: { pack: PackMaster; cards: CardMaster[]; onClose: () => void }) {
+  return createPortal(<div className="economy-feedback-backdrop"><div className="economy-pack-dialog panel" role="dialog" aria-modal="true" aria-label={`${pack.name}の収録カード`}>
+    <p className="eyebrow">PACK CONTENTS</p><h2>{pack.name}の収録カード</h2>
+    <p>確率は通常の抽選1回あたりです。同じレア度の収録カードから均等に選ばれます。</p>
+    {pack.pityCount > 0 && <p>天井に達したパックの1枚目はSR以上確定となり、下記の確率とは異なります。</p>}
+    <div className="economy-pack-contents">{packContents(pack, cards).map(({ card, chance }) => <div className="economy-pack-content" key={card.cardId}>
+      <img src={cardImage(card)} alt="" /><div><strong>{card.name} <span className={`economy-rarity economy-rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</span></strong><p>{card.text}</p></div><b>{formatPackChance(chance)}</b>
+    </div>)}</div>
+    <button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button>
+  </div></div>, document.body);
+}
+
+function PackConfirmDialog({ pack, balance, onCancel, onConfirm }: { pack: PackMaster; balance: number; onCancel: () => void; onConfirm: () => void }) {
+  return createPortal(<div className="economy-feedback-backdrop"><div className="economy-pack-confirm panel" role="dialog" aria-modal="true" aria-label="パック購入の確認">
+    <p className="eyebrow">CONFIRM PURCHASE</p><h2>本当に開けますか？</h2>
+    <p>{pack.name}を{pack.price}Gで購入します。</p><p>購入後の所持：{(balance - pack.price).toLocaleString()}G</p>
+    <div className="button-row"><button type="button" className="button button--ghost" autoFocus onClick={onCancel}>やめる</button><button type="button" className="button button--primary" onClick={onConfirm}>購入して開ける</button></div>
+  </div></div>, document.body);
+}
+
 export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedback; onClose: () => void }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -41,15 +62,18 @@ export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedba
     const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, [feedback.phase]);
-  return createPortal(<div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
-    {feedback.phase === 'working' && feedback.image ? <img className="economy-feedback__pack" src={feedback.image} alt="" /> : feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
+  return createPortal(<div className="economy-feedback-backdrop"><div className={`economy-feedback panel economy-feedback--${feedback.phase}${feedback.acquired?.length ? ' economy-feedback--pack-result' : ''}`} role="dialog" aria-modal="true" aria-label={feedback.title}>
+    {feedback.phase === 'working' && feedback.image ? <img className="economy-feedback__pack" src={feedback.image} alt="" /> : feedback.phase === 'working' ? <div className="economy-feedback__spinner" aria-hidden="true"><PortalIcon name="coin" /></div> : feedback.acquired?.length ? <div className="economy-feedback__cards">{feedback.acquired.map((card, index) => <figure className="economy-feedback__acquired" style={{ animationDelay: `${index * 180}ms` }} key={`${card.cardId}-${index}`}><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><figcaption>{card.name} <span className={`economy-rarity economy-rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</span></figcaption></figure>)}</div> : feedback.image ? <img className="economy-feedback__card" src={feedback.image} alt="" /> : <div className="economy-feedback__symbol"><PortalIcon name={feedback.icon ?? 'shop'} /></div>}
     <p className="eyebrow">{feedback.phase === 'working' ? 'PROCESSING' : feedback.phase === 'done' ? 'COMPLETE' : 'TRY AGAIN'}</p><h2>{feedback.title}</h2>
-    {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : '記録を保存しています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>閉じる</button></>}
+    {feedback.phase === 'working' ? <p role="status">{seconds >= 5 ? `保存に少し時間がかかっています（${seconds}秒）。画面を閉じずにお待ちください。` : '記録を保存しています'}</p> : <><p>{feedback.detail}</p>{feedback.balance !== undefined && <p className="economy-feedback__balance">所持 {feedback.balance.toLocaleString()} G</p>}{feedback.missions?.map((mission) => <p className="economy-feedback__mission" key={mission.label}>ミッション達成：{mission.label} ＋{mission.reward}G</p>)}<button type="button" className="button button--primary" autoFocus onClick={onClose}>{feedback.acquired?.length ? '確認して閉じる' : '閉じる'}</button></>}
   </div></div>, document.body);
 }
 
 export function EconomyPages({ page, session, data, onState, onRefreshShop }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void; onRefreshShop?: () => Promise<unknown> }) {
   const [collectionTab, setCollectionTab] = useState<'deck' | 'catalog'>('deck');
+  const [shopTab, setShopTab] = useState<'single' | 'pack'>('single');
+  const [previewPack, setPreviewPack] = useState<PackMaster | null>(null);
+  const [pendingPack, setPendingPack] = useState<PackMaster | null>(null);
   const [compactCards, setCompactCards] = useState(() => { try { return localStorage.getItem(cardSizeKey) === 'compact'; } catch { return false; } });
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -60,9 +84,6 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
     return valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId);
   });
-  const [opened, setOpened] = useState<string[]>([]);
-  const [showOpened, setShowOpened] = useState(false);
-  const [opening, setOpening] = useState(false);
   const [pendingTrain, setPendingTrain] = useState<{ kind: 'muscle' | 'run'; ownedId?: string; count: number }[]>([]);
   const trainTimer = useRef<number | null>(null);
   const pendingRef = useRef<typeof pendingTrain>([]);
@@ -90,6 +111,20 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       return result;
     } catch (error) { const detail = (error as Error).message; setMessage(detail); setFeedback({ phase: 'error', title: '処理できませんでした', detail }); return null; }
     finally { busyRef.current = false; setBusy(false); }
+  };
+
+  const confirmOpenPack = (pack: PackMaster) => {
+    setPendingPack(null);
+    playSfx('pack');
+    void transact('openPack', { packId: pack.packId }, () => 'パックを開けました！', {
+      working: 'パックを開封中…',
+      workingImage: `${import.meta.env.BASE_URL}images/packs/normal.webp`,
+      done: (result) => ({
+        title: 'パック開封！',
+        detail: `${result.acquired?.length ?? 0}枚のカードを手に入れました。`,
+        acquired: (result.acquired ?? []).map((item) => cardById(item.cardId)).filter((card): card is CardMaster => Boolean(card)),
+      }),
+    });
   };
 
   const flushTraining = async () => {
@@ -120,12 +155,39 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     trainTimer.current = window.setTimeout(() => { void flushTraining(); }, 800);
   };
 
-  const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => { if (feedback.phase === 'done' && opened.length) setShowOpened(true); setFeedback(null); }} />;
+  const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => setFeedback(null)} />;
 
-  if (page === 'shop') return <>{feedbackOverlay}<section className={pageClass}><p className="eyebrow">CARD SHOP</p><h1>カード購入</h1><CardSizeToggle compact={compactCards} onToggle={toggleCardSize} /><p className="economy-balance">所持 {data.profile.gPoint.toLocaleString()} G</p>
-    <h2>カードを選んで買う</h2><div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && card.image).sort(compareCards).map((card) => <CardTile key={card.cardId} card={card}><p className="economy-price">{card.shopPrice} G</p><button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button></CardTile>)}</div>
-    <h2>パックを開ける</h2><div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}><img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" /><h3>{pack.name}</h3><p>{pack.cardsPerPack}枚入り · {pack.price}G</p><p>排出率：{Object.entries(pack.rarityRates).map(([rarity, rate]) => `${rarity} ${rate}%`).join('／')}</p><p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>{pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}<button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < pack.price || data.daily.packsBought >= data.economy.packDailyLimit} onClick={() => { playSfx('pack'); setOpening(true); setOpened([]); setShowOpened(false); void transact('openPack', { packId: pack.packId }, (result) => { setOpened((result.acquired ?? []).map((item) => item.cardId)); return 'パックを開けました！'; }, { working: 'パックを開封中…', workingImage: `${import.meta.env.BASE_URL}images/packs/normal.webp`, done: (result) => ({ title: 'パック開封！', detail: `${result.acquired?.length ?? 0}枚のカードを手に入れました。閉じるとカードが表示されます。`, icon: 'shop' }) }).finally(() => setOpening(false)); }}>{opening ? '開封中…' : 'パックを開ける'}</button></article>)}</div>{showOpened && opened.length > 0 && <div className="economy-opened panel" role="status"><h2>出たカード</h2><div className="economy-grid">{opened.map((id, index) => { const card = cardById(id); return card ? <div className="economy-opened-card" style={{ animationDelay: `${index * 220}ms` }} key={`${id}-${index}`}><CardTile card={card} /></div> : null; })}</div></div>}
-    {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
+  if (page === 'shop') return <>
+    {feedbackOverlay}
+    {previewPack && <PackContentsDialog pack={previewPack} cards={data.cardMaster} onClose={() => setPreviewPack(null)} />}
+    {pendingPack && <PackConfirmDialog pack={pendingPack} balance={data.profile.gPoint} onCancel={() => setPendingPack(null)} onConfirm={() => confirmOpenPack(pendingPack)} />}
+    <section className={pageClass}>
+      <p className="eyebrow">CARD SHOP</p><h1>カード購入</h1>
+      <CardSizeToggle compact={compactCards} onToggle={toggleCardSize} />
+      <p className="economy-balance">所持 {data.profile.gPoint.toLocaleString()} G</p>
+      <div className="collection-tabs shop-tabs" role="tablist" aria-label="カード購入の方法">
+        <button type="button" role="tab" aria-selected={shopTab === 'single'} onClick={() => setShopTab('single')}>カードを選んで買う</button>
+        <button type="button" role="tab" aria-selected={shopTab === 'pack'} onClick={() => setShopTab('pack')}>パックを開ける</button>
+      </div>
+      {shopTab === 'single' ? <div role="tabpanel">
+        <div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && card.image).sort(compareCards).map((card) => <CardTile key={card.cardId} card={card}>
+          <p className="economy-price">{card.shopPrice} G</p>
+          <button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button>
+        </CardTile>)}</div>
+      </div> : <div role="tabpanel">
+        <div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}>
+          <img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" />
+          <h2>{pack.name}</h2><p>{pack.cardsPerPack}枚入り · {pack.price}G</p>
+          <p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>
+          {pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}
+          <button className="button button--ghost" type="button" onClick={() => setPreviewPack(pack)}>収録カード</button>
+          <button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < pack.price || data.daily.packsBought >= data.economy.packDailyLimit} onClick={() => setPendingPack(pack)}>パックを開ける</button>
+        </article>)}</div>
+      </div>}
+      {message && <p className="economy-message" role="status">{message}</p>}
+      <a className="button button--ghost" href="#/home">ホームへ戻る</a>
+    </section>
+  </>;
 
   if (page === 'training') {
     const projected = pendingCost(data, pendingTrain);

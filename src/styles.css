@@ -16,8 +16,10 @@ img{user-select:none;-webkit-user-drag:none}
 .app-header,.hero,.mode-panel,.deck-page,.battle-page,.result-page,.tuning-page,.app-footer{position:relative;width:min(1180px,calc(100% - 48px));margin-inline:auto}
 .app-header{height:86px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #ffffff28}
 .app-header nav{display:flex;align-items:center;gap:25px}
-.brand{display:flex;align-items:center;gap:12px;border:0;background:none;color:#fff;font:20px 'Dela Gothic One',sans-serif;padding:0}
-.brand span{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;transform:rotate(-8deg);background:#ffd34b;color:#11203d;box-shadow:0 5px 0 #9c6711;font:26px 'Dela Gothic One',sans-serif}
+.brand-identity{display:inline-flex;align-items:center;gap:10px;min-width:0;border:0;background:none;color:#fff;padding:0;text-align:left}
+.brand-identity img{display:block;width:155px;max-height:64px;object-fit:contain;object-position:left center;flex:none}
+.brand-identity__details{display:flex;flex-direction:column;gap:3px;max-width:240px;color:#d9e4f7;font-size:11px;line-height:1.45}
+.brand-identity__details small{color:#ffdf77;font-size:11px;font-weight:900;white-space:nowrap}
 .text-link{border:0;background:none;color:#d3e0f8;font-weight:800;font-size:14px;padding:10px 0}
 .text-link:hover{color:#ffdc6f}
 .sound-toggle{flex:none;border:1px solid #ffdc6f7d;border-radius:999px;background:#ffdc6f1a;color:#ffe594;padding:7px 11px;font-size:12px;font-weight:900;white-space:nowrap}
@@ -36,7 +38,6 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 
 .portal-shell{padding-bottom:24px}
 .portal-shell--illustrated{background-image:linear-gradient(180deg,#071127b8 0%,#07142ca8 48%,#071127e0 100%),var(--portal-bg);background-position:center;background-size:cover;background-repeat:no-repeat}
-.portal-brand img{display:block;width:155px;max-height:64px;object-fit:contain;object-position:left center}
 .portal-header nav{flex-wrap:wrap;justify-content:flex-end;gap:10px 22px}
 .portal-panel,.portal-overview,.portal-dashboard,.portal-menu,.portal-error{position:relative;width:min(1080px,calc(100% - 48px));margin-inline:auto}
 .portal-panel{max-width:680px;margin-top:52px;margin-bottom:60px;padding:clamp(26px,5vw,55px)}
@@ -112,6 +113,20 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .economy-price{color:#ffda6e!important;font-weight:800}
 .economy-sell{display:block;margin:10px auto 0;border:0;background:transparent;color:#c9d7ee;text-decoration:underline}
 .economy-pack,.economy-run,.economy-opened{padding:22px}
+.shop-tabs{flex-wrap:wrap}
+.shop-tabs button{flex:1 1 210px}
+.economy-pack-dialog,.economy-pack-confirm{width:min(100%,760px);max-height:calc(100dvh - 40px);overflow:auto;padding:25px;border-color:#ffda6b;box-shadow:0 25px 80px #000a}
+.economy-pack-dialog h2,.economy-pack-confirm h2{margin:4px 0 12px;color:#ffe181;font:clamp(23px,4vw,31px)/1.35 'Dela Gothic One',sans-serif}
+.economy-pack-dialog>p:not(.eyebrow),.economy-pack-confirm>p:not(.eyebrow){color:#dce8fa;line-height:1.6}
+.economy-pack-dialog>.button{display:block;margin:18px auto 0;min-width:150px}
+.economy-pack-contents{display:grid;gap:9px;max-height:55dvh;overflow:auto;padding:4px}
+.economy-pack-content{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px;border:1px solid #ffffff2f;border-radius:12px;background:#0d1937}
+.economy-pack-content img{width:52px;aspect-ratio:1024/1365;object-fit:contain}
+.economy-pack-content strong{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.economy-pack-content p{margin:3px 0 0;color:#ccdaee;font-size:13px;line-height:1.45}
+.economy-pack-content b{color:#ffe083;white-space:nowrap}
+.economy-pack-confirm{width:min(100%,470px);text-align:center}
+.economy-pack-confirm .button-row{justify-content:center}
 .economy-pack__image{display:block;width:min(100%,170px);height:auto;margin:0 auto 16px;filter:drop-shadow(0 12px 13px #020717b8)}
 .economy-run{display:flex;align-items:center;gap:20px;overflow:hidden}
 .economy-run>div{position:relative;flex:1}
@@ -135,6 +150,11 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 @keyframes economy-queue-progress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .economy-feedback-backdrop{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#050b1bdb;backdrop-filter:blur(6px)}
 .economy-feedback{width:min(100%,470px);max-height:calc(100dvh - 40px);overflow:auto;padding:27px 24px;text-align:center;border-color:#ffd86b;box-shadow:0 25px 80px #000a,0 0 50px #ffcf4638;animation:economy-feedback-in .45s cubic-bezier(.2,.9,.3,1.15) both}
+.economy-feedback--pack-result{width:min(100%,720px)}
+.economy-feedback__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;margin:8px 0 18px}
+.economy-feedback__acquired{margin:0;opacity:0;animation:economy-card-reveal .65s ease-out forwards}
+.economy-feedback__acquired img{display:block;width:min(100%,155px);aspect-ratio:1024/1365;object-fit:contain;margin:auto;filter:drop-shadow(0 10px 14px #0008)}
+.economy-feedback__acquired figcaption{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px;font-weight:900;font-size:14px}
 .economy-feedback--error{border-color:#ff8e91;box-shadow:0 25px 80px #000a,0 0 40px #fa596231}
 .economy-feedback .eyebrow{margin:12px 0 8px;color:#ffd86b}
 .economy-feedback h2{font:clamp(23px,4vw,32px)/1.35 'Dela Gothic One',sans-serif;color:#ffdf79;margin:0 0 12px}
@@ -237,7 +257,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .online-reveal-grid .online-flip-card .card{width:100%}
 .online-presentation .reveal-hint{margin:12px 0}
 .ranking-panel ol{list-style:none;padding:0}.ranking-panel li{display:grid;grid-template-columns:65px 1fr 70px;gap:10px;padding:10px;border-bottom:1px solid #ffffff36}.ranking-panel li.is-self{background:#ffdc6b24;color:#ffe18a}
-@media(max-width:760px){.portal-dashboard{grid-template-columns:1fr}.portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-overview{align-items:flex-start;flex-direction:column}.portal-header{height:auto;min-height:86px;padding-block:12px}.portal-brand img{width:125px}}
+@media(max-width:760px){.portal-dashboard{grid-template-columns:1fr}.portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-overview{align-items:flex-start;flex-direction:column}.portal-header{height:auto;min-height:86px;padding-block:12px}.brand-identity img{width:125px}}
 
 .card{aspect-ratio:1024/1365;position:relative;flex:none;container-type:inline-size;width:100%;border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 13px #030713a8);touch-action:manipulation;-webkit-touch-callout:none}
 .card img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
@@ -412,6 +432,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 @media(max-width:900px){.hero{grid-template-columns:1fr;min-height:0;padding:38px 0 22px}.hero__cards{height:250px}.hero__cards .card{width:130px;top:0}.deck-grid,.select-grid,.back-row,.target-grid{gap:9px}.deck-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.selection-board{padding:22px}.select-card{padding:8px}.select-card>span{min-height:54px}}
 @media(max-width:650px){.app-header,.hero,.mode-panel,.deck-page,.battle-page,.result-page,.tuning-page,.app-footer{width:min(100% - 28px,480px)}.app-header{height:72px}.brand{font-size:16px}.brand span{width:39px;height:39px;font-size:21px}.app-header nav{gap:12px}.text-link{font-size:11px}.hero{padding:35px 0 14px}.hero h1{font-size:30px}.hero__copy>p:last-child{font-size:14px}.hero__cards{height:207px}.hero__cards .card{width:100px}.mode-panel,.deck-page,.tuning-page,.result-page{padding:20px 16px}.mode-grid,.name-grid,.life-grid,.result-life,.tuning-grid{grid-template-columns:1fr}.mode-option{min-height:105px;padding:16px}.deck-grid,.select-grid,.back-row,.target-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.deck-card .card{max-width:145px}.selection-board{padding:18px 12px}.back-card .card{max-width:100px}.select-card .card{max-width:140px}.select-card>span{min-height:0}.final-open{gap:15px;padding:8px;align-items:flex-start}.final-open .card{max-width:125px}.final-open h2{font-size:20px}.final-open p:not(.eyebrow){font-size:13px}.round-intro{min-height:350px}.reveal-panel,.summary-panel,.target-panel{padding:22px 12px}.flip-card{width:min(155px,39vw)}.reveal-entry__type{font-size:13px;padding:6px 9px}.summary-cards .card{width:min(150px,38vw)!important}.battle-heading h1{font-size:22px}.history-list li{grid-template-columns:37px 1fr auto;gap:8px}.history-list small{grid-column:2/-1;text-align:left}.button-row .button{flex:1}.app-footer{padding:18px 0 26px}}
 @media(max-width:650px){.app-header__menu,.app-header__tuning{display:none}.brand{white-space:nowrap}.level-picker button{min-width:calc(33.333% - 7px);padding:6px}.level-picker button img{width:min(21vw,82px);height:88px}.economy-run{gap:8px;padding:15px}.economy-training-art--run{width:32vw;height:125px}.economy-training-heading .economy-training-art{width:105px;height:110px}.sound-toggle{font-size:10px;padding:6px 8px}.portal-header nav{gap:5px 10px}}
+@media(max-width:650px){.app-header{height:auto;min-height:72px;flex-wrap:wrap;padding-block:10px}.app-header nav{margin-left:auto;gap:10px}.brand-identity img{width:118px}.brand-identity__details{max-width:158px;font-size:10px}.brand-identity__details small{font-size:10px}}
+@media(max-width:520px){.economy-feedback__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.economy-feedback__acquired:last-child:nth-child(odd){grid-column:1/-1;justify-self:center;max-width:140px}.economy-pack-content{grid-template-columns:44px minmax(0,1fr);gap:8px}.economy-pack-content img{width:44px}.economy-pack-content b{grid-column:2;justify-self:start}.economy-pack-dialog,.economy-pack-confirm{padding:19px 15px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 .card__unknown {
   display: grid;

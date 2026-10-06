@@ -3,6 +3,7 @@ import { Card } from './components/Card';
 import { LoadingState } from './components/LoadingState';
 import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
+import { BrandIdentity } from './components/BrandIdentity';
 import { playSfx } from './audio/sfx';
 import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, typeLabels } from './data/cards';
 import { beginRound, choiceRequests, createBattle, effectOrder, finishRound, shownDamage, requiredPick, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundChoice, type RoundLog } from './game/battle';
@@ -89,7 +90,7 @@ function TuningPage({ settings, onChange }: { settings: TuningSettings; onChange
   };
   return (
     <main className="app-shell">
-      <header className="app-header"><a className="brand" href="#/battle"><span>G</span><strong>Gカード</strong></a><a className="text-link" href="#/battle">対戦メニューへ</a></header>
+      <header className="app-header"><BrandIdentity href="#/battle" /><a className="text-link" href="#/battle">対戦メニューへ</a></header>
       <section className="tuning-page panel">
         <p className="eyebrow">DEVELOPMENT SETTINGS</p>
         <h1>試作用の調整</h1>
@@ -124,7 +125,7 @@ function App() {
   const [names, setNames] = useState<[string, string]>(['あなた', 'CPU Lv1']);
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(defaultDeckIds);
-  const [deckMode, setDeckMode] = useState<'sample' | 'owned'>('sample');
+  const [deckMode, setDeckMode] = useState<'sample' | 'owned'>('owned');
   const [account, setAccount] = useState<BootstrapData | null>(null);
   const [liveBattleConfig, setLiveBattleConfig] = useState<BattleDeckConfig[] | null>(null);
   const [battleConfigError, setBattleConfigError] = useState('');
@@ -157,10 +158,12 @@ function App() {
   useEffect(() => {
     const session = savedSession();
     if (hash !== '#/battle' || !session || (!portalConfigured && !isGuest(session))) return;
+    setDeckMode('owned');
     let cancelled = false;
     const applyAccount = (data: BootstrapData) => {
       setAccount(data);
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
+      if (!data.economy?.enabled || playable.length < 4) setDeckMode('sample');
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
       setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
     };
@@ -404,13 +407,13 @@ function App() {
   return (
     <main className={`app-shell${screen === 'battle' || screen === 'result' ? ' app-shell--battle' : ''}`} style={screen === 'battle' || screen === 'result' ? battleBackgroundStyle : undefined}>
       <header className="app-header">
-        <button type="button" className="brand brand--button" onClick={() => setScreen('menu')}><span>G</span><strong>Gカード</strong></button>
+        <BrandIdentity onClick={() => setScreen('menu')} />
         <nav><a className="text-link" href="#/home">ホーム</a><button type="button" className="text-link app-header__menu" onClick={() => setScreen('menu')}>対戦メニュー</button><SoundToggle /></nav>
       </header>
 
       {screen === 'menu' && <>
         <section className="hero">
-          <div className="hero__copy"><p className="eyebrow">G CARD BATTLE</p><h1>見せるのは手の形。<br /><em>勝負はカードの中身。</em></h1><p>サンプルカードか、自分が持っているカードから4枚を選んで対戦できます。</p></div>
+          <div className="hero__copy"><p className="eyebrow">対戦のルール</p><h1>4枚で対戦。<br /><em>ライフで決着。</em></h1><p>1枚ずつカードを出し、グーはチョキ、チョキはパー、パーはグーに勝ちます。勝ったカードの効果が発動。相手のライフを0にするか、4ラウンド後にライフが多い方の勝ちです。</p></div>
           <div className="hero__cards">{availableCards.filter((card) => samplePool.includes(card.cardId) && selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
         </section>
         <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦はログイン中、勝利報酬を受け取れます。ゲストの記録はこの端末に保存されます。</p></div></div>

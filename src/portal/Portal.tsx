@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { SoundToggle } from '../components/SoundToggle';
+import { BrandIdentity } from '../components/BrandIdentity';
 import { LoadingState } from '../components/LoadingState';
 import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState, type PublicShopConfig } from './api';
 import { clearBootstrapCache, isBootstrapFresh, isBootstrapFromToday, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './bootstrapCache';
@@ -76,7 +77,6 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   const [refreshing, setRefreshing] = useState(false);
   const [guestShopConfig, setGuestShopConfig] = useState<PublicShopConfig | null>(null);
   const [guestShopError, setGuestShopError] = useState('');
-  const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
   const economyReady = Boolean(bootstrap?.economy?.enabled && bootstrap.packs && bootstrap.battleConfig);
   const learningReady = Boolean(bootstrap?.learning?.enabled);
   const dailyCurrent = !session || isGuest(session) || isBootstrapFromToday(readBootstrapCache(session));
@@ -189,7 +189,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   const illustratedStyle = backgroundName ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${backgroundName}.webp")` } as CSSProperties : undefined;
 
   return <main className={`app-shell portal-shell${illustratedPage ? ' portal-shell--illustrated' : ''}`} style={illustratedStyle}>
-    <header className="app-header portal-header"><a href="#/home" className="portal-brand"><img src={logoUrl} alt="Gカード" /></a><nav><a href="#/battle" className="text-link">対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}<SoundToggle />{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
+    <header className="app-header portal-header"><BrandIdentity /><nav><a href="#/battle" className="text-link">対戦</a>{bootstrap?.profile.role === 'admin' && <a href="#/admin" className="text-link">管理者</a>}<SoundToggle />{session && <button type="button" className="text-link" onClick={logout}>ログアウト</button>}</nav></header>
     {refreshing && bootstrap && <p className="portal-sync" role="status"><span className="portal-sync__spinner" />前回の記録を表示中 · 最新の記録を確認中…</p>}
     {!session ? <section className="portal-panel panel"><p className="eyebrow">WELCOME TO G CARD</p><h1>Gカードを始める</h1>{busy ? <><LoadingState text="学校アカウントを確認中" /><p>初回は学校の記録を準備するため、少し時間がかかることがあります。</p></> : <>{portalConfigured && <><p>学校アカウントでログインすると、記録を学校に保存できます。</p><GoogleButton onCredential={onCredential} /></>}<div className="guest-entry"><button type="button" className="button button--ghost" onClick={onGuest}>ゲストとして遊ぶ</button><p>ゲストのカード・Gポイント・対戦記録はこの端末だけに保存されます。端末のデータを消すと復元できません。</p></div></>}</section>
         : needsNickname && isGuest(session) ? <section className="portal-panel panel"><p className="eyebrow">FIRST STEP</p><h1>ニックネームを決めよう</h1><p>ゲスト対戦で表示する名前です。8文字以内で入力してください。</p><form onSubmit={submitNickname} className="portal-form"><label>ニックネーム<input value={nickname} maxLength={8} disabled={busy} onChange={(event) => setNickname(event.target.value)} required /></label><button className="button button--primary" disabled={busy || !nickname.trim()}>{busy && <span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />}{busy ? '保存中…' : '決定する'}</button></form>{busy && <LoadingState text="ゲストのカードを準備中" />}</section>
@@ -207,6 +207,6 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
                 </section>
                 <section className="portal-menu">{menuItems.filter((item) => !isGuest(session) || !['tests', 'reflections', 'online', 'ranking'].includes(item.key)).map((item) => { const href = item.key === 'tests' && learningReady ? '#/tests' : item.key === 'reflections' && learningReady ? '#/reflections' : item.key === 'battle' ? '#/battle' : item.key === 'online' && bootstrap.online?.enabled ? '#/online' : item.key === 'ranking' && bootstrap.online?.rankingEnabled ? '#/ranking' : economyReady && item.key === 'deck' ? '#/collection' : economyReady && item.key === 'shop' ? '#/shop' : economyReady && item.key === 'training' ? '#/training' : null; return href ? <a key={item.key} href={href} className="portal-menu-item panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong>{item.key === 'tests' && bootstrap.unreadTests > 0 && <small>{bootstrap.unreadTests}件の未受験</small>}</a> : <div key={item.key} className="portal-menu-item portal-menu-item--pending panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong><small>準備中</small></div>; })}</section></>}
     {error && <p className="portal-error" role="alert">{error}</p>}
-    <footer className="app-footer">Gカード · {session ? isGuest(session) ? 'ゲスト' : '学校アカウント' : '未ログイン'} · ver1.1 · 最終アップデート {import.meta.env.VITE_BUILD_DATE || '10/4'}</footer>
+    <footer className="app-footer">Gカード · {session ? isGuest(session) ? 'ゲスト' : '学校アカウント' : '未ログイン'}</footer>
   </main>;
 }
