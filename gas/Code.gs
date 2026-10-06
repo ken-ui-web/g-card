@@ -849,7 +849,7 @@ function gcOpenPack_(token, payload, requestId) {
     const user = gcUserObject_(record);
     if (Number(user.gPoint || 0) < pack.price) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りません');
     const master = gcCardMaster_();
-    const pool = master.filter(function (card) { return card.active && card.inPack && pack.cardPool.indexOf(card.cardId) >= 0; });
+    const pool = master.filter(function (card) { return card.inPack && pack.cardPool.indexOf(card.cardId) >= 0; });
     const rates = Object.keys(pack.rarityRates).map(function (rarity) { return { rarity: rarity, rate: Number(pack.rarityRates[rarity]), cards: pool.filter(function (card) { return card.rarity === rarity; }) }; });
     if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 ||
         !rates.length || rates.some(function (item) { return !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0; }) ||
@@ -998,9 +998,9 @@ function gcAdminSavePack_(token, payload) {
       typeof payload.active !== 'boolean' || !Array.isArray(pool) || !pool.length || !rates || !Object.values(rawRates).every(function (value) { return Number.isFinite(Number(value)) && Number(value) >= 0; })) gcError_('BAD_REQUEST', 'パックの設定を確認してください');
   const master = gcCardMaster_();
   const keys = Object.keys(rates);
-  if (!keys.length || keys.some(function (rarity) { return ['N', 'R', 'SR', 'SSR'].indexOf(rarity) < 0 || !Number.isFinite(Number(rates[rarity])) || Number(rates[rarity]) <= 0 || !pool.some(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === rarity && card.active && card.inPack; }); }); }) ||
+  if (!keys.length || keys.some(function (rarity) { return ['N', 'R', 'SR', 'SSR'].indexOf(rarity) < 0 || !Number.isFinite(Number(rates[rarity])) || Number(rates[rarity]) <= 0 || !pool.some(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === rarity && card.inPack; }); }); }) ||
       Math.abs(keys.reduce(function (sum, key) { return sum + Number(rates[key]); }, 0) - 100) > .001 ||
-      pool.some(function (id) { return !master.some(function (card) { return card.cardId === id && card.active && card.inPack; }); }) ||
+      pool.some(function (id) { return !master.some(function (card) { return card.cardId === id && card.inPack; }); }) ||
       Number(payload.pityCount) > 0 && !keys.some(function (key) { return key === 'SR' || key === 'SSR'; })) gcError_('BAD_PACK', '排出率と収録カードのレア度を確認してください');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Packs');

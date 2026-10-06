@@ -45,4 +45,12 @@ describe('管理者の一括保存', () => {
     const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'decks');
     expect(validateEconomyChanges(draft, changes)).toBeNull();
   });
+  it('単品販売停止中のカードをパックに収録できる', () => {
+    const draft = structuredClone(saved);
+    draft.cards[0].active = false;
+    draft.cards[0].rarity = 'N';
+    draft.packs[0].rarityRates = { N: 100 };
+    const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'packs');
+    expect(validateEconomyChanges(draft, changes)).toBeNull();
+  });
 });

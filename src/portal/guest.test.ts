@@ -69,6 +69,16 @@ describe('ゲストの端末内保存', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('単品販売が停止したレアカードもパックから排出できる', () => {
+    guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
+    const raw = JSON.parse(storage.get('g-card-guest-v1')!) as { gPoint: number };
+    raw.gPoint = 500;
+    storage.set('g-card-guest-v1', JSON.stringify(raw));
+    installGuestShopConfig({ ...defaultShopConfig, cards: defaultShopConfig.cards.map((setting) => ({ ...setting, active: availableCards.find((card) => card.cardId === setting.cardId)?.rarity === 'N' })) });
+    const opened = guestAction('openPack', { packId: 'all-cards' }, crypto.randomUUID()) as EconomyState;
+    expect(opened.acquired).toHaveLength(3);
+  });
+
   it('管理者が販売停止したカードとパックを表示せず、ゲストの購入も拒否する', () => {
     guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
     installGuestShopConfig(restrictedShopConfig);

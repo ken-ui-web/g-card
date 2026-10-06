@@ -140,7 +140,7 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
   } else if (action === 'openPack') {
     const pack = activeShopConfig?.packs.find((item) => item.packId === payload.packId);
     if (!pack || !activeShopConfig || state.gPoint < pack.price || state.daily.packsBought >= activeShopConfig.packDailyLimit) throw new Error('パックを購入できません');
-    const pool = availableCards.filter((item) => pack.cardPool.includes(item.cardId) && activeShopConfig!.cards.some((setting) => setting.cardId === item.cardId && setting.active && setting.inPack));
+    const pool = availableCards.filter((item) => pack.cardPool.includes(item.cardId) && activeShopConfig!.cards.some((setting) => setting.cardId === item.cardId && setting.inPack));
     const rates = Object.entries(pack.rarityRates).map(([rarity, rate]) => ({ rarity, rate, cards: pool.filter((item) => item.rarity === rarity) }));
     if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 || !rates.length || rates.some((item) => !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0) || Math.abs(rates.reduce((sum, item) => sum + item.rate, 0) - 100) > .001 || pack.pityCount > 0 && !pool.some((item) => item.rarity === 'SR' || item.rarity === 'SSR')) throw new Error('パックの設定を先生に確認してください');
     const acquired: OwnedCard[] = [];
