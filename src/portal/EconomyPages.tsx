@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { callApi, isGuest, type BootstrapData, type CardMaster, type EconomyState, type OwnedCard, type PackMaster } from './api';
-import { availableCards } from '../data/cards';
+import { availableCards, type CardType, typeLabels } from '../data/cards';
 import { compareCards } from '../data/cardOrder';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
@@ -13,6 +13,7 @@ type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: s
 type FeedbackPlan = { working: string; workingImage?: string; workingKind?: 'pack' | 'card'; done: (result: EconomyState) => Omit<Feedback, 'phase' | 'balance' | 'missions'> };
 const cardImage = (card: CardMaster) => `${import.meta.env.BASE_URL}images/cards/${card.image}?v=${import.meta.env.VITE_BUILD_VERSION || 'dev'}`;
 const cardSizeKey = 'g-card-card-size-v1';
+const deckTypes: CardType[] = ['rock', 'scissors', 'paper'];
 const salePrice = (data: BootstrapData, owned: OwnedCard, card: CardMaster) => (data.economy.sellPrices?.[card.rarity] ?? 0) + (owned.trainingSpent ?? data.economy.muscleCostBase * owned.trainLevel + data.economy.muscleCostStep * owned.trainLevel * (owned.trainLevel - 1) / 2);
 
 function CardSizeToggle({ compact, onToggle }: { compact: boolean; onToggle: () => void }) {
@@ -72,6 +73,7 @@ export function EconomyFeedbackOverlay({ feedback, onClose }: { feedback: Feedba
 
 export function EconomyPages({ page, session, data, onState, onRefreshShop }: { page: Page; session: string; data: BootstrapData; onState: (state: EconomyState) => void; onRefreshShop?: () => Promise<unknown> }) {
   const [collectionTab, setCollectionTab] = useState<'deck' | 'catalog'>('deck');
+  const [deckTypeTab, setDeckTypeTab] = useState<CardType>('rock');
   const [shopTab, setShopTab] = useState<'single' | 'pack'>('single');
   const [trainingTab, setTrainingTab] = useState<'muscle' | 'run'>('muscle');
   const [previewPack, setPreviewPack] = useState<PackMaster | null>(null);
@@ -81,10 +83,11 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
   const busyRef = useRef(false);
   const [message, setMessage] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [selected, setSelected] = useState<string[]>(() => {
+  const [selected, setSelected] = useState<(string | null)[]>(() => {
     const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
     const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
-    return valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId);
+    const initial = valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId);
+    return Array.from({ length: 4 }, (_, index) => initial[index] ?? null);
   });
   const [pendingTrain, setPendingTrain] = useState<{ kind: 'muscle' | 'run'; ownedId?: string; count: number }[]>([]);
   const trainTimer = useRef<number | null>(null);
@@ -95,6 +98,12 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
 
   useEffect(() => { pendingRef.current = pendingTrain; }, [pendingTrain]);
   useEffect(() => { if (page === 'training') setTrainingTab('muscle'); }, [page]);
+  useEffect(() => {
+    setSelected((current) => {
+      const next = current.map((id) => id && !data.ownedCards.some((owned) => owned.ownedId === id) ? null : id);
+      return next.every((id, index) => id === current[index]) ? current : next;
+    });
+  }, [data.ownedCards]);
   useEffect(() => () => { if (trainTimer.current !== null) { window.clearTimeout(trainTimer.current); void flushTraining(); } }, []);
 
   const transact = async (action: string, payload: Record<string, unknown>, success: (state: EconomyState) => string, plan?: FeedbackPlan) => {
@@ -211,12 +220,41 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       {pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }
 
-  const selectedSsr = selected.filter((id) => cardById(data.ownedCards.find((item) => item.ownedId === id)?.cardId ?? '')?.rarity === 'SSR').length;
-  const toggle = (ownedId: string) => setSelected((current) => current.includes(ownedId) ? current.filter((id) => id !== ownedId) : current.length < 4 && !(cardById(data.ownedCards.find((item) => item.ownedId === ownedId)?.cardId ?? '')?.rarity === 'SSR' && selectedSsr >= 1) ? [...current, ownedId] : current);
+  const selectedIds = selected.filter((id): id is string => id !== null);
+  const selectedSsr = selectedIds.filter((id) => cardById(data.ownedCards.find((item) => item.ownedId === id)?.cardId ?? '')?.rarity === 'SSR').length;
+  const addToDeck = (ownedId: string) => setSelected((current) => {
+    const emptyIndex = current.indexOf(null);
+    if (emptyIndex < 0 || current.includes(ownedId)) return current;
+    const card = cardById(data.ownedCards.find((item) => item.ownedId === ownedId)?.cardId ?? '');
+    if (!card || (card.rarity === 'SSR' && current.some((id) => cardById(data.ownedCards.find((item) => item.ownedId === id)?.cardId ?? '')?.rarity === 'SSR'))) return current;
+    const next = [...current];
+    next[emptyIndex] = ownedId;
+    return next;
+  });
   const ownedSorted = [...data.ownedCards].sort((a, b) => compareCards(cardById(a.cardId)!, cardById(b.cardId)!));
+  const candidates = ownedSorted.filter((owned) => cardById(owned.cardId)?.type === deckTypeTab && !selectedIds.includes(owned.ownedId));
   return <>{feedbackOverlay}<section className={pageClass}><p className="eyebrow">MY COLLECTION</p><h1>デッキ・図鑑</h1><CardSizeToggle compact={compactCards} onToggle={toggleCardSize} />
     <div className="collection-tabs" role="tablist" aria-label="デッキと図鑑"><button type="button" role="tab" aria-selected={collectionTab === 'deck'} onClick={() => setCollectionTab('deck')}>デッキ</button><button type="button" role="tab" aria-selected={collectionTab === 'catalog'} onClick={() => setCollectionTab('catalog')}>図鑑</button></div>
-    {collectionTab === 'deck' ? <div role="tabpanel"><p>所持カードから４枚選びます。SSRは1枚までです。同じ名前でも、所持カードごとに筋トレ値は異なります。</p><p className="economy-balance">選択中 {selected.length} / 4 枚</p><div className="economy-grid">{ownedSorted.map((owned) => { const card = cardById(owned.cardId); if (!card) return null; const playable = availableCards.some((item) => item.cardId === owned.cardId); return <CardTile key={owned.ownedId} card={card} owned={owned}><button type="button" className={`button ${selected.includes(owned.ownedId) ? 'button--primary' : 'button--ghost'}`} disabled={!playable || (!selected.includes(owned.ownedId) && (selected.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1))} onClick={() => toggle(owned.ownedId)}>{!playable ? '対戦対応待ち' : selected.includes(owned.ownedId) ? 'デッキから外す' : 'デッキに入れる'}</button><button type="button" className="economy-sell" disabled={busy || data.ownedCards.length <= 4} onClick={() => { if (owned.trainLevel > 0 && !window.confirm(`筋トレに使ったGも含めて${salePrice(data, owned, card)}Gで売却します。筋トレ値は失われます。よろしいですか？`)) return; void transact('sellCard', { ownedId: owned.ownedId }, (result) => `${card.name}を売却しました。所持 ${result.gPoint}G`, { working: `${card.name}を売却中…`, workingImage: cardImage(card), workingKind: 'card', done: () => ({ title: '売却完了！', detail: `${card.name}を売却し、${salePrice(data, owned, card)}Gを受け取りました。`, icon: 'coin' }) }).then((result) => { if (result) setSelected(result.lastDeck); }); }}>売却する（+{salePrice(data, owned, card)}G）</button></CardTile>; })}</div><div className="button-row"><button className="button button--primary" disabled={busy || selected.length !== 4 || selectedSsr > 1} onClick={() => { void transact('saveDeck', { ownedIds: selected }, () => 'デッキを保存しました。'); }}>この４枚を保存</button><a className="button button--ghost" href="#/battle">対戦する</a></div></div>
+    {collectionTab === 'deck' ? <div role="tabpanel"><p>所持カードから４枚選びます。SSRは1枚までです。同じ名前でも、所持カードごとに筋トレ値は異なります。</p>
+      <div className="deck-selection-heading"><h2>選択中のカード</h2><span>{selectedIds.length} / 4 枚</span></div>
+      <div className="deck-slots" aria-label="選択中の４枚">
+        {selected.map((ownedId, index) => {
+          const owned = data.ownedCards.find((item) => item.ownedId === ownedId);
+          const card = owned ? cardById(owned.cardId) : null;
+          return <div className={`deck-slot panel${card ? ` economy-card--${card.rarity.toLowerCase()}` : ' deck-slot--empty'}`} key={index}>
+            <span className="deck-slot__number">{index + 1}枚目</span>
+            {card ? <><img src={cardImage(card)} alt={`${card.name}のカード表面`} /><div className="deck-slot__details"><strong title={card.name}>{card.name}</strong><span className={`economy-rarity economy-rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</span></div>{card.type === 'rock' && <small>筋トレ +{owned?.trainLevel ?? 0}</small>}<button type="button" className="deck-slot__remove" aria-label={`${card.name}を外す`} onClick={() => setSelected((current) => current.map((id, slot) => slot === index ? null : id))}>外す</button></>
+              : <span className="deck-slot__placeholder">空き</span>}
+          </div>;
+        })}
+      </div>
+      <div className="deck-selection-heading"><h2>カードを選ぶ</h2><span>グー・チョキ・パーから探す</span></div>
+      <div className="collection-tabs deck-type-tabs" role="tablist" aria-label="カードの種類">{deckTypes.map((type) => <button key={type} type="button" role="tab" id={`deck-tab-${type}`} aria-selected={deckTypeTab === type} aria-controls="deck-candidates" onClick={() => setDeckTypeTab(type)}>{typeLabels[type]}</button>)}</div>
+      <div id="deck-candidates" role="tabpanel" aria-labelledby={`deck-tab-${deckTypeTab}`}>
+        {candidates.length ? <div className="economy-grid">{candidates.map((owned) => { const card = cardById(owned.cardId)!; const playable = availableCards.some((item) => item.cardId === owned.cardId); return <CardTile key={owned.ownedId} card={card} owned={owned}><button type="button" className="button button--ghost" disabled={!playable || selectedIds.length >= 4 || (card.rarity === 'SSR' && selectedSsr >= 1)} onClick={() => addToDeck(owned.ownedId)}>{!playable ? '対戦対応待ち' : 'デッキに入れる'}</button><button type="button" className="economy-sell" disabled={busy || data.ownedCards.length <= 4} onClick={() => { if (owned.trainLevel > 0 && !window.confirm(`筋トレに使ったGも含めて${salePrice(data, owned, card)}Gで売却します。筋トレ値は失われます。よろしいですか？`)) return; void transact('sellCard', { ownedId: owned.ownedId }, (result) => `${card.name}を売却しました。所持 ${result.gPoint}G`, { working: `${card.name}を売却中…`, workingImage: cardImage(card), workingKind: 'card', done: () => ({ title: '売却完了！', detail: `${card.name}を売却し、${salePrice(data, owned, card)}Gを受け取りました。`, icon: 'coin' }) }); }}>売却する（+{salePrice(data, owned, card)}G）</button></CardTile>; })}</div> : <p className="deck-candidates-empty">この種類で選べるカードはありません。</p>}
+      </div>
+      <div className="button-row"><button className="button button--primary" disabled={busy || selectedIds.length !== 4 || selectedSsr > 1} onClick={() => { void transact('saveDeck', { ownedIds: selectedIds }, () => 'デッキを保存しました。'); }}>この４枚を保存</button><a className="button button--ghost" href="#/battle">対戦する</a></div>
+    </div>
       : <div role="tabpanel"><p>カードはグー、チョキ、パーの順です。まだ持っていないカードは暗く表示されます。</p><div className="economy-grid economy-catalog">{data.cardMaster.filter((card) => card.image).sort(compareCards).map((card) => { const count = data.ownedCards.filter((owned) => owned.cardId === card.cardId).length; return <article key={card.cardId} className={`economy-card panel economy-card--${card.rarity.toLowerCase()}`}><img src={cardImage(card)} className={count ? '' : 'is-locked'} alt={count ? `${card.name}のカード表面` : '未所持のカード'} /><div className="economy-card__name"><strong>{count ? card.name : '未所持のカード'}</strong><span className={`economy-rarity economy-rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</span></div><small>所持 {count} 枚</small></article>; })}</div></div>}
     {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
 }
