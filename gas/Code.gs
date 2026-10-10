@@ -5,7 +5,7 @@ const GC_HEADERS = {
   Users: ['email', 'role', 'class', 'number', 'name', 'nickname', 'gPoint', 'runCount', 'totalEarned', 'loginStreak', 'lastLoginDate', 'pityCounter', 'lastDeckJson', 'welcomeGiven', 'createdAt', 'updatedAt'],
   OwnedCards: ['ownedId', 'email', 'cardId', 'trainLevel', 'source', 'acquiredAt', 'soldAt', 'trainingSpent'],
   Cards: ['cardId', 'name', 'type', 'rarity', 'text', 'effects', 'trainingMultiplier', 'image', 'shopPrice', 'inPack', 'active', 'sortOrder', 'flavor', 'trainingBonus'],
-  Packs: ['packId', 'name', 'price', 'cardsPerPack', 'rarityRatesJson', 'cardPoolJson', 'pityCount', 'startAt', 'endAt', 'active'],
+  Packs: ['packId', 'name', 'price', 'cardsPerPack', 'rarityRatesJson', 'cardPoolJson', 'pityCount', 'startAt', 'endAt', 'active', 'imageKey'],
   Decks: ['deckId', 'name', 'cardIdsJson', 'maxLife', 'rockTrainLevel'],
   Tests: ['testId', 'title', 'description', 'sectionsJson', 'settingsJson', 'published', 'createdAt', 'updatedAt'],
   Questions: ['testId', 'questionId', 'sectionId', 'order', 'qType', 'text', 'imageFileId', 'optionsJson', 'answerKeyJson', 'points', 'required', 'shuffleOptions', 'feedbackCorrect', 'feedbackWrong'],
@@ -83,10 +83,11 @@ const GC_ECONOMY_SETTINGS = [
   ['perfectBonus', '50', 'テストで初めて満点を取ったときのボーナス'],
   ['defaultReflectionPoint', '20', '振り返りのお題の標準Gポイント'],
 ];
-const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true];
-const GC_FIRST_WAVE_PACK = ['first-wave', '第1弾パック', 200, 3, '{"N":68.5,"R":30,"SSR":1.5}', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 0, '', '', true];
+const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true, 'starter'];
+const GC_FIRST_WAVE_PACK = ['first-wave', '第1弾パック', 200, 3, '{"N":68.5,"R":30,"SSR":1.5}', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 0, '', '', true, 'first-wave'];
 const GC_ALL_CARD_IDS = GC_CARDS.map(function (card) { return card[0]; });
-const GC_ALL_CARDS_PACK = ['all-cards', '全カードパック', 200, 3, '{"N":60,"R":30,"SR":8.5,"SSR":1.5}', JSON.stringify(GC_ALL_CARD_IDS), 10, '', '', true];
+const GC_ALL_CARDS_PACK = ['all-cards', '全カードパック', 200, 3, '{"N":60,"R":30,"SR":8.5,"SSR":1.5}', JSON.stringify(GC_ALL_CARD_IDS), 10, '', '', true, 'all-cards'];
+const GC_PACK_IMAGE_KEYS = ['starter', 'first-wave', 'all-cards', 'limited', 'rare', 'ssr-guaranteed'];
 const GC_STARTER_DECKS = [
   ['sample', 'サンプルカードセット', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
   ['cpu-1', 'CPU Lv1の候補', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
@@ -122,6 +123,10 @@ function setup() {
       if (name === 'Cards' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
         sheet.getRange(1, headers.length).setValue('trainingBonus');
         actual[headers.length - 1] = 'trainingBonus';
+      }
+      if (name === 'Packs' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
+        sheet.getRange(1, headers.length).setValue('imageKey');
+        actual[headers.length - 1] = 'imageKey';
       }
       if (actual.join('|') !== headers.join('|')) throw new Error(name + ' シートの見出しが異なります');
     }
@@ -468,9 +473,15 @@ function gcOwned_(email) {
   });
 }
 
+function gcPackImageKey_(value, packId) {
+  const key = String(value || '').trim();
+  if (GC_PACK_IMAGE_KEYS.indexOf(key) >= 0) return key;
+  return GC_PACK_IMAGE_KEYS.indexOf(String(packId)) >= 0 ? String(packId) : 'starter';
+}
+
 function gcPackMaster_() {
   return gcMasterRows_('Packs').filter(function (row) { return row[0] && row[9] === true; }).map(function (row) {
-    return { packId: String(row[0]), name: String(row[1]), price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: gcRarityRates_(row[4]), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), startAt: row[7] ? gcDateKey_(row[7]) : '', endAt: row[8] ? gcDateKey_(row[8]) : '' };
+    return { packId: String(row[0]), name: String(row[1]), price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: gcRarityRates_(row[4]), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), startAt: row[7] ? gcDateKey_(row[7]) : '', endAt: row[8] ? gcDateKey_(row[8]) : '', imageKey: gcPackImageKey_(row[10], row[0]) };
   });
 }
 
@@ -928,7 +939,7 @@ function gcAdminGetEconomy_(token) {
   return {
     settings: GC_ECONOMY_SETTINGS.map(function (row) { return { key: row[0], value: settings[row[0]] === undefined ? row[1] : settings[row[0]], description: row[2] }; }),
     cards: gcCardMaster_(),
-    packs: gcMasterRows_('Packs').filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: gcRarityRates_(row[4]), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true }; }),
+    packs: gcMasterRows_('Packs').filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: gcRarityRates_(row[4]), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true, imageKey: gcPackImageKey_(row[10], row[0]) }; }),
     missions: gcMasterRows_('Missions').filter(function (row) { return row[0]; }).map(function (row) { return { missionId: row[0], period: row[1], condition: row[2], targetCount: Number(row[3]), reward: Number(row[4]), label: row[5], active: row[6] === true }; }),
     decks: gcBattleConfigRows_(),
   };
@@ -995,7 +1006,7 @@ function gcAdminSavePack_(token, payload) {
       !Number.isInteger(Number(payload.price)) || Number(payload.price) < 0 || Number(payload.price) > 100000 ||
       !Number.isInteger(Number(payload.cardsPerPack)) || Number(payload.cardsPerPack) < 1 || Number(payload.cardsPerPack) > 10 ||
       !Number.isInteger(Number(payload.pityCount)) || Number(payload.pityCount) < 0 || Number(payload.pityCount) > 100 ||
-      typeof payload.active !== 'boolean' || !Array.isArray(pool) || !pool.length || !rates || !Object.values(rawRates).every(function (value) { return Number.isFinite(Number(value)) && Number(value) >= 0; })) gcError_('BAD_REQUEST', 'パックの設定を確認してください');
+      typeof payload.active !== 'boolean' || payload.imageKey && GC_PACK_IMAGE_KEYS.indexOf(payload.imageKey) < 0 || !Array.isArray(pool) || !pool.length || !rates || !Object.values(rawRates).every(function (value) { return Number.isFinite(Number(value)) && Number(value) >= 0; })) gcError_('BAD_REQUEST', 'パックの設定を確認してください');
   const master = gcCardMaster_();
   const keys = Object.keys(rates);
   if (!keys.length || keys.some(function (rarity) { return ['N', 'R', 'SR', 'SSR'].indexOf(rarity) < 0 || !Number.isFinite(Number(rates[rarity])) || Number(rates[rarity]) <= 0 || !pool.some(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === rarity && card.inPack; }); }); }) ||
@@ -1004,10 +1015,16 @@ function gcAdminSavePack_(token, payload) {
       Number(payload.pityCount) > 0 && !keys.some(function (key) { return key === 'SR' || key === 'SSR'; })) gcError_('BAD_PACK', '排出率と収録カードのレア度を確認してください');
   return gcWithLock_(function () {
     const sheet = gcSheet_('Packs');
+    const currentHeader = sheet.getRange(1, 1, 1, GC_HEADERS.Packs.length).getValues()[0];
+    if (currentHeader.slice(0, -1).join('|') === GC_HEADERS.Packs.slice(0, -1).join('|') && currentHeader[GC_HEADERS.Packs.length - 1] === '') {
+      sheet.getRange(1, GC_HEADERS.Packs.length).setValue('imageKey');
+    } else if (currentHeader.join('|') !== GC_HEADERS.Packs.join('|')) {
+      gcError_('BAD_SCHEMA', 'Packsシートの見出しを確認してください');
+    }
     const rows = sheet.getDataRange().getValues();
     const index = rows.findIndex(function (row) { return row[0] === payload.packId; });
     const existing = index >= 1 ? rows[index] : [];
-    const values = [payload.packId, payload.name.trim(), Number(payload.price), Number(payload.cardsPerPack), JSON.stringify(rates), JSON.stringify(pool), Number(payload.pityCount), existing[7] || '', existing[8] || '', payload.active];
+    const values = [payload.packId, payload.name.trim(), Number(payload.price), Number(payload.cardsPerPack), JSON.stringify(rates), JSON.stringify(pool), Number(payload.pityCount), existing[7] || '', existing[8] || '', payload.active, gcPackImageKey_(payload.imageKey, payload.packId)];
     if (index >= 1) sheet.getRange(index + 1, 1, 1, GC_HEADERS.Packs.length).setValues([values]);
     else sheet.appendRow(values);
     gcClearMasterCache_('Packs');

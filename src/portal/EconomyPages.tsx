@@ -6,6 +6,7 @@ import { compareCards } from '../data/cardOrder';
 import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
 import { formatPackChance, packContents } from './packContents';
+import { packArtKey, packArtUrl } from './packArt';
 
 type Page = 'shop' | 'training' | 'collection';
 type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; icon?: PortalIconName; acquired?: CardMaster[]; missions?: EconomyState['completedMissions'] };
@@ -118,7 +119,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     playSfx('pack');
     void transact('openPack', { packId: pack.packId }, () => 'パックを開けました！', {
       working: 'パックを開封中…',
-      workingImage: `${import.meta.env.BASE_URL}images/packs/normal.webp`,
+      workingImage: packArtUrl(packArtKey(pack)),
       done: (result) => ({
         title: 'パック開封！',
         detail: `${result.acquired?.length ?? 0}枚のカードを手に入れました。`,
@@ -176,7 +177,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
         </CardTile>)}</div>
       </div> : <div role="tabpanel">
         <div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}>
-          <img className="economy-pack__image" src={`${import.meta.env.BASE_URL}images/packs/normal.webp`} alt="" />
+          <img className="economy-pack__image" src={packArtUrl(packArtKey(pack))} alt="" />
           <h2>{pack.name}</h2><p>{pack.cardsPerPack}枚入り · {pack.price}G</p>
           <p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>
           {pack.pityCount > 0 && <p>SR以上確定まであと{Math.max(0, pack.pityCount - data.profile.pityCounter)}パック</p>}

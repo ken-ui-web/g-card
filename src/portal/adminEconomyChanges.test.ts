@@ -22,6 +22,14 @@ describe('管理者の一括保存', () => {
     expect(changes[2].payload).toMatchObject({ price: 250, rarityRates: { N: 70, R: 30 } });
   });
 
+  it('パック画像だけの変更も保存対象になる', () => {
+    const draft = structuredClone(saved);
+    draft.packs[0].imageKey = 'ssr-guaranteed';
+    const changes = collectEconomyChanges(saved, draft);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ action: 'adminSavePack', payload: { imageKey: 'ssr-guaranteed' } });
+  });
+
   it('途中で失敗しても成功済みだけを保存済みにできる', () => {
     const draft = structuredClone(saved);
     draft.settings[0].value = '25';

@@ -5,6 +5,7 @@ import { collectEconomyChanges, markEconomyChangeSaved, validateEconomyChanges, 
 import { LoadingState } from '../components/LoadingState';
 import { typeLabels } from '../data/cards';
 import { compareCards } from '../data/cardOrder';
+import { packArtKey, packArtOptions, packArtUrl } from './packArt';
 
 type Pack = AdminData['packs'][number];
 type Deck = AdminData['decks'][number];
@@ -19,7 +20,8 @@ export function DeckEditor({ deck, cards, onChange }: { deck: Deck; cards: CardM
 }
 function PackEditor({ pack, cards, busy, onChange, onSave }: { pack: Pack; cards: CardMaster[]; busy: boolean; onChange: (value: Pack) => void; onSave?: () => void }) {
   const rateTotal = Object.values(pack.rarityRates).reduce((sum, rate) => sum + Number(rate), 0);
-  return <div className="admin-pack"><h3>{pack.name}</h3><div className="admin-economy-grid">
+  const selectedArt = packArtKey(pack);
+  return <div className="admin-pack"><h3>{pack.name}</h3><div className="admin-pack-art"><img src={packArtUrl(selectedArt)} alt={`${packArtOptions.find((option) => option.key === selectedArt)?.label}の画像`} /><label>パック画像<select value={selectedArt} onChange={(event) => onChange({ ...pack, imageKey: event.target.value })}>{packArtOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label></div><div className="admin-economy-grid">
     <label>価格<input type="number" min="0" value={pack.price} onChange={(event) => onChange({ ...pack, price: Number(event.target.value) })} /></label>
     <label>1パックの枚数<input type="number" min="1" max="10" value={pack.cardsPerPack} onChange={(event) => onChange({ ...pack, cardsPerPack: Number(event.target.value) })} /></label>
     <label>天井までのパック数（0ならなし）<input type="number" min="0" value={pack.pityCount} onChange={(event) => onChange({ ...pack, pityCount: Number(event.target.value) })} /></label>
@@ -36,7 +38,7 @@ export function AdminEconomy({ session, onDirtyChange }: { session: string; onDi
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [newMission, setNewMission] = useState<AdminData['missions'][number]>({ missionId: '', period: 'daily', condition: 'train', targetCount: 1, reward: 10, label: '', active: true });
-  const [newPack, setNewPack] = useState<Pack>({ packId: '', name: '', price: 200, cardsPerPack: 3, rarityRates: { N: 70, R: 30 }, cardPool: [], pityCount: 0, active: false });
+  const [newPack, setNewPack] = useState<Pack>({ packId: '', name: '', price: 200, cardsPerPack: 3, rarityRates: { N: 70, R: 30 }, cardPool: [], pityCount: 0, imageKey: 'starter', active: false });
   useEffect(() => { let active = true; callApi<AdminData>('adminGetEconomy', session).then((result) => { if (active) { setData(result); setSavedData(result); } }).catch((error: Error) => { if (active) setMessage(error.message); }); return () => { active = false; }; }, [session]);
   const changes = data && savedData ? collectEconomyChanges(savedData, data) : [];
   useEffect(() => { onDirtyChange?.(changes.length > 0); }, [changes.length, onDirtyChange]);

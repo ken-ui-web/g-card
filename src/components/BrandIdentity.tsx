@@ -1,8 +1,8 @@
 const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
-const updateDate = import.meta.env.VITE_BUILD_DATE || '10/6';
+const updateDate = import.meta.env.VITE_BUILD_DATE || '10/10';
 
 function BrandContent() {
-  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver1.2 · 最終更新 {updateDate}</small><span>ショップ・パック開封・対戦を改善しました。</span></span></>;
+  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver1.3 · 最終更新 {updateDate}</small><span>カードとパックの画像、一覧表示を更新しました。</span></span></>;
 }
 
 export function BrandIdentity({ onClick, href = '#/home' }: { onClick?: () => void; href?: string }) {

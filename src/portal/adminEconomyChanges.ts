@@ -1,9 +1,10 @@
-import type { BattleDeckConfig, CardMaster } from './api';
+import type { BattleDeckConfig, CardMaster, PackMaster } from './api';
+import { packArtKey, packArtOptions } from './packArt';
 
 export interface AdminData {
   settings: { key: string; value: string; description: string }[];
   cards: CardMaster[];
-  packs: { packId: string; name: string; price: number; cardsPerPack: number; rarityRates: Record<string, number>; cardPool: string[]; pityCount: number; active: boolean }[];
+  packs: (PackMaster & { active: boolean })[];
   missions: { missionId: string; period: string; condition: string; targetCount: number; reward: number; label: string; active: boolean }[];
   decks: BattleDeckConfig[];
 }
@@ -18,7 +19,7 @@ export interface EconomyChange {
 }
 
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-const packPayload = (pack: AdminData['packs'][number]) => ({ ...pack, rarityRates: Object.fromEntries(Object.entries(pack.rarityRates).filter(([, rate]) => Number(rate) > 0)) });
+const packPayload = (pack: AdminData['packs'][number]) => ({ ...pack, imageKey: packArtKey(pack), rarityRates: Object.fromEntries(Object.entries(pack.rarityRates).filter(([, rate]) => Number(rate) > 0)) });
 
 export function collectEconomyChanges(saved: AdminData, draft: AdminData): EconomyChange[] {
   const changes: EconomyChange[] = [];
@@ -84,7 +85,7 @@ export function validateEconomyChanges(draft: AdminData, changes: EconomyChange[
     if (change.group === 'packs') {
       const pack = draft.packs.find((item) => item.packId === change.id)!;
       const rates = Object.entries(pack.rarityRates).filter(([, rate]) => Number(rate) > 0);
-      if (!integer(pack.price, 0, 100000) || !integer(pack.cardsPerPack, 1, 10) || !integer(pack.pityCount, 0, 100) || !pack.cardPool.length || !rates.length || Object.entries(pack.rarityRates).some(([rarity, rate]) => !['N', 'R', 'SR', 'SSR'].includes(rarity) || !Number.isFinite(Number(rate)) || Number(rate) < 0) || Math.abs(rates.reduce((sum, [, rate]) => sum + Number(rate), 0) - 100) > .001 || pack.cardPool.some((id) => !cards.get(id)?.inPack) || rates.some(([rarity]) => !pack.cardPool.some((id) => cards.get(id)?.rarity === rarity)) || pack.pityCount > 0 && !rates.some(([rarity]) => rarity === 'SR' || rarity === 'SSR')) return `${pack.name}の価格・排出率・収録カードを確認してください。`;
+      if (!integer(pack.price, 0, 100000) || !integer(pack.cardsPerPack, 1, 10) || !integer(pack.pityCount, 0, 100) || pack.imageKey && !packArtOptions.some((option) => option.key === pack.imageKey) || !pack.cardPool.length || !rates.length || Object.entries(pack.rarityRates).some(([rarity, rate]) => !['N', 'R', 'SR', 'SSR'].includes(rarity) || !Number.isFinite(Number(rate)) || Number(rate) < 0) || Math.abs(rates.reduce((sum, [, rate]) => sum + Number(rate), 0) - 100) > .001 || pack.cardPool.some((id) => !cards.get(id)?.inPack) || rates.some(([rarity]) => !pack.cardPool.some((id) => cards.get(id)?.rarity === rarity)) || pack.pityCount > 0 && !rates.some(([rarity]) => rarity === 'SR' || rarity === 'SSR')) return `${pack.name}の価格・排出率・収録カードを確認してください。`;
     }
     if (change.group === 'missions') {
       const mission = draft.missions.find((item) => item.missionId === change.id)!;
