@@ -101,22 +101,29 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 @keyframes ssr-sweep{0%,45%{transform:translateX(0) rotate(19deg)}100%{transform:translateX(500%) rotate(19deg)}}
 .collection-tabs{display:flex;gap:10px;margin:25px 0}.collection-tabs button{min-width:120px;min-height:48px;padding:10px 22px;border:1px solid #ffffff55;border-radius:12px;background:#172348;color:#fff;font-weight:900}.collection-tabs button[aria-selected=true]{background:#ffd449;color:#152240;border-color:#ffd449}
 .economy-card img{display:block;width:min(100%,200px);aspect-ratio:1024/1365;object-fit:contain;margin-inline:auto;border-radius:12px}
+.economy-card__body{display:flex;flex:1;flex-direction:column;min-width:0}
+.economy-card h3{height:2.7em;line-height:1.35;align-items:flex-start;flex:none;overflow:hidden}
+.economy-card__title{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.economy-card__effect{display:-webkit-box;height:3em;flex:none;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.economy-card__body>.button:first-of-type{margin-top:auto}
 .economy-rarity{display:inline-flex;align-items:center;justify-content:center;min-width:38px;padding:3px 8px;border-radius:999px;border:1px solid #ffffff7a;background:#213053;color:#fff;font-size:13px;font-weight:900;letter-spacing:.04em;vertical-align:middle;white-space:nowrap}
 .economy-rarity--r{border-color:#8cdaef;background:#174e64;color:#e4faff}
 .economy-rarity--sr{border-color:#b3ebff;background:#225e7e;color:#fff;box-shadow:0 0 10px #8adfff99}
 .economy-rarity--ssr{border-color:#fff3ad;background:linear-gradient(120deg,#9c5718,#efc34f,#9c5718);color:#fff;box-shadow:0 0 14px #ffe775}
-.economy-card__name{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px}
+.economy-card__name{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:2.7em;line-height:1.35}
+.economy-card__name strong{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .economy-size-toggle{margin:0 0 16px;min-width:126px}
 .economy-page--compact .economy-grid:not(.economy-pack-grid){grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
 .economy-page--compact .economy-card{padding:10px;gap:8px}
 .economy-page--compact .economy-card img{width:min(100%,145px)}
 .economy-page--compact .economy-card h3{font-size:16px}
 .economy-page--compact .economy-card p{font-size:13px;line-height:1.35}
+.economy-page--compact .economy-card__effect{height:2.7em}
 .economy-page--compact .economy-card .button{font-size:13px;padding-inline:7px}
 .economy-page--compact .economy-card__name strong{font-size:14px}
 .economy-catalog .is-locked{filter:grayscale(1) brightness(.3)}
 .economy-card h3{margin:0;font-size:20px}.economy-card h3 small{font-size:13px;color:#ffd66c}
-.economy-card h3{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.economy-card h3{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 @media(prefers-reduced-motion:reduce){.economy-card--sr,.economy-card--ssr,.economy-card--ssr::after{animation:none}}
 .economy-card p{margin:7px 0;color:#dae5f7;line-height:1.5}
 .economy-card .button,.economy-pack .button{width:100%;margin-top:10px}
@@ -319,6 +326,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .online-panel h1{font-size:clamp(27px,4vw,42px)}.online-panel h2{margin-top:24px}.online-panel label{display:grid;gap:8px;max-width:300px;margin:18px 0}.online-panel input{min-height:46px;border:1px solid #ffffff66;border-radius:10px;background:#0d1935;color:white;padding:8px 12px;font-size:18px}
 .online-mode,.online-life,.online-targets{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}.online-mode button[aria-pressed=true]{background:#ffd451;color:#172441}
 .online-deck-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:12px;margin:20px 0}.online-deck-grid button{display:grid;justify-items:center;gap:8px;border:2px solid #ffffff55;border-radius:13px;background:#17274e;color:white;padding:12px;cursor:pointer}.online-deck-grid button.is-selected{border-color:#ffdb63;background:#29406b}.online-deck-grid .card{width:min(100%,110px)}
+.online-deck-grid strong{display:-webkit-box;height:3em;overflow:hidden;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .online-back,.online-targets button{display:inline-flex;align-items:center;justify-content:center;border:1px solid #ffdb63;border-radius:10px;background:#192d58;color:#ffe485;padding:8px 13px;margin:4px;font-weight:800}.online-targets button{cursor:pointer}
 .online-reveal-grid{display:flex;justify-content:center;gap:clamp(12px,4vw,36px);flex-wrap:wrap;margin:20px 0}.online-reveal-grid>div{display:grid;justify-items:center;gap:8px}.online-reveal-grid .card{width:min(40vw,170px)}
 .online-presentation{min-height:400px;padding:clamp(18px,4vw,30px);text-align:center}
@@ -388,6 +396,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .deck-card .card{max-width:190px}
 .deck-card strong{align-self:stretch;margin-top:12px;font-size:16px}
 .deck-card span{align-self:stretch;color:#b6c6df;font-size:12px;line-height:1.6}
+.deck-card>strong,.deck-card>span{display:-webkit-box;height:3.2em;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.deck-card>strong{line-height:1.6}
 .deck-card small{align-self:stretch;margin-top:auto;padding-top:10px;color:#ffdc75;font-weight:800}
 .deck-note{margin-top:20px;padding:17px 20px;border-radius:14px;background:#ffd45112;border:1px solid #ffd45138}
 .deck-note strong{color:#ffdc73}
@@ -418,7 +428,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .select-card:hover{border-color:#ffd451;transform:translateY(-3px)}
 .select-card .card{max-width:185px;margin-inline:auto}
 .select-card strong{margin-top:8px;font-size:16px}
-.select-card>span{font-size:12px;color:#c3d1e8;line-height:1.5;min-height:38px}
+.select-card>strong{display:-webkit-box;height:3em;overflow:hidden;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.select-card>span{display:-webkit-box;height:3em;overflow:hidden;font-size:12px;color:#c3d1e8;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .select-card small{display:grid;place-items:center;min-height:40px;margin-top:auto;border-radius:9px;background:#ffdc5a;color:#17233e;font-weight:900;font-size:12px}
 .final-open{display:flex;justify-content:center;align-items:center;gap:35px;padding:18px}
 .final-open>div:last-child{max-width:410px}
