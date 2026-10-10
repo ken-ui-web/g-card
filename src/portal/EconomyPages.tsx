@@ -7,6 +7,7 @@ import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
 import { formatPackChance, packContents } from './packContents';
 import { packArtKey, packArtUrl } from './packArt';
+import { readTrainingDraft, stageMuscle, trainingCost, trainingCount, writeTrainingDraft, type TrainingDraft } from './trainingDraft';
 
 type Page = 'shop' | 'training' | 'collection';
 type Feedback = { phase: 'working' | 'done' | 'error'; title: string; detail?: string; balance?: number; image?: string; workingKind?: 'pack' | 'card'; icon?: PortalIconName; acquired?: CardMaster[]; missions?: EconomyState['completedMissions'] };
@@ -18,17 +19,6 @@ const salePrice = (data: BootstrapData, owned: OwnedCard, card: CardMaster) => (
 
 function CardSizeToggle({ compact, onToggle }: { compact: boolean; onToggle: () => void }) {
   return <button type="button" className="button button--ghost economy-size-toggle" aria-pressed={compact} onClick={onToggle}>{compact ? '大きくする' : '小さくする'}</button>;
-}
-
-function pendingCost(data: BootstrapData, items: { kind: 'muscle' | 'run'; ownedId?: string; count: number }[]) {
-  let cost = 0;
-  let runs = data.profile.runCount;
-  const levels = new Map(data.ownedCards.map((card) => [card.ownedId, card.trainLevel]));
-  for (const item of items) for (let index = 0; index < item.count; index++) {
-    if (item.kind === 'run') { cost += data.economy.runCostBase + data.economy.runCostStep * runs; runs++; }
-    else { const level = levels.get(item.ownedId ?? '') ?? 0; cost += data.economy.muscleCostBase + data.economy.muscleCostStep * level; levels.set(item.ownedId ?? '', level + 1); }
-  }
-  return { cost, runs };
 }
 
 function CardTile({ card, owned, children, className = '' }: { card: CardMaster; owned?: OwnedCard; children?: React.ReactNode; className?: string }) {
@@ -53,6 +43,17 @@ function PackConfirmDialog({ pack, balance, onCancel, onConfirm }: { pack: PackM
     <p className="eyebrow">CONFIRM PURCHASE</p><h2>本当に開けますか？</h2>
     <p>{pack.name}を{pack.price}Gで購入します。</p><p>購入後の所持：{(balance - pack.price).toLocaleString()}G</p>
     <div className="button-row"><button type="button" className="button button--ghost" autoFocus onClick={onCancel}>やめる</button><button type="button" className="button button--primary" onClick={onConfirm}>購入して開ける</button></div>
+  </div></div>, document.body);
+}
+
+function TrainingConfirmDialog({ draft, data, onCancel, onConfirm }: { draft: TrainingDraft; data: BootstrapData; onCancel: () => void; onConfirm: () => void }) {
+  const cost = trainingCost(data, draft);
+  return createPortal(<div className="economy-feedback-backdrop"><div className="economy-pack-confirm panel" role="dialog" aria-modal="true" aria-label="筋トレ内容の保存確認">
+    <p className="eyebrow">CONFIRM TRAINING</p><h2>筋トレ内容を保存しますか？</h2>
+    <p>{trainingCount(draft)}回分をまとめて記録します。</p>
+    <div className="training-confirm-list">{draft.items.map((item) => { const owned = data.ownedCards.find((card) => card.ownedId === item.ownedId); const card = data.cardMaster.find((entry) => entry.cardId === owned?.cardId); return <div key={item.ownedId}><span>{card?.name ?? '所持カード'} · 筋トレ値 +{owned?.trainLevel ?? 0} → +{(owned?.trainLevel ?? 0) + item.count}</span><strong>{item.count}回</strong></div>; })}</div>
+    <p>合計 {cost.toLocaleString()}G · 費用差引後 {Math.max(0, data.profile.gPoint - cost).toLocaleString()}G</p><small>ミッション報酬は保存後に加算されます。</small>
+    <div className="button-row"><button type="button" className="button button--ghost" autoFocus onClick={onCancel}>戻る</button><button type="button" className="button button--primary" onClick={onConfirm}>この内容で保存</button></div>
   </div></div>, document.body);
 }
 
@@ -89,22 +90,22 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     const initial = valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId);
     return Array.from({ length: 4 }, (_, index) => initial[index] ?? null);
   });
-  const [pendingTrain, setPendingTrain] = useState<{ kind: 'muscle' | 'run'; ownedId?: string; count: number }[]>([]);
-  const trainTimer = useRef<number | null>(null);
-  const pendingRef = useRef<typeof pendingTrain>([]);
+  const [trainingDraft, setTrainingDraft] = useState<TrainingDraft | null>(() => readTrainingDraft(session));
+  const trainingDraftRef = useRef(trainingDraft);
+  const [showTrainingConfirm, setShowTrainingConfirm] = useState(false);
+  const [powerUps, setPowerUps] = useState<Record<string, number>>({});
   const cardById = (id: string) => data.cardMaster.find((card) => card.cardId === id);
   const toggleCardSize = () => setCompactCards((current) => { const next = !current; try { localStorage.setItem(cardSizeKey, next ? 'compact' : 'regular'); } catch { /* Size still changes for this visit. */ } return next; });
   const pageClass = `economy-page${compactCards ? ' economy-page--compact' : ''}`;
 
-  useEffect(() => { pendingRef.current = pendingTrain; }, [pendingTrain]);
   useEffect(() => { if (page === 'training') setTrainingTab('muscle'); }, [page]);
+  useEffect(() => { const stored = readTrainingDraft(session); trainingDraftRef.current = stored; setTrainingDraft(stored); setShowTrainingConfirm(false); }, [session]);
   useEffect(() => {
     setSelected((current) => {
       const next = current.map((id) => id && !data.ownedCards.some((owned) => owned.ownedId === id) ? null : id);
       return next.every((id, index) => id === current[index]) ? current : next;
     });
   }, [data.ownedCards]);
-  useEffect(() => () => { if (trainTimer.current !== null) { window.clearTimeout(trainTimer.current); void flushTraining(); } }, []);
 
   const transact = async (action: string, payload: Record<string, unknown>, success: (state: EconomyState) => string, plan?: FeedbackPlan) => {
     if (busyRef.current) return null;
@@ -139,32 +140,70 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     });
   };
 
-  const flushTraining = async () => {
-    const items = pendingRef.current;
-    if (!items.length) return;
-    pendingRef.current = [];
-    setPendingTrain([]);
-    const runCount = items.filter((item) => item.kind === 'run').reduce((sum, item) => sum + item.count, 0);
-    const muscleCount = items.filter((item) => item.kind === 'muscle').reduce((sum, item) => sum + item.count, 0);
-    const trainedCard = items.length === 1 && items[0].kind === 'muscle' ? cardById(data.ownedCards.find((owned) => owned.ownedId === items[0].ownedId)?.cardId ?? '') : null;
-    await transact('train', { items }, (result) => `${result.trained ?? 0}回のトレーニングを記録しました。`, {
-      working: 'トレーニングを記録中…',
-      done: (result) => { const trainedOwned = items.length === 1 && items[0].kind === 'muscle' ? result.ownedCards.find((owned) => owned.ownedId === items[0].ownedId) : null; return { title: muscleCount && !runCount ? '筋トレ完了！' : runCount && !muscleCount ? '走り込み完了！' : 'トレーニング完了！', detail: `${result.trained ?? 0}回分を記録しました。${trainedCard && trainedOwned ? ` ${trainedCard.name}の筋トレ値は＋${trainedOwned.trainLevel}です。` : ''}${runCount && !muscleCount ? ` 最大ライフは${result.maxLife}です。` : ''}`, image: trainedCard ? cardImage(trainedCard) : undefined, icon: runCount && !muscleCount ? 'life' : 'training' }; },
-    });
-  };
-  const queueTraining = (kind: 'muscle' | 'run', ownedId?: string) => {
+  const queueMuscle = (ownedId: string) => {
     if (busyRef.current) return;
-    playSfx('select');
-    const key = `${kind}:${ownedId ?? ''}`;
-    const next = [...pendingRef.current];
-    const index = next.findIndex((item) => `${item.kind}:${item.ownedId ?? ''}` === key);
-    if (index >= 0) next[index] = { ...next[index], count: next[index].count + 1 };
-    else next.push({ kind, ownedId, count: 1 });
-    if (pendingCost(data, next).cost > data.profile.gPoint) { setMessage('Gポイントが足りません'); return; }
-    pendingRef.current = next;
-    setPendingTrain(next);
-    if (trainTimer.current !== null) window.clearTimeout(trainTimer.current);
-    trainTimer.current = window.setTimeout(() => { void flushTraining(); }, 800);
+    try {
+      const next = stageMuscle(trainingDraftRef.current, ownedId, crypto.randomUUID());
+      if (trainingCost(data, next) > data.profile.gPoint) { setMessage('Gポイントが足りません'); return; }
+      try { writeTrainingDraft(session, next); }
+      catch { setMessage('端末に一時保存できません。ブラウザーの保存設定を確認してください。'); return; }
+      trainingDraftRef.current = next;
+      setTrainingDraft(next);
+      setMessage('');
+      setPowerUps((current) => ({ ...current, [ownedId]: (current[ownedId] ?? 0) + 1 }));
+      playSfx('point');
+    } catch (failure) { setMessage((failure as Error).message || '端末に一時保存できませんでした'); }
+  };
+
+  const discardTraining = () => {
+    if (!trainingDraftRef.current || trainingDraftRef.current.status === 'submitting' || !window.confirm('仮の筋トレ内容を破棄しますか？')) return;
+    try { writeTrainingDraft(session, null); trainingDraftRef.current = null; setTrainingDraft(null); setMessage('筋トレ内容を取り消しました。'); }
+    catch { setMessage('端末の一時保存を削除できませんでした'); }
+  };
+
+  const saveTraining = async () => {
+    const current = trainingDraftRef.current;
+    if (!current || busyRef.current) return;
+    if (current.status === 'staged' && (!Number.isFinite(trainingCost(data, current)) || trainingCost(data, current) > data.profile.gPoint)) { setMessage('所持カードやGポイントが変わりました。内容を確認してください。'); return; }
+    if (current.status === 'staged') {
+      try {
+        const submitting: TrainingDraft = { ...current, status: 'submitting' };
+        writeTrainingDraft(session, submitting);
+        trainingDraftRef.current = submitting;
+        setTrainingDraft(submitting);
+      } catch { setMessage('端末に一時保存できないため、送信を中止しました。'); return; }
+    }
+    busyRef.current = true;
+    setBusy(true); setMessage('');
+    setFeedback({ phase: 'working', title: '筋トレ内容を保存中…' });
+    try {
+      const result = await callApi<EconomyState>('train', session, { items: current.items }, current.requestId);
+      onState(result);
+      try { writeTrainingDraft(session, null); } catch { /* The saved request ID still prevents a second charge. */ }
+      trainingDraftRef.current = null;
+      setTrainingDraft(null);
+      const trained = result.trained;
+      const detail = trained === undefined ? '保存済みの筋トレ内容を確認しました。' : trained === trainingCount(current) ? `${trained}回分の筋トレを記録しました。` : `予定${trainingCount(current)}回のうち${trained}回分を記録しました。`;
+      setMessage(detail);
+      setFeedback({ phase: 'done', title: '筋トレ完了！', detail, balance: result.gPoint, missions: result.completedMissions, icon: 'training' });
+      playSfx('point');
+    } catch (failure) {
+      const error = failure as Error & { code?: string };
+      if (error.code === 'BAD_REQUEST' || error.code === 'NOT_ENOUGH_POINTS') {
+        const staged: TrainingDraft = { ...current, status: 'staged' };
+        try { writeTrainingDraft(session, staged); trainingDraftRef.current = staged; setTrainingDraft(staged); } catch { /* Keep the saved draft for recovery. */ }
+      }
+      setMessage(error.message);
+      setFeedback({ phase: 'error', title: '保存できませんでした', detail: error.message });
+    } finally { busyRef.current = false; setBusy(false); }
+  };
+
+  const trainRun = () => {
+    if (trainingDraftRef.current) return;
+    void transact('train', { items: [{ kind: 'run', count: 1 }] }, (result) => `最大ライフが${result.maxLife}になりました。`, {
+      working: '走り込みを記録中…',
+      done: (result) => ({ title: '走り込み完了！', detail: `最大ライフは${result.maxLife}です。`, icon: 'life' }),
+    });
   };
 
   const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => setFeedback(null)} />;
@@ -206,18 +245,20 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
   </>;
 
   if (page === 'training') {
-    const projected = pendingCost(data, pendingTrain);
-    const runCost = data.economy.runCostBase + data.economy.runCostStep * projected.runs;
-    const currentLife = data.profile.maxLife + (projected.runs - data.profile.runCount) * data.economy.lifePerRun;
-    const remainingG = data.profile.gPoint - projected.cost;
+    const projectedCost = trainingCost(data, trainingDraft);
+    const remainingG = data.profile.gPoint - projectedCost;
+    const runCost = data.economy.runCostBase + data.economy.runCostStep * data.profile.runCount;
+    const currentLife = data.profile.maxLife;
+    const queuedCount = trainingCount(trainingDraft);
     const rockCards = data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').sort((a, b) => compareCards(cardById(a.cardId)!, cardById(b.cardId)!));
-    return <>{feedbackOverlay}<section className={`${pageClass} economy-training-page`}><p className="eyebrow">TRAINING</p><h1>トレーニング</h1>
-      <div className="economy-training-summary" aria-label="現在のトレーニング状況"><div><span>{pendingTrain.length ? '保存後の所持G' : '所持G'}</span><strong>{remainingG.toLocaleString()} G</strong></div><div><span>{pendingTrain.length ? '保存後の最大ライフ' : '最大ライフ'}</span><strong>{currentLife}</strong></div></div>
+    return <>{feedbackOverlay}{showTrainingConfirm && trainingDraft && <TrainingConfirmDialog draft={trainingDraft} data={data} onCancel={() => setShowTrainingConfirm(false)} onConfirm={() => { setShowTrainingConfirm(false); void saveTraining(); }} />}<section className={`${pageClass} economy-training-page`}><p className="eyebrow">TRAINING</p><h1>トレーニング</h1>
+      <div className="economy-training-summary" aria-label="現在のトレーニング状況"><div><span>{trainingDraft ? '費用差引後' : '所持G'}</span><strong>{Number.isFinite(remainingG) ? `${remainingG.toLocaleString()} G` : '要確認'}</strong></div><div><span>最大ライフ</span><strong>{currentLife}</strong></div></div>
       <div className="economy-training-tabs" role="tablist" aria-label="トレーニングの種類"><button type="button" role="tab" aria-selected={trainingTab === 'muscle'} aria-controls="training-muscle-panel" onClick={() => setTrainingTab('muscle')}><strong>カードの筋トレ</strong><small>グーカードを1枚ずつ強化</small></button><button type="button" role="tab" aria-selected={trainingTab === 'run'} aria-controls="training-run-panel" onClick={() => setTrainingTab('run')}><strong>走り込み</strong><small>最大ライフを増やす</small></button></div>
+      {trainingDraft && <div className="economy-training-draft panel" role="status"><div><strong>{trainingDraft.status === 'submitting' ? '保存結果を確認してください' : `仮の筋トレ ${queuedCount}回`}</strong><small>{trainingDraft.status === 'submitting' ? '同じ内容で再確認します。二重にGは引かれません。' : !Number.isFinite(projectedCost) || remainingG < 0 ? '所持カードや残高が変わりました。選び直してください。' : `端末に一時保存中 · 合計 ${projectedCost.toLocaleString()}G`}</small></div><div className="economy-training-draft__actions"><button type="button" className="button button--primary" disabled={busy || trainingDraft.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0)} onClick={() => trainingDraft.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)}>{trainingDraft.status === 'submitting' ? '保存結果を確認する' : '筋トレを終了する'}</button>{trainingDraft.status === 'staged' && <button type="button" className="button button--ghost" onClick={discardTraining}>選び直す</button>}</div></div>}
       {trainingTab === 'muscle' ? <div id="training-muscle-panel" role="tabpanel" className="economy-training-workspace panel"><div className="economy-training-toolbar"><div><h2>カードの筋トレ</h2><p>グーカード1枚ごとに筋トレ値が上がります。上がるダメージはカードによって異なります。</p><small>所持しているグーカード {rockCards.length}枚</small></div><CardSizeToggle compact={compactCards} onToggle={toggleCardSize} /></div>
-        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = pendingTrain.find((item) => item.kind === 'muscle' && item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'is-training' : ''}><dl className="economy-training-card-stats"><div><dt>筋トレ値</dt><dd>+{level} <span>→</span> +{level + 1}</dd></div><div><dt>次の費用</dt><dd>{cost.toLocaleString()} G</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage} → {damage + card.trainingMultiplier}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || remainingG < cost} onClick={() => queueTraining('muscle', owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-inline-working" role="status">{queued}回分を保存準備中…</p>}</CardTile>; })}</div>
-      </div> : <div id="training-run-panel" role="tabpanel"><div className={`economy-run economy-run--focused panel ${pendingTrain.some((item) => item.kind === 'run') ? 'is-training' : ''}`}><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>すべての対戦で使う最大ライフを育てます。</p><div className="economy-run-stats"><div><span>最大ライフ</span><strong>{currentLife} <em>→</em> {currentLife + data.economy.lifePerRun}</strong></div><div><span>次の費用</span><strong>{runCost.toLocaleString()} G</strong></div></div><button type="button" className="button button--primary" disabled={busy || remainingG < runCost} onClick={() => queueTraining('run')}>走り込む</button>{pendingTrain.some((item) => item.kind === 'run') && <p className="economy-inline-working" role="status">保存を準備中…</p>}</div></div></div>}
-      {pendingTrain.length > 0 && <p className="economy-training-status" role="status">{pendingTrain.reduce((sum, item) => sum + item.count, 0)}回分を準備中… <span>まもなく保存します</span></p>}{message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
+        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = trainingDraft?.items.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'has-draft' : ''}><dl className="economy-training-card-stats"><div><dt>{queued ? '仮の筋トレ値' : '筋トレ値'}</dt><dd>+{level} <span>→</span> +{level + 1}</dd></div><div><dt>次の費用</dt><dd>{cost.toLocaleString()} G</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage} → {damage + card.trainingMultiplier}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < cost || queuedCount >= 100} onClick={() => queueMuscle(owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-training-card-pending">未保存 {queued}回</p>}{powerUps[owned.ownedId] > 0 && <span key={powerUps[owned.ownedId]} className="training-power-burst" aria-hidden="true"><strong>+1</strong><small>POWER UP!</small></span>}</CardTile>; })}</div>
+      </div> : <div id="training-run-panel" role="tabpanel"><div className="economy-run economy-run--focused panel"><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>すべての対戦で使う最大ライフを育てます。</p><div className="economy-run-stats"><div><span>最大ライフ</span><strong>{currentLife} <em>→</em> {currentLife + data.economy.lifePerRun}</strong></div><div><span>次の費用</span><strong>{runCost.toLocaleString()} G</strong></div></div><button type="button" className="button button--primary" disabled={busy || Boolean(trainingDraft) || data.profile.gPoint < runCost} onClick={trainRun}>走り込む</button>{trainingDraft && <p className="economy-training-card-pending">先に仮の筋トレを保存してください。</p>}</div></div></div>}
+      {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }
 
   const selectedIds = selected.filter((id): id is string => id !== null);
