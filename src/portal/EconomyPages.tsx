@@ -164,19 +164,23 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     {pendingPack && <PackConfirmDialog pack={pendingPack} balance={data.profile.gPoint} onCancel={() => setPendingPack(null)} onConfirm={() => confirmOpenPack(pendingPack)} />}
     <section className={pageClass}>
       <p className="eyebrow">CARD SHOP</p><h1>カード購入</h1>
-      <CardSizeToggle compact={compactCards} onToggle={toggleCardSize} />
+      {shopTab === 'single' && <CardSizeToggle compact={compactCards} onToggle={toggleCardSize} />}
       <p className="economy-balance">所持 {data.profile.gPoint.toLocaleString()} G</p>
-      <div className="collection-tabs shop-tabs" role="tablist" aria-label="カード購入の方法">
-        <button type="button" role="tab" aria-selected={shopTab === 'single'} onClick={() => setShopTab('single')}>カードを選んで買う</button>
-        <button type="button" role="tab" aria-selected={shopTab === 'pack'} onClick={() => setShopTab('pack')}>パックを開ける</button>
+      <div className="shop-method">
+        <h2>買い方を選ぶ</h2>
+        <p>下の2つのタブをタップして切り替えられます。</p>
+        <div className="collection-tabs shop-tabs" role="tablist" aria-label="カード購入の方法">
+          <button type="button" role="tab" aria-selected={shopTab === 'single'} aria-controls="shop-single-panel" onClick={() => setShopTab('single')}><span className="shop-tab__status">{shopTab === 'single' ? '✓ 表示中' : 'タップして切り替え'}</span><strong>カードを選んで買う</strong><small>好きなカードを指定</small></button>
+          <button type="button" role="tab" aria-selected={shopTab === 'pack'} aria-controls="shop-pack-panel" onClick={() => setShopTab('pack')}><span className="shop-tab__status">{shopTab === 'pack' ? '✓ 表示中' : 'タップして切り替え'}</span><strong>パックを開ける</strong><small>中身は開けてからのお楽しみ</small></button>
+        </div>
       </div>
-      {shopTab === 'single' ? <div role="tabpanel">
+      {shopTab === 'single' ? <div id="shop-single-panel" role="tabpanel">
         <div className="economy-grid">{data.cardMaster.filter((card) => card.active && card.shopPrice !== null && card.image).sort(compareCards).map((card) => <CardTile key={card.cardId} card={card}>
           <p className="economy-price">{card.shopPrice} G</p>
           <button className="button button--primary" type="button" disabled={busy || data.profile.gPoint < (card.shopPrice ?? Infinity)} onClick={() => { void transact('buyCard', { cardId: card.cardId }, () => `${card.name}を購入しました。`, { working: `${card.name}を購入中…`, done: () => ({ title: '購入完了！', detail: `${card.name}を手に入れました。デッキ・図鑑で確認できます。`, image: cardImage(card) }) }); }}>購入する</button>
         </CardTile>)}</div>
-      </div> : <div role="tabpanel">
-        <div className="economy-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}>
+      </div> : <div id="shop-pack-panel" role="tabpanel">
+        <div className="economy-grid economy-pack-grid">{data.packs.map((pack) => <article className="economy-pack panel" key={pack.packId}>
           <img className="economy-pack__image" src={packArtUrl(packArtKey(pack))} alt="" />
           <h2>{pack.name}</h2><p>{pack.cardsPerPack}枚入り · {pack.price}G</p>
           <p>今日の購入：{data.daily.packsBought} / {data.economy.packDailyLimit} パック</p>
