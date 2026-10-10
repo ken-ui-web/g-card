@@ -8,9 +8,15 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="%BASE_URL%images/brand/apple-touch-icon-180.png" />
     <title>Gカード</title>
+    <style>
+      .boot-loading{min-height:100vh;display:flex;align-items:center;justify-content:center;gap:14px;background:#0e1530;color:#ffe28a;font:700 16px system-ui,sans-serif}
+      .boot-loading__spinner{width:30px;height:30px;border:4px solid #ffe28a55;border-top-color:#ffe28a;border-radius:50%;animation:boot-spin .8s linear infinite}
+      @keyframes boot-spin{to{transform:rotate(360deg)}}
+      @media(prefers-reduced-motion:reduce){.boot-loading__spinner{animation:none}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot-loading" role="status"><span class="boot-loading__spinner" aria-hidden="true"></span>Gカードを準備中…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

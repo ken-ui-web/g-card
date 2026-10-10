@@ -455,6 +455,7 @@ export function OnlinePage() {
             : <p role="status">デッキの最終確認中…</p>}
         </OnlineBattleBoard>}
         <div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></>}
+      {busy && <p className="online-action-working" role="status"><span aria-hidden="true" />対戦操作を送信中…</p>}
       {error && <p role="alert" className="portal-error">{error}</p>}
     </section><footer className="app-footer">Gカード · オンライン対戦</footer></main>;
 }

@@ -72,6 +72,25 @@ export const portalConfigured = Boolean(googleClientId && gasUrl);
 export const guestSession = 'guest:local';
 export const isGuest = (session: string | null): boolean => session === guestSession;
 
+export interface ApiActivity { id: number; action: string; startedAt: number }
+let activeApiRequests: ApiActivity[] = [];
+let nextActivityId = 0;
+const activityListeners = new Set<() => void>();
+export const getApiActivity = (): readonly ApiActivity[] => activeApiRequests;
+export function subscribeApiActivity(listener: () => void): () => void {
+  activityListeners.add(listener);
+  return () => { activityListeners.delete(listener); };
+}
+function beginApiActivity(action: string): () => void {
+  const id = ++nextActivityId;
+  activeApiRequests = [...activeApiRequests, { id, action, startedAt: Date.now() }];
+  activityListeners.forEach((listener) => listener());
+  return () => {
+    activeApiRequests = activeApiRequests.filter((request) => request.id !== id);
+    activityListeners.forEach((listener) => listener());
+  };
+}
+
 export function savedSession(): string | null {
   try { return localStorage.getItem(sessionKey); } catch { return null; }
 }
@@ -88,6 +107,8 @@ export async function callApi<T>(action: string, session: string | null, payload
     return guestAction(action, payload as Record<string, unknown>, requestId) as T;
   }
   if (!gasUrl) throw new Error('サーバーの接続先が未設定です');
+  const finishActivity = beginApiActivity(action);
+  try {
   const body = JSON.stringify({ action, session, requestId, payload });
   for (let attempt = 0; attempt < 3; attempt++) {
     const controller = new AbortController();
@@ -117,4 +138,7 @@ export async function callApi<T>(action: string, session: string | null, payload
     }
   }
   throw new Error('サーバーと通信できません');
+  } finally {
+    finishActivity();
+  }
 }
