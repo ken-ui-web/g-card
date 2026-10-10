@@ -9,6 +9,7 @@ import { packArtKey, packArtOptions, packArtUrl } from './packArt';
 
 type Pack = AdminData['packs'][number];
 type Deck = AdminData['decks'][number];
+const packRarityOrder: Record<CardMaster['rarity'], number> = { N: 0, R: 1, SR: 2, SSR: 3 };
 const missionConditions = [['win_battle','対戦で勝つ'],['play_cpu','CPUと対戦'],['train','トレーニング'],['open_pack','パックを開ける'],['login','ログイン'],['submit_test','テストを受ける'],['perfect_test','テスト満点'],['submit_reflection','振り返りを提出'],['play_online','オンラインで対戦']];
 export function DeckEditor({ deck, cards, onChange }: { deck: Deck; cards: CardMaster[]; onChange: (value: Deck) => void }) {
   const groups = (['rock', 'scissors', 'paper'] as const).map((type) => ({ type, cards: cards.filter((card) => card.type === type).sort(compareCards) }));
@@ -21,13 +22,13 @@ export function DeckEditor({ deck, cards, onChange }: { deck: Deck; cards: CardM
 function PackEditor({ pack, cards, busy, onChange, onSave }: { pack: Pack; cards: CardMaster[]; busy: boolean; onChange: (value: Pack) => void; onSave?: () => void }) {
   const rateTotal = Object.values(pack.rarityRates).reduce((sum, rate) => sum + Number(rate), 0);
   const selectedArt = packArtKey(pack);
-  const cardGroups = (['rock', 'scissors', 'paper'] as const).map((type) => ({ type, cards: cards.filter((card) => card.inPack && card.type === type).sort(compareCards) }));
+  const cardGroups = (['rock', 'scissors', 'paper'] as const).map((type) => ({ type, cards: cards.filter((card) => card.inPack && card.type === type).sort((a, b) => packRarityOrder[a.rarity] - packRarityOrder[b.rarity] || compareCards(a, b)) }));
   return <div className="admin-pack"><h3>{pack.name}</h3><div className="admin-pack-art"><img src={packArtUrl(selectedArt)} alt={`${packArtOptions.find((option) => option.key === selectedArt)?.label}の画像`} /><label>パック画像<select value={selectedArt} onChange={(event) => onChange({ ...pack, imageKey: event.target.value })}>{packArtOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label></div><div className="admin-economy-grid">
     <label>価格<input type="number" min="0" value={pack.price} onChange={(event) => onChange({ ...pack, price: Number(event.target.value) })} /></label>
     <label>1パックの枚数<input type="number" min="1" max="10" value={pack.cardsPerPack} onChange={(event) => onChange({ ...pack, cardsPerPack: Number(event.target.value) })} /></label>
     <label>天井までのパック数（0ならなし）<input type="number" min="0" value={pack.pityCount} onChange={(event) => onChange({ ...pack, pityCount: Number(event.target.value) })} /></label>
   </div><h4>排出率（合計100%）</h4><div className="admin-economy-grid">{(['N', 'R', 'SR', 'SSR'] as const).map((rarity) => <label key={rarity}>{rarity} の排出率 %<input type="number" min="0" max="100" step="0.1" value={pack.rarityRates[rarity] ?? 0} onChange={(event) => onChange({ ...pack, rarityRates: { ...pack.rarityRates, [rarity]: Number(event.target.value) } })} /></label>)}</div><p>現在の合計：{rateTotal}%</p>
-    <h4>収録カード</h4><p className="admin-pack-help">カードにマウスを重ねると効果が表示されます。タップやキーボードで選んだときも確認できます。</p>
+    <h4>収録カード</h4><p className="admin-pack-help">各種類の中はN → R → SR → SSRの順です。カードにマウスを重ねると効果が表示されます。タップやキーボードで選んだときも確認できます。</p>
     <div className="admin-pack-groups">{cardGroups.map(({ type, cards: typeCards }) => <section className={`admin-pack-group admin-pack-group--${type}`} key={type}><h5>{typeLabels[type]} <small>{typeCards.filter((card) => pack.cardPool.includes(card.cardId)).length} / {typeCards.length}枚を収録</small></h5><div className="admin-pack-card-grid">{typeCards.map((card) => <label className="admin-pack-card" key={card.cardId}><input type="checkbox" aria-label={`${card.name}（${card.rarity}）：${card.text}`} checked={pack.cardPool.includes(card.cardId)} onChange={(event) => onChange({ ...pack, cardPool: event.target.checked ? [...pack.cardPool, card.cardId] : pack.cardPool.filter((id) => id !== card.cardId) })} /><span className="admin-pack-card__name">{card.name} <b className={`admin-deck-card__rarity admin-deck-card__rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</b></span><span className="admin-pack-card__effect" role="tooltip">{card.text}</span></label>)}</div></section>)}</div>
     <label><input type="checkbox" checked={pack.active} onChange={(event) => onChange({ ...pack, active: event.target.checked })} />販売中</label>
     {onSave && <button type="button" className="button button--ghost" disabled={busy || Math.abs(rateTotal - 100) > .001} onClick={onSave}>追加する</button>}
