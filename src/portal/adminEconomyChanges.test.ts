@@ -61,4 +61,22 @@ describe('管理者の一括保存', () => {
     const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'packs');
     expect(validateEconomyChanges(draft, changes)).toBeNull();
   });
+  it('パック対象外になった収録カードを名前で知らせる', () => {
+    const draft = structuredClone(saved);
+    draft.cards[0].rarity = 'N';
+    draft.cards.push({ ...draft.cards[0], cardId: 'C008', name: 'のこぎり', inPack: false });
+    draft.packs[0].rarityRates = { N: 100 };
+    draft.packs[0].cardPool = ['G001', 'C008'];
+    const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'packs');
+    expect(validateEconomyChanges(draft, changes)).toContain('のこぎり');
+  });
+  it('NとRの収録カードがあれば排出率70対30の変更を保存できる', () => {
+    const draft = structuredClone(saved);
+    draft.cards[0].rarity = 'N';
+    draft.cards.push({ ...draft.cards[0], cardId: 'G006', name: '正拳突き', rarity: 'R' });
+    draft.packs[0].cardPool = ['G001', 'G006'];
+    draft.packs[0].price = 100;
+    const changes = collectEconomyChanges(saved, draft).filter((change) => change.group === 'packs');
+    expect(validateEconomyChanges(draft, changes)).toBeNull();
+  });
 });

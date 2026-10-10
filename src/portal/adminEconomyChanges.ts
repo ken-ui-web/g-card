@@ -69,6 +69,27 @@ export function markEconomyChangeSaved(saved: AdminData, draft: AdminData, chang
 
 const integer = (value: unknown, min: number, max: number): boolean => Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
 
+export function validatePackSettings(pack: AdminData['packs'][number], cardList: CardMaster[]): string | null {
+  const cards = new Map(cardList.map((card) => [card.cardId, card]));
+  if (!integer(pack.price, 0, 100000)) return `${pack.name}の価格は0〜100000Gの整数にしてください。`;
+  if (!integer(pack.cardsPerPack, 1, 10)) return `${pack.name}の1パックの枚数は1〜10枚にしてください。`;
+  if (!integer(pack.pityCount, 0, 100)) return `${pack.name}の天井までのパック数は0〜100にしてください。`;
+  if (pack.imageKey && !packArtOptions.some((option) => option.key === pack.imageKey)) return `${pack.name}のパック画像を選び直してください。`;
+  if (!pack.cardPool.length) return `${pack.name}の収録カードを1枚以上選んでください。`;
+  const invalidRate = Object.entries(pack.rarityRates).find(([rarity, rate]) => !['N', 'R', 'SR', 'SSR'].includes(rarity) || !Number.isFinite(Number(rate)) || Number(rate) < 0);
+  if (invalidRate) return `${pack.name}の${invalidRate[0]}の排出率を確認してください。`;
+  const rates = Object.entries(pack.rarityRates).filter(([, rate]) => Number(rate) > 0);
+  if (!rates.length) return `${pack.name}の排出率を設定してください。`;
+  const total = rates.reduce((sum, [, rate]) => sum + Number(rate), 0);
+  if (Math.abs(total - 100) > .001) return `${pack.name}の排出率の合計は100%にしてください（現在${total}%）。`;
+  const unavailableId = pack.cardPool.find((id) => !cards.get(id)?.inPack);
+  if (unavailableId) return `${pack.name}の「${cards.get(unavailableId)?.name ?? unavailableId}」はパック対象外です。下の一覧から外すか、カードの販売設定で「パックに入れる」をオンにしてください。`;
+  const missingRarity = rates.find(([rarity]) => !pack.cardPool.some((id) => cards.get(id)?.rarity === rarity));
+  if (missingRarity) return `${pack.name}は${missingRarity[0]}の排出率が設定されています。${missingRarity[0]}のカードを収録してください。`;
+  if (pack.pityCount > 0 && !rates.some(([rarity]) => rarity === 'SR' || rarity === 'SSR')) return `${pack.name}の天井を使う場合はSRかSSRの排出率を設定してください。`;
+  return null;
+}
+
 export function validateEconomyChanges(draft: AdminData, changes: EconomyChange[]): string | null {
   const cards = new Map(draft.cards.map((card) => [card.cardId, card]));
   for (const change of changes) {
@@ -84,8 +105,8 @@ export function validateEconomyChanges(draft: AdminData, changes: EconomyChange[
     }
     if (change.group === 'packs') {
       const pack = draft.packs.find((item) => item.packId === change.id)!;
-      const rates = Object.entries(pack.rarityRates).filter(([, rate]) => Number(rate) > 0);
-      if (!integer(pack.price, 0, 100000) || !integer(pack.cardsPerPack, 1, 10) || !integer(pack.pityCount, 0, 100) || pack.imageKey && !packArtOptions.some((option) => option.key === pack.imageKey) || !pack.cardPool.length || !rates.length || Object.entries(pack.rarityRates).some(([rarity, rate]) => !['N', 'R', 'SR', 'SSR'].includes(rarity) || !Number.isFinite(Number(rate)) || Number(rate) < 0) || Math.abs(rates.reduce((sum, [, rate]) => sum + Number(rate), 0) - 100) > .001 || pack.cardPool.some((id) => !cards.get(id)?.inPack) || rates.some(([rarity]) => !pack.cardPool.some((id) => cards.get(id)?.rarity === rarity)) || pack.pityCount > 0 && !rates.some(([rarity]) => rarity === 'SR' || rarity === 'SSR')) return `${pack.name}の価格・排出率・収録カードを確認してください。`;
+      const issue = validatePackSettings(pack, draft.cards);
+      if (issue) return issue;
     }
     if (change.group === 'missions') {
       const mission = draft.missions.find((item) => item.missionId === change.id)!;
