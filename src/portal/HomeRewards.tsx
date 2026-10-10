@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { BootstrapData, MissionState } from './api';
 import { PortalIcon } from './Icons';
 
@@ -13,7 +14,7 @@ function LoginBonusPanel({ bonus, current }: { bonus: BootstrapData['loginBonus'
   const count = days.size;
   const remaining = Math.max(0, 4 - count);
   const summary = !current ? '記録を確認中' : !bonus.weekDays ? '学校側の更新待ち' : bonus.weeklyCompleted ? `今週の${bonus.weeklyBonus ?? 100}G達成！` : `今週 ${count}/4日 · あと${remaining}日`;
-  return <details className="portal-reward-fold portal-bonus panel"><summary><PortalIcon name="stamp" /><span className="portal-reward-fold__title"><strong>ログインボーナス</strong><small>{summary}</small></span><span className="portal-reward-fold__hint">詳細</span></summary><div className="portal-reward-fold__body">
+  return <details className="portal-reward-fold portal-bonus panel" open><summary><PortalIcon name="stamp" /><span className="portal-reward-fold__title"><strong>ログインボーナス</strong><small>{summary}</small></span><span className="portal-reward-fold__hint">詳細</span></summary><div className="portal-reward-fold__body">
     {!current ? <p>今日のログイン記録を確認中…</p> : !bonus.weekDays ? <p>週4日ボーナスの記録を準備中です。学校側の更新後に表示されます。</p> : <>
       <div className="portal-bonus__reward"><PortalIcon name="stamp" /><div><strong>週4日で +{bonus.weeklyBonus ?? 100}G</strong><small>{displayDate(start)}〜{displayDate(addDays(start, 6))} のうち4日</small></div></div>
       <div className="portal-stamps" aria-label={`今週${count}日ログイン、目標4日`}>{['月', '火', '水', '木', '金', '土', '日'].map((label, index) => { const day = addDays(start, index); return <div className={`portal-stamp${days.has(day) ? ' is-stamped' : ''}`} key={day}><span>{days.has(day) ? <PortalIcon name="stamp" /> : label}</span><small>{label}</small></div>; })}</div>
@@ -44,9 +45,22 @@ function MissionGroup({ period, missions, current, guest }: { period: 'daily' | 
   </section>;
 }
 
+function MissionPreview({ period, missions, current, guest }: { period: 'daily' | 'weekly'; missions: MissionState[]; current: boolean; guest: boolean }) {
+  const list = missions.filter((mission) => mission.period === period);
+  const complete = list.filter((mission) => mission.completed).length;
+  const next = list.filter((mission) => !mission.completed).sort((a, b) => b.progress / b.targetCount - a.progress / a.targetCount)[0];
+  const remaining = next ? Math.max(0, next.targetCount - next.progress) : 0;
+  const href = next && missionRoutes[next.condition];
+  const available = href && (!guest || !['#/tests', '#/reflections', '#/online'].includes(href));
+  return <div className="portal-mission-preview"><div className="portal-mission-preview__heading"><strong>{period === 'daily' ? 'デイリー' : 'ウィークリー'}</strong><small>{current ? `達成 ${complete} / ${list.length}` : '確認中'}</small></div>
+    {!current ? <p>進み具合を確認中…</p> : next ? <><div className="portal-mission-preview__task"><span>{next.label}</span><b>+{next.reward}G</b></div><div className="portal-mission-preview__foot"><small>あと{remaining}回で達成</small>{available && <a href={href}>挑戦する →</a>}</div><div className="mission-progress" role="progressbar" aria-label={`${next.label}の進み具合`} aria-valuenow={Math.min(next.progress, next.targetCount)} aria-valuemin={0} aria-valuemax={next.targetCount}><span style={{ width: `${Math.min(next.progress / next.targetCount, 1) * 100}%` }} /></div></> : <p>{list.length ? '今期のミッションはすべて達成！' : '現在のミッションはありません。'}</p>}
+  </div>;
+}
+
 export function HomeRewards({ bonus, missions, current, guest }: { bonus: BootstrapData['loginBonus']; missions: MissionState[]; current: boolean; guest: boolean }) {
+  const [missionExpanded, setMissionExpanded] = useState(false);
   const remaining = missions.filter((mission) => !mission.completed).length;
   const total = missions.length;
   const summary = !current ? '進み具合を確認中' : total ? remaining ? `未達成 ${remaining}件 · 達成 ${total - remaining}件` : `全${total}件達成！` : '現在のミッションはありません';
-  return <section className="portal-dashboard" aria-label="ボーナスとミッション"><LoginBonusPanel bonus={bonus} current={current} /><details className="portal-reward-fold portal-missions panel"><summary><PortalIcon name="test" /><span className="portal-reward-fold__title"><strong>ミッション</strong><small>{summary}</small></span><span className="portal-reward-fold__hint">詳細</span></summary><div className="portal-reward-fold__body"><MissionGroup period="daily" missions={missions} current={current} guest={guest} /><MissionGroup period="weekly" missions={missions} current={current} guest={guest} /></div></details></section>;
+  return <section className="portal-dashboard" aria-label="ボーナスとミッション"><LoginBonusPanel bonus={bonus} current={current} /><section className="portal-missions panel"><div className="portal-missions__header"><PortalIcon name="test" /><span className="portal-reward-fold__title"><strong>ミッション</strong><small>{summary}</small></span><button type="button" className="portal-missions__toggle" aria-expanded={missionExpanded} onClick={() => setMissionExpanded((value) => !value)}>{missionExpanded ? '少なく表示' : 'すべて見る'} <span aria-hidden="true">{missionExpanded ? '⌃' : '⌄'}</span></button></div><div className="portal-reward-fold__body">{missionExpanded ? <><MissionGroup period="daily" missions={missions} current={current} guest={guest} /><MissionGroup period="weekly" missions={missions} current={current} guest={guest} /></> : <><MissionPreview period="daily" missions={missions} current={current} guest={guest} /><MissionPreview period="weekly" missions={missions} current={current} guest={guest} /></>}</div></section></section>;
 }
