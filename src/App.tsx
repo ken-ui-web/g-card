@@ -6,7 +6,8 @@ import { SoundToggle } from './components/SoundToggle';
 import { BrandIdentity } from './components/BrandIdentity';
 import { showRewardCelebration } from './components/RewardCelebration';
 import { playSfx } from './audio/sfx';
-import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, typeLabels } from './data/cards';
+import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, type CardType, typeLabels } from './data/cards';
+import { selectedFromSlots, toDeckSlots, toggleDeckSlot, validDeckSlots, type DeckSlots } from './data/deckSlots';
 import { beginRound, choiceRequests, createBattle, effectOrder, finishRound, shownDamage, requiredPick, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundChoice, type RoundLog } from './game/battle';
 import { chooseCpuCard, chooseCpuDeck, chooseCpuTarget, nextRandom, toCpuView, type CpuLevel } from './game/cpu';
 import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from './game/settings';
@@ -125,13 +126,16 @@ function App() {
   const [localNames, setLocalNames] = useState<[string, string]>(['', '']);
   const [names, setNames] = useState<[string, string]>(['あなた', 'CPU Lv1']);
   const [battle, setBattle] = useState<BattleState | null>(null);
-  const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>(defaultDeckIds);
+  const [sampleSlots, setSampleSlots] = useState<DeckSlots>(() => toDeckSlots(defaultDeckIds));
+  const [deckType, setDeckType] = useState<CardType | 'all'>('all');
   const [deckMode, setDeckMode] = useState<'sample' | 'owned'>('owned');
   const [account, setAccount] = useState<BootstrapData | null>(null);
   const [liveBattleConfig, setLiveBattleConfig] = useState<BattleDeckConfig[] | null>(null);
   const [battleConfigError, setBattleConfigError] = useState('');
   const [configReload, setConfigReload] = useState(0);
-  const [ownedSelection, setOwnedSelection] = useState<string[]>([]);
+  const [ownedSlots, setOwnedSlots] = useState<DeckSlots>(() => toDeckSlots([]));
+  const selectedDeckIds = selectedFromSlots(sampleSlots);
+  const ownedSelection = selectedFromSlots(ownedSlots);
   const [reward, setReward] = useState<EconomyState | null>(null);
   const [rewardError, setRewardError] = useState('');
   const [deckError, setDeckError] = useState('');
@@ -166,7 +170,7 @@ function App() {
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
       if (!data.economy?.enabled || playable.length < 4) setDeckMode('sample');
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
-      setOwnedSelection(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId));
+      setOwnedSlots(toDeckSlots(valid.length === 4 ? valid : playable.slice(0, 4).map((card) => card.ownedId)));
     };
     const cached = !isGuest(session) ? readBootstrapCache(session) : null;
     if (cached) applyAccount(cached.data);
@@ -182,9 +186,9 @@ function App() {
       if (cancelled) return;
       setLiveBattleConfig(decks);
       const samplePool = decks.find((deck) => deck.deckId === 'sample')!.cardIds;
-      setSelectedDeckIds((selected) => {
-        const valid = selected.filter((id) => samplePool.includes(id));
-        return valid.length === 4 ? valid : samplePool.slice(0, 4);
+      setSampleSlots((slots) => {
+        const valid = selectedFromSlots(validDeckSlots(slots, samplePool));
+        return toDeckSlots(valid.length === 4 ? valid : samplePool.slice(0, 4));
       });
     }).catch((error: Error) => { if (!cancelled) setBattleConfigError(error.message); });
     return () => { cancelled = true; };
@@ -281,13 +285,10 @@ function App() {
   };
 
   const toggleDeckCard = (cardId: string) => {
-    setSelectedDeckIds((selected) => selected.includes(cardId)
-      ? selected.filter((id) => id !== cardId)
-      : selected.length < 4 && ssrCount([...selected, cardId]) <= 1 ? [...selected, cardId] : selected);
+    setSampleSlots((slots) => toggleDeckSlot(slots, cardId, ssrCount([...selectedFromSlots(slots), cardId]) <= 1));
   };
-  const toggleOwnedCard = (ownedId: string) => setOwnedSelection((selected) => selected.includes(ownedId)
-    ? selected.filter((id) => id !== ownedId)
-    : selected.length < 4 && ssrCount([...selected, ownedId].map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '')) <= 1 ? [...selected, ownedId] : selected);
+  const toggleOwnedCard = (ownedId: string) => setOwnedSlots((slots) => toggleDeckSlot(slots, ownedId,
+    ssrCount([...selectedFromSlots(slots), ownedId].map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '')) <= 1));
 
   const reportResult = async () => {
     const session = savedSession();
@@ -401,6 +402,15 @@ function App() {
   const battleConfig = liveBattleConfig;
   const samplePool = battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds ?? [];
   const sampleCards = availableCards.filter((card) => samplePool.includes(card.cardId));
+  const usingOwnedDeck = mode === 'cpu' && deckMode === 'owned';
+  const activeSlots = usingOwnedDeck ? ownedSlots : sampleSlots;
+  const activeSelection = usingOwnedDeck ? ownedSelection : selectedDeckIds;
+  const deckOptions = (usingOwnedDeck && account
+    ? account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => ({ id: owned.ownedId, card: getCard(owned.cardId), trainLevel: owned.trainLevel }))
+    : sampleCards.map((card) => ({ id: card.cardId, card, trainLevel: 0 })))
+    .sort((a, b) => compareCards(a.card, b.card));
+  const deckOptionById = new Map(deckOptions.map((item) => [item.id, item]));
+  const visibleDeckOptions = deckOptions.filter((item) => !activeSelection.includes(item.id) && (deckType === 'all' || item.card.type === deckType));
   const reveal = battle?.reveal;
   const revealActors = battle && reveal ? effectOrder(reveal.winner, reveal.cards, battle.players.map((player) => player.life), battle.seed, battle.round) : [];
   const currentRequest = battle ? choiceRequests(battle)[choiceStep] : undefined;
@@ -431,10 +441,44 @@ function App() {
         </section>
       </>}
 
-      {screen === 'deck' && <section className="panel deck-page"><p className="eyebrow">READY YOUR DECK</p><h1>カードを4枚選ぶ</h1><p>{mode === 'cpu' && deckMode === 'owned' ? `所持カードから4枚を選びます（現在 ${ownedSelection.length} / 4 枚）。筋トレ値と最大ライフが反映されます。` : `サンプル${sampleCards.length}枚から4枚を選びます（現在 ${selectedDeckIds.length} / 4 枚）。`} SSRはデッキに1枚までです。別のカードを入れるときは、まず選択中の1枚を外してください。</p>
-        {mode === 'cpu' && deckMode === 'owned' && account ? <div className="deck-grid">{account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).sort((a, b) => compareCards(getCard(a.cardId), getCard(b.cardId))).map((owned) => { const card = getCard(owned.cardId); const selected = ownedSelection.includes(owned.ownedId); const damage = configuredDamage(card, settings); return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''} ${selected ? 'is-selected' : ''}`} key={owned.ownedId} aria-pressed={selected} disabled={!selected && (ownedSelection.length === 4 || card.rarity === 'SSR' && ssrCount(ownedSelection.map((id) => account.ownedCards.find((item) => item.ownedId === id)?.cardId || '')) >= 1)} onClick={() => toggleOwnedCard(owned.ownedId)}><Card card={card} damage={damage === null ? null : damage + owned.trainLevel * card.trainingMultiplier} /><strong>{card.name} · 筋トレ +{owned.trainLevel}</strong><span>{typeLabels[card.type]} · {card.text}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div> : <div className="deck-grid">{sampleCards.sort(compareCards).map((card) => { const selected = selectedDeckIds.includes(card.cardId); return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''} ${selected ? 'is-selected' : ''}`} key={card.cardId} aria-pressed={selected} disabled={!selected && (selectedDeckIds.length === 4 || card.rarity === 'SSR' && ssrCount(selectedDeckIds) >= 1)} onClick={() => toggleDeckCard(card.cardId)}><Card card={card} damage={configuredDamage(card, settings)} /><strong>{card.name}</strong><span>{typeLabels[card.type]} · {cardText(card, settings)}</span><small>{selected ? '選択中・押すと外す' : 'このカードを入れる'}</small></button>; })}</div>}
+      {screen === 'deck' && <section className="panel deck-page">
+        <p className="eyebrow">READY YOUR DECK</p>
+        <h1>カードを4枚選ぶ</h1>
+        <p>{usingOwnedDeck ? '所持カードの筋トレ値と最大ライフが反映されます。' : `サンプル${sampleCards.length}枚から選べます。`} SSRは1枚まで。選択中のカードを外すと、別のカードを入れられます。</p>
+        <div className="battle-deck-actions">
+          <button type="button" className="button button--primary" disabled={starting || activeSelection.length !== 4} onClick={() => { void startGame(); }}>{starting ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />デッキを保存中…</> : '対戦を始める'}</button>
+          <button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button>
+          <span role="status">選択中 {activeSelection.length} / 4 枚</span>
+        </div>
+        {deckError && <p className="portal-error" role="alert">{deckError}</p>}
+        <h2 className="battle-deck-subtitle">選択中の4枚</h2>
+        <div className="battle-deck-slots" aria-label="選択中の4枚">
+          {activeSlots.map((id, index) => {
+            const item = id ? deckOptionById.get(id) : undefined;
+            const damage = item ? configuredDamage(item.card, settings) : null;
+            return <div className={`battle-deck-slot${item?.card.rarity === 'SSR' ? ' deck-card--ssr' : ''}${!item ? ' battle-deck-slot--empty' : ''}`} key={index}>
+              <small>{index + 1}枚目</small>
+              {item ? <><Card card={item.card} damage={damage === null ? null : damage + item.trainLevel * item.card.trainingMultiplier} width={100} /><strong>{item.card.name}</strong><span>{item.card.rarity} · {typeLabels[item.card.type]}</span><button type="button" aria-label={`${item.card.name}を外す`} onClick={() => usingOwnedDeck ? toggleOwnedCard(item.id) : toggleDeckCard(item.id)}>外す</button></> : <span className="battle-deck-slot__empty">空き</span>}
+            </div>;
+          })}
+        </div>
+        <h2 className="battle-deck-subtitle">カードを探す</h2>
+        <div className="deck-type-tabs" role="group" aria-label="カードの種類">
+          {(['all', 'rock', 'scissors', 'paper'] as const).map((type) => <button type="button" key={type} aria-pressed={deckType === type} onClick={() => setDeckType(type)}>{type === 'all' ? 'すべて' : typeLabels[type]}</button>)}
+        </div>
+        <div className="deck-grid">{visibleDeckOptions.map((item) => {
+          const { card } = item;
+          const damage = configuredDamage(card, settings);
+          const disabled = activeSelection.length === 4 || card.rarity === 'SSR' && ssrCount(activeSelection.map((id) => deckOptionById.get(id)?.card.cardId || '')) >= 1;
+          return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''}`} key={item.id} disabled={disabled} onClick={() => usingOwnedDeck ? toggleOwnedCard(item.id) : toggleDeckCard(item.id)}>
+            <Card card={card} damage={damage === null ? null : damage + item.trainLevel * card.trainingMultiplier} />
+            <strong>{card.name}{usingOwnedDeck && card.type === 'rock' ? ` · 筋トレ +${item.trainLevel}` : ''}</strong>
+            <span>{card.rarity} · {typeLabels[card.type]} · {usingOwnedDeck ? card.text : cardText(card, settings)}</span>
+            <small>{disabled ? '入れるには選択中のカードを外す' : 'このカードを入れる'}</small>
+          </button>;
+        })}</div>
+        {visibleDeckOptions.length === 0 && <p className="deck-empty-note">この種類に追加できるカードはありません。</p>}
         <div className="deck-note"><strong>勝ち方</strong><p>グーはチョキに、チョキはパーに、パーはグーに勝ちます。勝ったカードだけが効果を発動。4ラウンド後、残りライフが多い側の勝利です。</p></div>
-        {deckError && <p className="portal-error" role="alert">{deckError}</p>}<div className="button-row"><button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button><button type="button" className="button button--primary" disabled={starting || (mode === 'cpu' && deckMode === 'owned' ? ownedSelection : selectedDeckIds).length !== 4} onClick={() => { void startGame(); }}>{starting ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />デッキを保存中…</> : '対戦を始める'}</button></div>
       </section>}
 
       {screen === 'battle' && battle && <section className="battle-page">
