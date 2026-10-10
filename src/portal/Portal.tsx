@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { SoundToggle } from '../components/SoundToggle';
 import { BrandIdentity } from '../components/BrandIdentity';
 import { LoadingState } from '../components/LoadingState';
+import { showRewardCelebration } from '../components/RewardCelebration';
 import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState, type PublicShopConfig } from './api';
 import { clearBootstrapCache, isBootstrapFresh, isBootstrapFromToday, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './bootstrapCache';
 import { applyGuestShopConfig, clearGuestShopConfig, createGuest } from './guest';
@@ -10,6 +11,7 @@ import { PortalIcon, type PortalIconName } from './Icons';
 import { EconomyPages } from './EconomyPages';
 import { AdminWorkspace } from './AdminWorkspace';
 import { LearningPages } from './LearningPages';
+import { HomeRewards } from './HomeRewards';
 
 declare global {
   interface Window {
@@ -55,13 +57,10 @@ const menuItems = [
   { icon: 'ranking', title: 'ランキング', key: 'ranking' },
 ] as const;
 
-function missionPeriod(period: string) {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  if (period === 'daily') return `${today.replaceAll('-', '/')} 0:00〜23:59`;
-  const monday = new Date(`${today}T00:00:00Z`);
-  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
-  const sunday = new Date(monday); sunday.setUTCDate(sunday.getUTCDate() + 6);
-  return `${monday.toISOString().slice(0, 10).replaceAll('-', '/')}〜${sunday.toISOString().slice(0, 10).replaceAll('-', '/')} 23:59`;
+function announceLoginRewards(data: BootstrapData) {
+  const bonus = data.loginBonus;
+  if (bonus.awarded && bonus.amount > 0) showRewardCelebration({ kind: 'login', title: bonus.weeklyAwarded ? '週4日ログイン達成！' : 'ログインボーナス獲得！', amount: bonus.amount, detail: bonus.weeklyAwarded ? bonus.amount > (bonus.weeklyBonus ?? 100) ? '毎日のログイン分と週4日達成ボーナスを受け取りました。' : '週4日達成ボーナスを受け取りました。' : '今日のログイン分を受け取りました。' });
+  if (bonus.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: bonus.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: bonus.completedMissions });
 }
 
 export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' | 'collection' | 'tests' | 'reflections' }) {
@@ -106,6 +105,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
     if (!isGuest(activeSession)) writeBootstrapCache(activeSession, data);
     setBootstrap(data);
     setNeedsNickname(isGuest(activeSession) && data.needsNickname);
+    announceLoginRewards(data);
   };
 
   const applyEconomy = (state: EconomyState) => {
@@ -136,6 +136,10 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
           setBootstrap(data);
           setNeedsNickname(isGuest(session) && data.needsNickname);
           setError('');
+          announceLoginRewards(data);
+          const loginMissions = new Set(data.loginBonus.completedMissions?.map((item) => item.label) ?? []);
+          const completed = snapshot ? data.missions.filter((mission) => mission.completed && !snapshot.data.missions.some((previous) => previous.missionId === mission.missionId && previous.completed) && !loginMissions.has(mission.label)) : [];
+          if (completed.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: completed.reduce((sum, item) => sum + item.reward, 0), items: completed });
         } else {
           const latest = readBootstrapCache(session);
           if (latest) setBootstrap(latest.data);
@@ -198,13 +202,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
               : (page === 'tests' || page === 'reflections') && session ? isGuest(session) ? <section className="portal-panel panel"><h1>学校アカウント専用です</h1><p>テストと振り返りは学校アカウントでログインすると使えます。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section> : learningReady ? <LearningPages page={page} session={session} onPoints={applyLearning} /> : <section className="portal-panel panel"><h1>先生の公開待ち</h1><p>テストと振り返り連携は、先生の準備が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : page !== 'home' && session ? economyReady ? guestShopNeeded && !guestShopConfig ? <section className="portal-panel panel">{guestShopError ? <><h1>ショップ設定を読み込めません</h1><p className="portal-error" role="alert">{guestShopError}</p><button type="button" className="button button--primary" onClick={() => { setGuestShopError(''); void refreshGuestShop().catch((failure: Error) => setGuestShopError(failure.message)); }}>再読み込み</button></> : <LoadingState text="ショップ設定を読み込み中" />}</section> : <EconomyPages page={page as 'shop' | 'training' | 'collection'} session={session} data={economyData!} onState={applyEconomy} onRefreshShop={isGuest(session) ? refreshGuestShop : undefined} /> : <section className="portal-panel panel"><h1>サーバーの更新待ち</h1><p>先生によるGカードの更新が終わると使えるようになります。</p><a className="button button--ghost" href="#/home">ホームへ戻る</a></section>
               : <><section className="portal-overview panel"><div><p className="eyebrow">MY HOME</p><h1>{bootstrap.profile.nickname}さん</h1></div><div className="portal-stats"><strong><PortalIcon name="coin" />{bootstrap.profile.gPoint.toLocaleString()} G</strong><strong><PortalIcon name="life" />最大ライフ {bootstrap.profile.maxLife}</strong></div></section>
-                <section className="portal-dashboard">
-                  <div className="portal-bonus panel"><h2>ログインボーナス</h2>
-                    {dailyCurrent ? <><div className="portal-stamps">{Array.from({ length: 7 }, (_, index) => <span className={index < ((bootstrap.loginBonus.streak - 1) % 7) + 1 ? 'is-stamped' : ''} key={index}>{index < ((bootstrap.loginBonus.streak - 1) % 7) + 1 ? <PortalIcon name="stamp" /> : index + 1}</span>)}</div><p>{bootstrap.loginBonus.awarded ? `今日のボーナス +${bootstrap.loginBonus.amount}G！` : '今日のスタンプは押してあります。'}</p></> : <p>今日のログインボーナスを確認中…</p>}
-                    <p>毎日{bootstrap.loginBonus.dailyAmount ?? 10}G、7日連続でさらに{bootstrap.loginBonus.streakBonus ?? 100}G。明日もログインしてスタンプを進めよう！</p>
-                  </div>
-                  <div className="portal-missions panel"><h2>ミッション</h2>{!dailyCurrent ? <p>今日の進み具合を確認中…</p> : bootstrap.missions?.length ? bootstrap.missions.map((mission) => <p key={mission.missionId}>{mission.completed ? '✓ ' : ''}{mission.label}：{mission.progress}/{mission.targetCount}（+{mission.reward}G）<small className="mission-period">{mission.period === 'daily' ? '毎日' : '毎週'} · {missionPeriod(mission.period)}</small></p>) : <p>現在のミッションはありません。</p>}</div>
-                </section>
+                <HomeRewards bonus={bootstrap.loginBonus} missions={bootstrap.missions ?? []} current={dailyCurrent} guest={isGuest(session)} />
                 <section className="portal-menu">{menuItems.filter((item) => !isGuest(session) || !['tests', 'reflections', 'online', 'ranking'].includes(item.key)).map((item) => { const href = item.key === 'tests' && learningReady ? '#/tests' : item.key === 'reflections' && learningReady ? '#/reflections' : item.key === 'battle' ? '#/battle' : item.key === 'online' && bootstrap.online?.enabled ? '#/online' : item.key === 'ranking' && bootstrap.online?.rankingEnabled ? '#/ranking' : economyReady && item.key === 'deck' ? '#/collection' : economyReady && item.key === 'shop' ? '#/shop' : economyReady && item.key === 'training' ? '#/training' : null; return href ? <a key={item.key} href={href} className="portal-menu-item panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong>{item.key === 'tests' && bootstrap.unreadTests > 0 && <small>{bootstrap.unreadTests}件の未受験</small>}</a> : <div key={item.key} className="portal-menu-item portal-menu-item--pending panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong><small>準備中</small></div>; })}</section></>}
     {error && <p className="portal-error" role="alert">{error}</p>}
     <footer className="app-footer">Gカード · {session ? isGuest(session) ? 'ゲスト' : '学校アカウント' : '未ログイン'}</footer>

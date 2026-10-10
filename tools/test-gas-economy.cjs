@@ -192,6 +192,24 @@ call('gcBootstrap_', returningToken);
 assert.equal(lockCalls - beforeBootstrapLocks, 1, '同日2回目のホーム表示は全体ロックを取らない');
 assert.equal(sheets.get('PointLog').rows.filter((row) => row[1] === returning && row[3] === 'login_bonus' && (row[4] instanceof Date ? row[4].toISOString().slice(0, 10) : row[4]) === today).length, 1, '同じ日のログインボーナスは一度だけ');
 assert.equal(call('gcFindUser_', returning).values[6], 110, '二度目のホーム表示で残高が増えない');
+const weeklyStudent = `weekly@${domain}`;
+sheets.get('Users').appendRow([weeklyStudent, 'student', '', '', '週テスト', '', 100, 0, 100, 1, '', 0, '', true, '', '']);
+const weeklyToken = call('gcSignSession_', weeklyStudent, 'student', call('gcSettings_'));
+const actualToday = context.gcToday_;
+for (let day = 5; day <= 8; day++) {
+  context.gcToday_ = () => `2026-10-${String(day).padStart(2, '0')}`;
+  const result = call('gcBootstrap_', weeklyToken);
+  assert.equal(result.loginBonus.weekDays.length, day - 4, '異なるログイン日だけ数える');
+  assert.equal(result.loginBonus.amount, day === 8 ? 110 : 10, '4日目だけ週100Gを追加する');
+  assert.equal(call('gcBootstrap_', weeklyToken).loginBonus.awarded, false, '同じ日の開き直しで再付与しない');
+}
+assert.equal(sheets.get('PointLog').rows.filter((row) => row[1] === weeklyStudent && row[3] === 'login_weekly').length, 1, '週4日ボーナスの履歴は1件だけ');
+assert.equal(call('gcFindUser_', weeklyStudent).values[6], 240);
+context.gcToday_ = () => '2026-10-12';
+const nextWeek = call('gcBootstrap_', weeklyToken);
+assert.equal(nextWeek.loginBonus.weekDays.length, 1, '月曜日に週の進捗をリセットする');
+assert.equal(nextWeek.loginBonus.weeklyCompleted, false);
+context.gcToday_ = actualToday;
 assert.equal(sheets.get('DailyCounters').rows.filter((row) => row[0] === returning).length, 0, 'ホーム表示だけでは日次カウンターを書かない');
 call('gcAdminSaveSettings_', token, { key: 'economyEnabled', value: '1' });
 sheets.get('OwnedCards').appendRow([id(), returning, 'G001', 0, 'initial', '', '']);

@@ -68,6 +68,8 @@ const GC_CARDS = [
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 const GC_ECONOMY_SETTINGS = [
+  ['loginBonus', '10', '1日1回のログインボーナス'],
+  ['loginStreakBonus', '100', '週4日ログイン達成時のボーナス'],
   ['economyEnabled', '0', '生徒にGポイント機能を公開（0=停止、1=公開）'],
   ['learningEnabled', '0', '生徒にテストと振り返り連携を公開（0=停止、1=公開）'],
   ['muscleCostBase', '20', '筋トレの基本価格'], ['muscleCostStep', '2', '筋トレ値ごとの価格上昇'],
@@ -153,7 +155,7 @@ function setup() {
       ['sessionDays', '7', 'セッション有効日数'],
       ['welcomeBonus', '100', '初回設定時のGポイント'],
       ['loginBonus', '10', '1日1回のGポイント'],
-      ['loginStreakBonus', '100', '7日目の追加Gポイント'],
+      ['loginStreakBonus', '100', '週4日ログイン達成時の追加Gポイント'],
       ['initialLife', '100', '初期ライフ'],
     ]);
   }
@@ -503,6 +505,26 @@ function gcMissionPeriod_(period, today) {
   return date.toISOString().slice(0, 10);
 }
 
+function gcLoginWeek_(email, today, dailyAmount, weeklyAmount) {
+  const start = gcMissionPeriod_('weekly', today);
+  const sheet = gcSheet_('PointLog');
+  const days = {};
+  let completed = false;
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 2, sheet.getLastRow() - 1, 4).getValues().forEach(function (row) {
+      if (String(row[0]).toLowerCase() !== email) return;
+      const key = gcDateKey_(row[3]);
+      if (row[2] === 'login_bonus' && key >= start && key <= today) {
+        days[key] = true;
+        // 旧版は7日連続の100Gをその日のlogin_bonus行に合算していた。
+        if (weeklyAmount > 0 && Number(row[1]) >= dailyAmount + weeklyAmount) completed = true;
+      }
+      if (row[2] === 'login_weekly' && key === start) completed = true;
+    });
+  }
+  return { start: start, days: Object.keys(days).sort(), completed: completed };
+}
+
 function gcMissionState_(email, today) {
   const progress = gcSheet_('MissionProgress').getDataRange().getValues();
   return gcMasterRows_('Missions').filter(function (row) { return row[0] && row[6] === true; }).map(function (row) {
@@ -543,18 +565,21 @@ function gcBootstrap_(token) {
   const identity = gcSession_(token, false);
   const today = gcToday_();
   let user = gcUserObject_(identity.record);
-  let bonus = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
-  if (user.welcomeGiven !== true || gcDateKey_(user.lastLoginDate) !== today) {
+  const dailyAmount = gcNumber_(identity.settings, 'loginBonus', 10, 0, 100000);
+  const weeklyAmount = gcNumber_(identity.settings, 'loginStreakBonus', 100, 0, 100000);
+  const week = gcLoginWeek_(identity.email, today, dailyAmount, weeklyAmount);
+  let bonus = { awarded: false, amount: 0, weeklyAwarded: false, weekDays: week.days, weekStart: week.start, weeklyCompleted: week.completed, completedMissions: [] };
+  if (user.welcomeGiven !== true || gcDateKey_(user.lastLoginDate) !== today || (week.days.length >= 4 && !week.completed)) {
     bonus = gcWithLock_(function () {
       const record = gcFindUser_(identity.email);
       const user = gcUserObject_(record);
-      const outcome = { awarded: false, amount: 0, streak: Number(user.loginStreak || 0) };
+      const outcome = { awarded: false, amount: 0, weeklyAwarded: false, weekDays: [], weekStart: '', weeklyCompleted: false, completedMissions: [] };
       gcEnsureWelcome_(identity, user);
       const previous = gcDateKey_(user.lastLoginDate);
       if (previous !== today) {
         const consecutive = previous && gcDayNumber_(today) - gcDayNumber_(previous) === 1;
         const streak = consecutive ? Number(user.loginStreak || 0) + 1 : 1;
-        const award = (Number(identity.settings.loginBonus) || 10) + (streak % 7 === 0 ? Number(identity.settings.loginStreakBonus) || 100 : 0);
+        const award = dailyAmount;
         const prior = gcPointLogEntry_(identity.email, 'login_bonus', today);
         if (!prior) {
           user.gPoint = Number(user.gPoint || 0) + award;
@@ -564,11 +589,24 @@ function gcBootstrap_(token) {
         user.loginStreak = streak;
         user.lastLoginDate = today;
         user.updatedAt = new Date().toISOString();
-        gcAwardMissions_(identity, user, { login: 1 });
+        outcome.completedMissions = gcAwardMissions_(identity, user, { login: 1 });
         outcome.awarded = !prior;
         outcome.amount = prior ? 0 : award;
-        outcome.streak = streak;
       }
+      const currentWeek = gcLoginWeek_(identity.email, today, dailyAmount, weeklyAmount);
+      if (currentWeek.days.length >= 4 && !currentWeek.completed) {
+        const weeklyAward = weeklyAmount;
+        user.gPoint = Number(user.gPoint || 0) + weeklyAward;
+        user.totalEarned = Number(user.totalEarned || 0) + weeklyAward;
+        user.updatedAt = new Date().toISOString();
+        gcPointLog_(identity.email, weeklyAward, 'login_weekly', currentWeek.start, user.gPoint);
+        outcome.awarded = true;
+        outcome.weeklyAwarded = true;
+        outcome.amount += weeklyAward;
+      }
+      outcome.weekDays = currentWeek.days;
+      outcome.weekStart = currentWeek.start;
+      outcome.weeklyCompleted = currentWeek.completed || outcome.weeklyAwarded;
       gcWriteUser_(record, user);
       return outcome;
     });
@@ -577,7 +615,7 @@ function gcBootstrap_(token) {
   return {
       profile: { nickname: String(user.name || (identity.admin ? user.nickname || '先生' : '')).trim(), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: false,
-      loginBonus: Object.assign({}, bonus, { dailyAmount: gcNumber_(identity.settings, 'loginBonus', 10, 0, 100000), streakBonus: gcNumber_(identity.settings, 'loginStreakBonus', 100, 0, 100000) }),
+      loginBonus: Object.assign({}, bonus, { dailyAmount: dailyAmount, weeklyBonus: weeklyAmount }),
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
       lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],

@@ -46,7 +46,17 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .portal-google-button{min-height:44px;margin-top:26px}
 .guest-entry{border-top:1px solid #ffffff34;margin-top:25px;padding-top:18px}
 .guest-entry p{font-size:13px}
-.mission-period{display:block;color:#ffdd8d;margin:3px 0 10px;font-size:12px}
+.reward-celebration-backdrop{position:fixed;inset:0;z-index:10010;display:grid;place-items:center;padding:20px;background:#061027dc;backdrop-filter:blur(7px)}
+.reward-celebration{width:min(100%,460px);padding:30px;text-align:center;border-color:#ffe27b;box-shadow:0 0 45px #ffd85b55,0 25px 70px #000b;animation:reward-appear .45s ease-out both}
+.reward-celebration__coin{display:grid;place-items:center;width:94px;height:94px;margin:0 auto 13px;border-radius:50%;background:#ffdc5d22;box-shadow:0 0 0 12px #ffdb5917,0 0 35px #ffdc5d8c;animation:reward-coin .7s ease-out both}
+.reward-celebration__coin .portal-icon{width:70px;height:70px}
+.reward-celebration h2{margin:5px 0 8px;font:clamp(22px,5vw,30px)/1.35 'Dela Gothic One',sans-serif;color:#ffe284}
+.reward-celebration__amount{display:block;color:#ffda59;font-size:clamp(33px,8vw,48px);font-weight:900;text-shadow:0 0 18px #ffd54c88}
+.reward-celebration p:not(.eyebrow){color:#dce7f8;line-height:1.55}
+.reward-celebration .reward-celebration__item{padding:8px;border:1px solid #ffda6b77;border-radius:10px;background:#ffd94b15;color:#ffe18a}
+.reward-celebration .button{min-width:190px;margin-top:12px}
+@keyframes reward-appear{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes reward-coin{from{opacity:0;transform:scale(.45) rotate(-24deg)}70%{opacity:1;transform:scale(1.13) rotate(8deg)}to{transform:scale(1) rotate(0)}}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:13px;min-height:112px;color:#ffdd7d;font-weight:900}
 .loading-state__spinner{width:36px;height:36px;flex:none;border:4px solid #ffda6a55;border-top-color:#ffe284;border-radius:50%;animation:economy-feedback-spin .9s linear infinite}
 .loading-state__spinner--small{width:18px;height:18px;border-width:3px;border-color:#16234444;border-top-color:#162344}
@@ -73,10 +83,26 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .portal-dashboard .panel{padding:24px}
 .portal-dashboard h2{font-size:19px;margin:0 0 14px}
 .portal-dashboard p{margin:14px 0 0;color:#cdd9ec}
-.portal-stamps{display:flex;gap:7px;flex-wrap:wrap}
-.portal-stamps span{width:38px;height:38px;display:grid;place-items:center;border:1px solid #ffd56c66;border-radius:50%;color:#b9c8df;font-weight:800}
-.portal-stamps .is-stamped{background:#ffcf52;border-color:#ffcf52;color:#1a2442;box-shadow:0 0 13px #ffd15466}
-.portal-stamps .portal-icon{width:29px;height:29px}
+.portal-bonus__reward{display:flex;align-items:center;gap:13px;padding:13px;border:1px solid #ffda6a76;border-radius:14px;background:#ffda6a13}
+.portal-bonus__reward>.portal-icon{width:42px;height:42px}
+.portal-bonus__reward strong,.portal-bonus__reward small{display:block}
+.portal-bonus__reward strong{color:#ffe384;font-size:18px}.portal-bonus__reward small{margin-top:3px;color:#cbd9ef;font-size:12px}
+.portal-stamps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:17px 0}
+.portal-stamp{display:grid;justify-items:center;gap:4px;min-width:0}
+.portal-stamp>span{width:clamp(29px,3vw,38px);height:clamp(29px,3vw,38px);display:grid;place-items:center;border:1px solid #ffd56c66;border-radius:50%;color:#b9c8df;font-weight:800}
+.portal-stamp.is-stamped>span{background:#ffcf52;border-color:#ffcf52;color:#1a2442;box-shadow:0 0 13px #ffd15466}
+.portal-stamp small{font-size:11px;color:#aebed9}.portal-stamp .portal-icon{width:29px;height:29px}
+.portal-bonus__progress{display:grid;gap:9px;margin-top:15px}.portal-bonus__progress>div:first-child{display:grid;gap:3px}.portal-bonus__progress strong{color:#ffe083}.portal-bonus__progress span{color:#d5e1f5;font-size:13px}
+.portal-bonus .portal-bonus__today{color:#ffe28a;font-weight:800}
+.mission-progress{height:8px;overflow:hidden;border-radius:999px;background:#ffffff24}.mission-progress>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#ffca3a,#ffe98b);transition:width .4s ease}
+.portal-missions{display:grid;gap:20px}.portal-mission-group+.portal-mission-group{padding-top:17px;border-top:1px solid #ffffff2e}
+.portal-mission-group__heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}.portal-mission-group h3{margin:0;font-size:17px;color:#ffe083}.portal-mission-group__heading small{color:#aebfda;font-size:11px}
+.portal-mission-list{display:grid;gap:10px;margin-top:12px}.portal-mission{padding:12px;border:1px solid #ffdc6b72;border-radius:12px;background:#101e3f}.portal-mission.is-complete{border-color:#6bc89d77;background:#15352f;animation:mission-complete .5s ease-out both}
+.portal-mission__top,.portal-mission__progress{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.portal-mission__top strong{font-size:14px}.portal-mission__top b{flex:none;color:#ffe083;font-size:12px}.portal-mission.is-complete .portal-mission__top b{color:#9df1c6}
+.portal-mission__progress{margin:6px 0 7px;color:#c7d7ef;font-size:12px}.portal-mission__progress span:first-child{color:#ffe083;font-weight:800}.portal-mission.is-complete .portal-mission__progress span:first-child{color:#9df1c6}.portal-mission.is-complete .mission-progress>span{background:#75d9a5}
+.portal-mission__action{display:inline-block;margin-top:10px;padding:6px 10px;border:1px solid #ffdb6f;border-radius:8px;color:#ffe089;font-size:12px;font-weight:900}.portal-mission__action:hover{background:#ffdb6f;color:#14213d}
+.admin-mission-section{margin:18px 0;padding:16px;border:1px solid #ffffff3d;border-radius:14px;background:#101b38}.admin-mission-section h3{margin:0 0 12px;color:#ffe083}
+@keyframes mission-complete{from{opacity:.7;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .portal-menu{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:25px;margin-bottom:40px}
 .portal-menu-item{min-height:118px;display:flex;flex-direction:column;gap:7px;padding:20px}
 .portal-menu-item>.portal-icon{width:32px;height:32px}
@@ -224,7 +250,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .economy-feedback__pack{display:block;width:min(42vw,180px);height:230px;object-fit:contain;margin:0 auto 10px;filter:drop-shadow(0 0 18px #ffdf7999);animation:economy-pack-float 1.2s ease-in-out infinite alternate}
 @keyframes economy-pack-float{from{transform:translateY(5px) rotate(-4deg) scale(.96)}to{transform:translateY(-7px) rotate(4deg) scale(1.05)}}
 .economy-feedback p.economy-feedback__balance{display:table;margin:14px auto 0;padding:8px 15px;border-radius:11px;background:#ffd45d;color:#17223c;font-size:18px;font-weight:900}
-.economy-feedback .economy-feedback__mission{color:#ffdb7e!important;font-weight:800}
+.economy-feedback .economy-feedback__mission{padding:10px 13px;border:1px solid #ffe189;border-radius:10px;background:#ffdb5e1a;color:#ffdb7e!important;font-weight:800;animation:mission-complete .55s ease-out both}
 @keyframes economy-feedback-in{from{opacity:0;transform:translateY(22px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes economy-feedback-spin{to{transform:rotate(360deg)}}
 .deck-mode-picker{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:22px}

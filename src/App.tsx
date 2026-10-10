@@ -4,6 +4,7 @@ import { LoadingState } from './components/LoadingState';
 import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
 import { BrandIdentity } from './components/BrandIdentity';
+import { showRewardCelebration } from './components/RewardCelebration';
 import { playSfx } from './audio/sfx';
 import { availableCards, defaultDeckIds, getCard, ssrCount, type CardDefinition, typeLabels } from './data/cards';
 import { beginRound, choiceRequests, createBattle, effectOrder, finishRound, shownDamage, requiredPick, type BattleCard, type BattleEvent, type BattleMode, type BattleState, type DeckEntry, type PlayerIndex, type RoundChoice, type RoundLog } from './game/battle';
@@ -302,6 +303,7 @@ function App() {
       setAccount((current) => current ? mergeEconomy(current, result) : current);
       if (!isGuest(session)) patchBootstrapCache(session, (current) => mergeEconomy(current, result));
       if ((result.awarded ?? 0) > 0) playSfx('point');
+      if (result.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: result.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: result.completedMissions });
     } catch (failure) {
       reportingId.current = '';
       setRewardError((failure as Error).message);

@@ -3,11 +3,11 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '1.5',
   date: '10/10',
-  changes: ['売却・通信', 'ショップ', 'トレーニング', 'カード一覧'],
+  changes: ['売却・通信', 'ショップ', 'トレーニング', 'カード一覧', 'ログイン・ミッション'],
 } as const;
 
 function BrandContent() {
-  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver{studentRelease.version} · 最終更新 {studentRelease.date}</small><span>{studentRelease.changes.join('・')}の表示を改善しました。</span></span></>;
+  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver{studentRelease.version} · 最終更新 {studentRelease.date}</small><span>{studentRelease.changes.join('・')}を更新しました。</span></span></>;
 }
 
 export function BrandIdentity({ onClick, href = '#/home' }: { onClick?: () => void; href?: string }) {

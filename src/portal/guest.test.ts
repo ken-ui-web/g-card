@@ -23,9 +23,45 @@ beforeEach(() => {
   installGuestShopConfig(defaultShopConfig);
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('ゲストの端末内保存', () => {
+  it('週内の異なる4日目に100Gを一度だけ付与し、翌週は進捗を戻す', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
+    guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
+    for (let offset = 0; offset < 4; offset++) {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 5 + offset, 3)));
+      const result = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+      expect(result.loginBonus.weekDays).toHaveLength(offset + 1);
+      expect(result.loginBonus.amount).toBe(offset === 3 ? 110 : 10);
+      expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).loginBonus.awarded).toBe(false);
+    }
+    expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(240);
+    vi.setSystemTime(new Date('2026-10-12T03:00:00Z'));
+    const nextWeek = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    expect(nextWeek.loginBonus.weekDays).toEqual(['2026-10-12']);
+    expect(nextWeek.loginBonus.weeklyCompleted).toBe(false);
+    expect(nextWeek.profile.gPoint).toBe(250);
+  });
+
+  it('ウィークリーミッションは日付が変わっても保持し、翌週に更新する', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
+    guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
+    const first = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    const rock = first.ownedCards.find((item) => item.cardId === 'G001')!;
+    const trained = guestAction('train', { items: [{ kind: 'muscle', ownedId: rock.ownedId, count: 1 }] }, crypto.randomUUID()) as EconomyState;
+    expect(trained.missions.find((mission) => mission.missionId === 'weekly-train')?.progress).toBe(1);
+    vi.setSystemTime(new Date('2026-10-06T03:00:00Z'));
+    const tomorrow = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    expect(tomorrow.missions.find((mission) => mission.missionId === 'weekly-train')?.progress).toBe(1);
+    expect(tomorrow.missions.find((mission) => mission.missionId === 'daily-train')?.progress).toBe(0);
+    vi.setSystemTime(new Date('2026-10-12T03:00:00Z'));
+    const nextWeek = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    expect(nextWeek.missions.find((mission) => mission.missionId === 'weekly-train')?.progress).toBe(0);
+  });
+
   it('ニックネーム、購入、筋トレ、売却、デッキを再読込後も保持する', () => {
     const first = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
     expect(first.needsNickname).toBe(true);

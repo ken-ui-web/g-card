@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { callApi } from './api';
 import { LoadingState } from '../components/LoadingState';
+import { showRewardCelebration } from '../components/RewardCelebration';
 
 type TestListItem = { testId: string; title: string; description: string; endAt: string; attempts: number; attemptLimit: number; bestScore: number | null; available: boolean; lastResponseId: string };
 type Question = { questionId: string; sectionId: string; type: string; text: string; imageUrl?: string; options: { choices?: string[]; rows?: string[]; columns?: string[]; min?: number; max?: number }; points: number; required: boolean };
@@ -77,6 +78,7 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
       const response = await callApi<Result>('submitTest', session, { testId: paper.testId, answers }, submitId.current);
       localStorage.removeItem(`g-card-draft-${paper.testId}`);
       setResult(response); setPaper(null); onPoints(response.gPoint, 'test');
+      if (response.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: response.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: response.completedMissions });
       setTests(await callApi<TestListItem[]>('listTests', session));
     } catch (failure) { setError((failure as Error).message); }
     finally { sending.current = false; setBusy(false); }
@@ -92,6 +94,7 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
     try {
       const outcome = await callApi<{ awarded: number; newSubmissions: number; gPoint: number; completedMissions?: { label: string; reward: number }[] }>('syncReflections', session);
       onPoints(outcome.gPoint, 'reflection');
+      if (outcome.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: outcome.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: outcome.completedMissions });
       setNote(outcome.newSubmissions ? `${outcome.newSubmissions}件の新しい提出を確認し、${outcome.awarded}Gを受け取りました。` : '新しくポイントを受け取る提出はありません。提出直後は少し待ってから再確認してください。');
       setReflections(await callApi<ReflectionList>('listReflections', session));
     } catch (failure) { setError((failure as Error).message); }

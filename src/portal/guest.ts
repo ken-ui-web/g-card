@@ -9,6 +9,7 @@ const monday = (date: string) => { const day = new Date(`${date}T00:00:00Z`); da
 const missionTemplates: MissionState[] = [
   { missionId: 'daily-win', period: 'daily', condition: 'win_battle', targetCount: 1, reward: 20, label: 'CPU対戦で1回勝つ', progress: 0, completed: false },
   { missionId: 'daily-train', period: 'daily', condition: 'train', targetCount: 1, reward: 10, label: 'トレーニングを1回する', progress: 0, completed: false },
+  { missionId: 'weekly-train', period: 'weekly', condition: 'train', targetCount: 3, reward: 30, label: '今週トレーニングを3回する', progress: 0, completed: false },
 ];
 const sellPrices = { N: 10, R: 30, SR: 100, SSR: 300 };
 let activeShopConfig: PublicShopConfig | null = null;
@@ -28,11 +29,11 @@ export function applyGuestShopConfig(data: BootstrapData, config: PublicShopConf
     economy: { ...data.economy, packDailyLimit: config.packDailyLimit, sellPrices: config.sellPrices },
   };
 }
-type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
+type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; loginWeekDays: string[]; weeklyBonusWeek: string; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
 
 function fresh(): GuestState {
   const ownedCards = starter.map((cardId) => ({ ownedId: crypto.randomUUID(), cardId, trainLevel: 0, trainingSpent: 0, source: 'initial' }));
-  return { nickname: '', gPoint: 100, runCount: 0, pityCounter: 0, ownedCards, lastDeck: ownedCards.map((item) => item.ownedId), lastLoginDate: '', loginStreak: 0, dailyDate: today(), daily: { cpuRewards: 0, onlineRewards: 0, packsBought: 0 }, firstWinGiven: false, missions: missionTemplates.map((item) => ({ ...item })), missionWeek: monday(today()), processed: {}, reportedBattles: {}, battleHistory: [] };
+  return { nickname: '', gPoint: 100, runCount: 0, pityCounter: 0, ownedCards, lastDeck: ownedCards.map((item) => item.ownedId), lastLoginDate: '', loginStreak: 0, loginWeekDays: [], weeklyBonusWeek: '', dailyDate: today(), daily: { cpuRewards: 0, onlineRewards: 0, packsBought: 0 }, firstWinGiven: false, missions: missionTemplates.map((item) => ({ ...item })), missionWeek: monday(today()), processed: {}, reportedBattles: {}, battleHistory: [] };
 }
 
 function read(): GuestState {
@@ -41,13 +42,33 @@ function read(): GuestState {
   const state = JSON.parse(raw) as GuestState;
   state.reportedBattles ??= {};
   state.battleHistory ??= [];
+  const weekStart = monday(today());
+  if (!state.loginWeekDays) {
+    state.loginWeekDays = [];
+    for (let offset = 0; offset < Math.min(7, state.loginStreak || 0); offset++) {
+      const day = new Date(`${state.lastLoginDate}T00:00:00Z`);
+      if (Number.isNaN(day.getTime())) break;
+      day.setUTCDate(day.getUTCDate() - offset);
+      const key = day.toISOString().slice(0, 10);
+      if (key >= weekStart && key <= today()) state.loginWeekDays.push(key);
+    }
+    if (state.loginStreak >= 7) {
+      const lastOldBonus = new Date(`${state.lastLoginDate}T00:00:00Z`);
+      lastOldBonus.setUTCDate(lastOldBonus.getUTCDate() - state.loginStreak % 7);
+      if (!Number.isNaN(lastOldBonus.getTime()) && lastOldBonus.toISOString().slice(0, 10) >= weekStart) state.weeklyBonusWeek = weekStart;
+    }
+  }
+  state.loginWeekDays = [...new Set(state.loginWeekDays.filter((day) => day >= weekStart && day <= today()))].sort();
+  state.weeklyBonusWeek ??= '';
+  if (state.missionWeek !== weekStart) state.missions = state.missions.filter((mission) => mission.period === 'daily').concat(missionTemplates.filter((mission) => mission.period === 'weekly').map((mission) => ({ ...mission })));
   if (state.dailyDate !== today()) {
     state.dailyDate = today(); state.daily = { cpuRewards: 0, onlineRewards: 0, packsBought: 0 };
     state.firstWinGiven = false;
-    state.missions = missionTemplates.map((item) => ({ ...item }));
+    state.missions = state.missions.filter((mission) => mission.period === 'weekly').concat(missionTemplates.filter((mission) => mission.period === 'daily').map((mission) => ({ ...mission })));
     state.processed = {};
   }
-  state.missionWeek = monday(today());
+  for (const template of missionTemplates) if (!state.missions.some((mission) => mission.missionId === template.missionId)) state.missions.push({ ...template });
+  state.missionWeek = weekStart;
   return state;
 }
 function write(state: GuestState) { localStorage.setItem(key, JSON.stringify(state)); }
@@ -67,17 +88,26 @@ function snapshot(state: GuestState, extra: Partial<EconomyState> = {}): Economy
 function card(id: string) { const result = availableCards.find((item) => item.cardId === id); if (!result) throw new Error('カードが見つかりません'); return result; }
 function amount(value: unknown) { const result = Number(value); if (!Number.isInteger(result) || result < 1 || result > 100) throw new Error('回数を確認してください'); return result; }
 function bootstrap(state: GuestState): BootstrapData {
-  let bonus = { awarded: false, amount: 0, streak: state.loginStreak };
-  if (state.nickname && state.lastLoginDate !== today()) {
-    const yesterday = new Date(`${today()}T00:00:00Z`); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-    state.loginStreak = state.lastLoginDate === yesterday.toISOString().slice(0, 10) ? state.loginStreak + 1 : 1;
-    const award = 10 + (state.loginStreak % 7 === 0 ? 100 : 0);
-    state.gPoint += award; state.lastLoginDate = today(); bonus = { awarded: true, amount: award, streak: state.loginStreak };
+  const weekStart = monday(today());
+  let bonus = { awarded: false, amount: 0, weeklyAwarded: false, weekDays: state.loginWeekDays, weekStart, weeklyCompleted: state.weeklyBonusWeek === weekStart, completedMissions: [] as { label: string; reward: number }[] };
+  if (state.nickname && (state.lastLoginDate !== today() || state.loginWeekDays.length >= 4 && state.weeklyBonusWeek !== weekStart)) {
+    const dailyAwarded = state.lastLoginDate !== today();
+    if (dailyAwarded) {
+      const yesterday = new Date(`${today()}T00:00:00Z`); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      state.loginStreak = state.lastLoginDate === yesterday.toISOString().slice(0, 10) ? state.loginStreak + 1 : 1;
+      state.loginWeekDays = [...new Set([...state.loginWeekDays, today()])].sort();
+    }
+    const weeklyAwarded = state.loginWeekDays.length >= 4 && state.weeklyBonusWeek !== weekStart;
+    const award = (dailyAwarded ? 10 : 0) + (weeklyAwarded ? 100 : 0);
+    state.gPoint += award;
+    if (dailyAwarded) state.lastLoginDate = today();
+    if (weeklyAwarded) state.weeklyBonusWeek = weekStart;
+    bonus = { awarded: true, amount: award, weeklyAwarded, weekDays: state.loginWeekDays, weekStart, weeklyCompleted: state.weeklyBonusWeek === weekStart, completedMissions: [] };
     write(state);
   }
   const data: BootstrapData = {
     profile: { nickname: state.nickname, role: 'student', gPoint: state.gPoint, maxLife: 100 + state.runCount * 5, runCount: state.runCount, pityCounter: state.pityCounter },
-    needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, streakBonus: 100 }, ownedCards: state.ownedCards,
+    needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, weeklyBonus: 100 }, ownedCards: state.ownedCards,
     cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: null, inPack: false, active: false, sortOrder: order.indexOf(item.type) * 100 + index })),
     lastDeck: state.lastDeck, packs: [], battleConfig: [], missions: state.missions, daily: state.daily,
     economy: { enabled: true, muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5, cpuRewardDailyCap: 3, packDailyLimit: 10, sellPrices },

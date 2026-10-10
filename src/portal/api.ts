@@ -50,7 +50,7 @@ export interface EconomyState {
 export interface BootstrapData {
   profile: Profile;
   needsNickname: boolean;
-  loginBonus: { awarded: boolean; amount: number; streak: number; dailyAmount?: number; streakBonus?: number };
+  loginBonus: { awarded: boolean; amount: number; dailyAmount?: number; weeklyBonus?: number; weekDays?: string[]; weekStart?: string; weeklyAwarded?: boolean; weeklyCompleted?: boolean; completedMissions?: { label: string; reward: number }[] };
   ownedCards: OwnedCard[];
   cardMaster: CardMaster[];
   lastDeck: string[];
