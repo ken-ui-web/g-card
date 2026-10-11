@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Card } from './components/Card';
+import { BattleDeckDock, useBattleDeckDock } from './components/BattleDeckDock';
 import { LoadingState } from './components/LoadingState';
 import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
@@ -140,6 +141,7 @@ function App() {
   const [rewardError, setRewardError] = useState('');
   const [deckError, setDeckError] = useState('');
   const [starting, setStarting] = useState(false);
+  const { markerRef: deckDockMarker, visible: deckDockVisible } = useBattleDeckDock(screen === 'deck');
   const battleId = useRef('');
   const reportingId = useRef('');
   const [ui, setUi] = useState<BattleUi>('select');
@@ -410,6 +412,7 @@ function App() {
     : sampleCards.map((card) => ({ id: card.cardId, card, trainLevel: 0 })))
     .sort((a, b) => compareCards(a.card, b.card));
   const deckOptionById = new Map(deckOptions.map((item) => [item.id, item]));
+  const dockCards = activeSlots.map((id) => id ? deckOptionById.get(id)?.card ?? null : null);
   const visibleDeckOptions = deckOptions.filter((item) => !activeSelection.includes(item.id) && (deckType === 'all' || item.card.type === deckType));
   const reveal = battle?.reveal;
   const revealActors = battle && reveal ? effectOrder(reveal.winner, reveal.cards, battle.players.map((player) => player.life), battle.seed, battle.round) : [];
@@ -462,6 +465,8 @@ function App() {
             </div>;
           })}
         </div>
+        <div ref={deckDockMarker} className="battle-deck-dock-marker" aria-hidden="true" />
+        <BattleDeckDock visible={deckDockVisible} cards={dockCards} busy={starting} busyText="デッキを保存中…" disabled={starting || activeSelection.length !== 4} onStart={() => { void startGame(); }} onRemove={(index) => { const id = activeSlots[index]; if (id) usingOwnedDeck ? toggleOwnedCard(id) : toggleDeckCard(id); }} />
         <h2 className="battle-deck-subtitle">カードを探す</h2>
         <div className="deck-type-tabs" role="group" aria-label="カードの種類">
           {(['all', 'rock', 'scissors', 'paper'] as const).map((type) => <button type="button" key={type} aria-pressed={deckType === type} onClick={() => setDeckType(type)}>{type === 'all' ? 'すべて' : typeLabels[type]}</button>)}

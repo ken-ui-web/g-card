@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
 import { Card } from '../components/Card';
+import { BattleDeckDock, useBattleDeckDock } from '../components/BattleDeckDock';
 import { BrandIdentity } from '../components/BrandIdentity';
 import { OnlineBattleBoard } from './OnlineBattleBoard';
 import { LoadingState } from '../components/LoadingState';
@@ -117,6 +118,7 @@ export function OnlinePage() {
   const [entries, setEntries] = useState<OnlineEntry[] | null>(null);
   const [salt, setSalt] = useState('');
   const [joined, setJoined] = useState(false);
+  const { markerRef: deckDockMarker, visible: deckDockVisible } = useBattleDeckDock(Boolean(view?.phase === 'deck' && room?.meta.guestUid && joined && !room.decks?.[uid]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reward, setReward] = useState<Reward | null>(null);
@@ -330,6 +332,10 @@ export function OnlinePage() {
   }, [account, deckMode]);
   const selectedValidSlots = validDeckSlots(selectedSlots, pool.map((item) => item.id));
   const selectedValid = selectedFromSlots(selectedValidSlots);
+  const dockCards = selectedValidSlots.map((id) => {
+    const item = pool.find((candidate) => candidate.id === id);
+    return item ? getCard(item.cardId) : null;
+  });
   const selectedSsr = ssrCount(selectedValid.map((id) => pool.find((item) => item.id === id)!.cardId));
   const chooseMode = (next: DeckMode) => { setDeckMode(next); setSelectedSlots(toDeckSlots(account ? initialOnlineSelection(onlinePool(account, next)) : defaultDeckIds)); };
   const toggleSelectedCard = (id: string) => setSelectedSlots((slots) => {
@@ -475,6 +481,8 @@ export function OnlinePage() {
                 </div>;
               })}
             </div>
+            <div ref={deckDockMarker} className="battle-deck-dock-marker" aria-hidden="true" />
+            <BattleDeckDock visible={deckDockVisible} cards={dockCards} busy={busy} busyText="デッキを送信中…" disabled={busy || selectedValid.length !== 4 || selectedSsr > 1} onStart={() => { void submitDeck(); }} onRemove={(index) => { const id = selectedValidSlots[index]; if (id) toggleSelectedCard(id); }} />
             <h3 className="battle-deck-subtitle">カードを探す</h3>
             <div className="deck-type-tabs" role="group" aria-label="カードの種類">
               {(['all', 'rock', 'scissors', 'paper'] as const).map((type) => <button type="button" key={type} aria-pressed={deckType === type} onClick={() => setDeckType(type)}>{type === 'all' ? 'すべて' : typeLabels[type]}</button>)}
