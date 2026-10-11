@@ -3,7 +3,7 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '1.6',
   date: '10/11',
-  changes: ['対戦のカード選択', '選択中カードの固定表示'],
+  changes: ['対戦のカード選択', '選択中カードの固定表示', 'トレーニングの固定表示'],
 } as const;
 
 function BrandContent() {

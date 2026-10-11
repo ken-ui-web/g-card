@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Card } from './components/Card';
-import { BattleDeckDock, useBattleDeckDock } from './components/BattleDeckDock';
+import { BattleDeckDock } from './components/BattleDeckDock';
+import { useScrolledPast } from './components/useScrolledPast';
 import { LoadingState } from './components/LoadingState';
 import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
@@ -141,7 +142,7 @@ function App() {
   const [rewardError, setRewardError] = useState('');
   const [deckError, setDeckError] = useState('');
   const [starting, setStarting] = useState(false);
-  const { markerRef: deckDockMarker, visible: deckDockVisible } = useBattleDeckDock(screen === 'deck');
+  const { markerRef: deckDockMarker, visible: deckDockVisible } = useScrolledPast(screen === 'deck');
   const battleId = useRef('');
   const reportingId = useRef('');
   const [ui, setUi] = useState<BattleUi>('select');

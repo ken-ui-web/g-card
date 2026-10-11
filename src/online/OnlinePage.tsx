@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
 import { Card } from '../components/Card';
-import { BattleDeckDock, useBattleDeckDock } from '../components/BattleDeckDock';
+import { BattleDeckDock } from '../components/BattleDeckDock';
+import { useScrolledPast } from '../components/useScrolledPast';
 import { BrandIdentity } from '../components/BrandIdentity';
 import { OnlineBattleBoard } from './OnlineBattleBoard';
 import { LoadingState } from '../components/LoadingState';
@@ -118,7 +119,7 @@ export function OnlinePage() {
   const [entries, setEntries] = useState<OnlineEntry[] | null>(null);
   const [salt, setSalt] = useState('');
   const [joined, setJoined] = useState(false);
-  const { markerRef: deckDockMarker, visible: deckDockVisible } = useBattleDeckDock(Boolean(view?.phase === 'deck' && room?.meta.guestUid && joined && !room.decks?.[uid]));
+  const { markerRef: deckDockMarker, visible: deckDockVisible } = useScrolledPast(Boolean(view?.phase === 'deck' && room?.meta.guestUid && joined && !room.decks?.[uid]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reward, setReward] = useState<Reward | null>(null);

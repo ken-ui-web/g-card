@@ -1,25 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { Card } from './Card';
 import type { CardDefinition } from '../data/cards';
-
-export function useBattleDeckDock(active: boolean) {
-  const markerRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!active) { setVisible(false); return; }
-    const update = () => setVisible(Boolean(markerRef.current && markerRef.current.getBoundingClientRect().top <= 0));
-    update();
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, [active]);
-
-  return { markerRef, visible };
-}
 
 export function BattleDeckDock({ visible, cards, busy, disabled, busyText = '準備中…', onStart, onRemove }: {
   visible: boolean;
