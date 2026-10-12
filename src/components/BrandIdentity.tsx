@@ -3,7 +3,7 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '1.7',
   date: '10/12',
-  changes: ['週間・月間・総合ランキング'],
+  changes: ['週間・月間・総合ランキング', 'CPU対戦の相手イラスト'],
 } as const;
 
 function BrandContent() {
