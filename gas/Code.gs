@@ -77,7 +77,7 @@ const GC_ECONOMY_SETTINGS = [
   ['lifePerRun', '5', '走り込み1回の最大ライフ増加'], ['maxLifeCap', '', '最大ライフの上限。空欄なら無制限'],
   ['cpuRewardLv1', '5', 'CPU Lv1勝利報酬'], ['cpuRewardLv2', '10', 'CPU Lv2勝利報酬'],
   ['cpuRewardLv3', '20', 'CPU Lv3勝利報酬'], ['cpuRewardDailyCap', '3', 'CPU対戦報酬の1日上限'],
-  ['onlineEnabled', '0', 'オンライン対戦を受付（0=停止、1=公開）'], ['rankingEnabled', '1', '週間ランキングを表示'],
+  ['onlineEnabled', '0', 'オンライン対戦を受付（0=停止、1=公開）'], ['rankingEnabled', '1', 'ランキングを表示'],
   ['onlineRewardWin', '10', 'オンライン勝利報酬'], ['onlineRewardDraw', '5', 'オンライン引き分け報酬'], ['onlineRewardLoss', '3', 'オンライン敗北報酬'],
   ['onlineRewardDailyCap', '3', 'オンライン対戦報酬の1日上限'],
   ['firstWinBonus', '20', '本日の初勝利報酬'], ['packDailyLimit', '10', 'パックの1日購入上限'],
@@ -1360,24 +1360,40 @@ function gcOnlineResult_(token, payload) {
 
 function gcGetRanking_(token) {
   const identity = gcSession_(token, false);
-  if (identity.settings.rankingEnabled === '0') return { enabled: false, weekStart: gcMissionPeriod_('weekly', gcToday_()), sample: [], owned: [], self: { sample: null, owned: null } };
-  const weekStart = gcMissionPeriod_('weekly', gcToday_());
-  const counts = { sample: {}, owned: {} };
+  if (identity.settings.rankingEnabled === '0') return { enabled: false };
+  const today = gcToday_();
+  const weekStart = gcMissionPeriod_('weekly', today);
+  const monthStart = today.slice(0, 7) + '-01';
+  const counts = {
+    weekly: { sample: {}, owned: {} },
+    monthly: { sample: {}, owned: {} },
+    overall: { sample: {}, owned: {} },
+  };
   gcAdminRows_('BattleLog').forEach(function (row) {
-    if (row[2] !== 'online' || row[5] !== 'win' || gcAdminDay_(row[8]) < weekStart || !counts[row[3]]) return;
+    if (row[2] !== 'online' || row[5] !== 'win' || !counts.overall[row[3]]) return;
+    const day = gcAdminDay_(row[8]);
+    if (!day || day > today) return;
     const email = String(row[1]).toLowerCase();
-    counts[row[3]][email] = (counts[row[3]][email] || 0) + 1;
+    ['overall', ...(day >= monthStart ? ['monthly'] : []), ...(day >= weekStart ? ['weekly'] : [])].forEach(function (period) {
+      const modeCounts = counts[period][row[3]];
+      modeCounts[email] = (modeCounts[email] || 0) + 1;
+    });
   });
   const nicknames = {};
   gcAdminRows_('Users').forEach(function (row) { nicknames[String(row[0]).toLowerCase()] = String(row[4] || (row[1] === 'admin' ? row[5] || '先生' : 'プレイヤー')).trim(); });
-  const ranking = function (mode) {
-    return Object.keys(counts[mode]).map(function (email) { return { email: email, nickname: nicknames[email] || 'プレイヤー', wins: counts[mode][email] }; })
+  const ranking = function (modeCounts) {
+    return Object.keys(modeCounts).map(function (email) { return { email: email, nickname: nicknames[email] || 'プレイヤー', wins: modeCounts[email] }; })
       .sort(function (a, b) { return b.wins - a.wins || a.nickname.localeCompare(b.nickname) || a.email.localeCompare(b.email); })
       .map(function (entry, index) { return { rank: index + 1, email: entry.email, nickname: entry.nickname, wins: entry.wins }; });
   };
-  const sample = ranking('sample');
-  const owned = ranking('owned');
   const publicRows = function (rows) { return rows.slice(0, 20).map(function (item) { return { rank: item.rank, nickname: item.nickname, wins: item.wins, isSelf: item.email === identity.email }; }); };
   const own = function (rows) { const row = rows.find(function (item) { return item.email === identity.email; }); return row ? { rank: row.rank, nickname: row.nickname, wins: row.wins } : null; };
-  return { enabled: true, weekStart: weekStart, sample: publicRows(sample), owned: publicRows(owned), self: { sample: own(sample), owned: own(owned) } };
+  const periods = {};
+  ['weekly', 'monthly', 'overall'].forEach(function (period) {
+    const sample = ranking(counts[period].sample);
+    const owned = ranking(counts[period].owned);
+    periods[period] = { sample: publicRows(sample), owned: publicRows(owned), self: { sample: own(sample), owned: own(owned) } };
+  });
+  return { enabled: true, weekStart: weekStart, monthStart: monthStart, periods: periods,
+    sample: periods.weekly.sample, owned: periods.weekly.owned, self: periods.weekly.self };
 }
