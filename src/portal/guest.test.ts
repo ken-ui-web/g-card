@@ -90,6 +90,9 @@ describe('ゲストの端末内保存', () => {
     expect(first.completedMissions?.[0]?.reward).toBe(20);
     expect(repeated.gPoint).toBe(first.gPoint);
     expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(first.gPoint);
+    const recent = guestAction('getCpuRecent', {}, crypto.randomUUID()) as Record<number, { battleId: string; result: string }[]>;
+    expect(recent[2]).toEqual([{ battleId, result: 'win' }]);
+    expect(recent[1]).toEqual([]);
   });
 
   it('パックも端末内で開封し、GASへの通信をしない', async () => {

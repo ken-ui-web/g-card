@@ -239,6 +239,7 @@ function gcDispatch_(request) {
     case 'train': return gcTrain_(request.session, request.payload || {}, request.requestId);
     case 'saveDeck': return gcSaveDeck_(request.session, request.payload || {});
     case 'reportBattle': return gcReportBattle_(request.session, request.payload || {});
+    case 'getCpuRecent': return gcGetCpuRecent_(request.session);
     case 'onlineJoin': return gcOnlineJoin_(request.session, request.payload || {});
     case 'onlineReport': return gcOnlineReport_(request.session, request.payload || {});
     case 'onlineResult': return gcOnlineResult_(request.session, request.payload || {});
@@ -932,6 +933,21 @@ function gcOpenPack_(token, payload, requestId) {
     gcWriteUser_(record, user);
     return gcRememberResult_(identity.email, 'open_pack', requestId, gcState_(identity, { acquired: acquired, completedMissions: completedMissions, pityRemaining: pack.pityCount ? Math.max(0, pack.pityCount - pity) : null }));
   });
+}
+
+function gcGetCpuRecent_(token) {
+  const identity = gcSession_(token, false);
+  const recent = { 1: [], 2: [], 3: [] };
+  const rows = gcSheet_('BattleLog').getDataRange().getValues();
+  for (let index = rows.length - 1; index >= 1; index--) {
+    const row = rows[index];
+    const level = Number(row[4]);
+    if (String(row[1]).toLowerCase() !== identity.email || row[2] !== 'cpu' ||
+        !recent[level] || recent[level].length >= 10 || ['win', 'loss', 'draw'].indexOf(row[5]) < 0) continue;
+    recent[level].push({ battleId: String(row[0]), result: String(row[5]) });
+    if (recent[1].length === 10 && recent[2].length === 10 && recent[3].length === 10) break;
+  }
+  return recent;
 }
 
 function gcReportBattle_(token, payload) {

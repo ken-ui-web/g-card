@@ -119,6 +119,15 @@ function bootstrap(state: GuestState): BootstrapData {
 export function guestAction(action: string, payload: Record<string, unknown>, requestId: string): BootstrapData | EconomyState | object {
   const state = read();
   if (action === 'bootstrap') return bootstrap(state);
+  if (action === 'getCpuRecent') {
+    const recent: Record<1 | 2 | 3, { battleId: string; result: string }[]> = { 1: [], 2: [], 3: [] };
+    for (let index = state.battleHistory.length - 1; index >= 0; index--) {
+      const match = state.battleHistory[index];
+      const level = match.cpuLevel as 1 | 2 | 3;
+      if (recent[level] && recent[level].length < 10 && ['win', 'loss', 'draw'].includes(match.result)) recent[level].push({ battleId: match.battleId, result: match.result });
+    }
+    return recent;
+  }
   if (action === 'setNickname') {
     const name = String(payload.nickname ?? '').trim();
     if (!name || name.length > 8) throw new Error('ニックネームは1～8文字で入力してください');

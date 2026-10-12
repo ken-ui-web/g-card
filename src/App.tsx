@@ -16,6 +16,7 @@ import { defaultSettings, loadSettings, saveSettings, type TuningSettings } from
 import { Portal } from './portal/Portal';
 import { callApi, isGuest, portalConfigured, savedSession, type BattleDeckConfig, type BootstrapData, type EconomyState } from './portal/api';
 import { loadBattleConfig } from './portal/battleConfig';
+import { addCpuMatch, cpuStats, emptyCpuRecent, loadCpuRecent, type CpuRecent, type CpuResult } from './portal/cpuRecent';
 import { isBootstrapFresh, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './portal/bootstrapCache';
 import './styles.css';
 
@@ -135,6 +136,9 @@ function App() {
   const [account, setAccount] = useState<BootstrapData | null>(null);
   const [liveBattleConfig, setLiveBattleConfig] = useState<BattleDeckConfig[] | null>(null);
   const [battleConfigError, setBattleConfigError] = useState('');
+  const [cpuRecent, setCpuRecent] = useState<CpuRecent>(emptyCpuRecent);
+  const [cpuRecentLoading, setCpuRecentLoading] = useState(false);
+  const [cpuRecentError, setCpuRecentError] = useState(false);
   const [configReload, setConfigReload] = useState(0);
   const [ownedSlots, setOwnedSlots] = useState<DeckSlots>(() => toDeckSlots([]));
   const selectedDeckIds = selectedFromSlots(sampleSlots);
@@ -166,7 +170,14 @@ function App() {
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => {
     const session = savedSession();
-    if (hash !== '#/battle' || !session || (!portalConfigured && !isGuest(session))) return;
+    if (hash !== '#/battle') return;
+    if (!session || (!portalConfigured && !isGuest(session))) {
+      setAccount(null);
+      setCpuRecent(emptyCpuRecent());
+      setCpuRecentLoading(false);
+      setCpuRecentError(false);
+      return;
+    }
     setDeckMode('owned');
     let cancelled = false;
     const applyAccount = (data: BootstrapData) => {
@@ -186,6 +197,12 @@ function App() {
     }).catch(() => { if (!cancelled && !cached) setAccount(null); });
     setLiveBattleConfig(null);
     setBattleConfigError('');
+    setCpuRecent(emptyCpuRecent());
+    setCpuRecentLoading(true);
+    setCpuRecentError(false);
+    void loadCpuRecent(session).then((recent) => { if (!cancelled) setCpuRecent(recent); })
+      .catch(() => { if (!cancelled) setCpuRecentError(true); })
+      .finally(() => { if (!cancelled) setCpuRecentLoading(false); });
     void loadBattleConfig(session).then((decks) => {
       if (cancelled) return;
       setLiveBattleConfig(decks);
@@ -297,14 +314,19 @@ function App() {
   const reportResult = async () => {
     const session = savedSession();
     if (!session || !battle || mode !== 'cpu' || !battleId.current || reportingId.current === battleId.current) return;
-    reportingId.current = battleId.current;
+    const completedBattleId = battleId.current;
+    const completedLevel = level;
+    const completedResult: CpuResult = battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss';
+    reportingId.current = completedBattleId;
     setRewardError('');
     try {
       const result = await callApi<EconomyState>('reportBattle', session, {
-        battleId: battleId.current, mode: 'cpu', deckMode, cpuLevel: level,
-        result: battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss',
+        battleId: completedBattleId, mode: 'cpu', deckMode, cpuLevel: completedLevel,
+        result: completedResult,
       });
       setReward(result);
+      setCpuRecent((recent) => addCpuMatch(recent, completedLevel, { battleId: completedBattleId, result: completedResult }));
+      setCpuRecentError(false);
       setAccount((current) => current ? mergeEconomy(current, result) : current);
       if (!isGuest(session)) patchBootstrapCache(session, (current) => mergeEconomy(current, result));
       if ((result.awarded ?? 0) > 0) playSfx('point');
@@ -438,7 +460,11 @@ function App() {
             <button type="button" className={`mode-option ${mode === 'cpu' ? 'is-active' : ''}`} onClick={() => setMode('cpu')} aria-pressed={mode === 'cpu'}><span className="mode-option__icon">⚙</span><strong>CPUと対戦</strong><small>レベルを選んで1人でプレイ</small></button>
             <button type="button" className={`mode-option ${mode === 'local' ? 'is-active' : ''}`} onClick={() => setMode('local')} aria-pressed={mode === 'local'}><span className="mode-option__icon">↔</span><strong>この端末で対戦</strong><small>交代で端末を渡して2人でプレイ</small></button>
           </div>
-          {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={cpuArtUrl(value)} alt="" /><span>Lv{value}</span><small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small></button>)}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
+          {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => {
+            const matches = cpuRecent[value];
+            const stats = cpuStats(matches);
+            return <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={cpuArtUrl(value)} alt="" /><span className="level-picker__details"><strong>Lv{value}</strong><small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small><span className="level-picker__record"><span>直近10試合</span>{cpuRecentLoading ? <span>読み込み中…</span> : cpuRecentError ? <span>記録を確認できません</span> : <><b>{stats.wins}勝 {stats.losses}敗 {stats.draws}分</b><b>勝率 {stats.rate === null ? '—' : `${stats.rate}%`}</b></>}</span></span></button>;
+          })}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
           {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログイン後に選べます。</small>}</div>}
           {battleConfigError && <p className="portal-error" role="alert">{battleConfigError} <button type="button" className="button button--ghost" onClick={() => { setLiveBattleConfig(null); setConfigReload((current) => current + 1); }}>再読み込み</button></p>}
           {!activeSession && <p>対戦するには、ホームで学校アカウントまたはゲストとしてログインしてください。</p>}
@@ -522,7 +548,7 @@ function App() {
 
         {ui === 'target' && reveal && currentRequest && <div className="target-panel panel"><p className="eyebrow">CARD EFFECT</p><h2>{names[currentRequest.actor]}が対象を選ぶ</h2><p>{getCard(reveal.cards[currentRequest.actor].cardId).name}の効果：{getCard(reveal.cards[currentRequest.actor].cardId).text}</p><div className="target-grid">{currentRequest.options.map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side={currentRequest.kind === 'own' || currentRequest.kind === 'encrypt' || instance.revealedTo?.includes(currentRequest.actor) ? 'front' : 'back'} backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>効果で変化</small>}</button>)}</div>{(currentRequest.kind === 'own' || currentRequest.kind === 'encrypt') && <label>変更後の種類<select value={selectedType} onChange={(event) => setSelectedType(event.target.value as typeof selectedType)}><option value="rock">グー</option><option value="scissors">チョキ</option><option value="paper">パー</option></select></label>}<button type="button" className="button button--primary" disabled={!selectedTarget && !currentRequest.optional} onClick={submitChoice}>{selectedTarget ? '決定する' : '変更せずに進む'}</button></div>}
 
-        {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div key={instance.instanceId}><span>{names[index]}</span><Card card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} width={180} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
+        {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div className={`summary-cards__entry${log.winner === index ? ' is-winner' : log.winner === null ? ' is-draw' : ''}`} key={instance.instanceId}><span>{names[index]}</span><Card card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
         <div className="battle-footnote">CPU対戦はログイン中、結果画面でGポイントとミッションの進み具合を保存します。この端末での2人対戦に報酬はありません。</div>
       </section>}
 

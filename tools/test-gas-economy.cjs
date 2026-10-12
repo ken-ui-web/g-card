@@ -148,6 +148,14 @@ const repeatedBattle = call('gcReportBattle_', token, { battleId, mode: 'cpu', d
 assert.equal(battle.awarded, 25); // 勝利5G＋本日の初勝利20G
 assert.equal(repeatedBattle.gPoint, battle.gPoint);
 assert.equal(sheets.get('BattleLog').rows.filter((row) => row[0] === battleId).length, 1);
+for (let index = 0; index < 12; index++) sheets.get('BattleLog').appendRow([id(), email, 'cpu', 'sample', 2, index % 2 ? 'loss' : 'win', '', 0, new Date().toISOString()]);
+sheets.get('BattleLog').appendRow([id(), 'other@school.example.jp', 'cpu', 'sample', 2, 'win', '', 0, new Date().toISOString()]);
+sheets.get('BattleLog').appendRow([id(), email, 'online', 'sample', 2, 'win', '', 0, new Date().toISOString()]);
+const recentCpu = call('gcDispatch_', { action: 'getCpuRecent', session: token });
+assert.equal(recentCpu[1].length, 1, 'レベル別の履歴を返す');
+assert.equal(recentCpu[2].length, 10, '各レベルは直近10試合だけ返す');
+assert.equal(recentCpu[2].filter((match) => match.result === 'win').length, 5);
+assert.equal(JSON.stringify(recentCpu).includes(email), false, '対戦履歴の応答にメールを含めない');
 for (let round = 0; round < 4; round++) call('gcReportBattle_', token, { battleId: id(), mode: 'cpu', deckMode: 'sample', cpuLevel: 1, result: 'win' });
 assert.equal(call('gcCounter_', email, today).values[2], 3);
 
