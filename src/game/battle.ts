@@ -64,7 +64,7 @@ export interface BattleState {
   history: RoundLog[];
   outcome: BattleOutcome | null;
 }
-export type ChoiceKind = 'opponent' | 'own' | 'swapOwn' | 'swapOpponent' | 'encrypt';
+export type ChoiceKind = 'opponent' | 'allOpponent' | 'own' | 'swapOwn' | 'swapOpponent' | 'encrypt';
 export interface ChoiceRequest { actor: PlayerIndex; kind: ChoiceKind; options: BattleCard[]; effect: CardEffect; optional?: boolean }
 export interface RoundChoice { targetId?: string; to?: CardType }
 const beats: Record<CardType, CardType> = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
@@ -172,7 +172,9 @@ export function choiceRequests(state: BattleState): ChoiceRequest[] {
     const enemy = other(actor);
     for (const effect of getCard(state.reveal.cards[actor].cardId).effects) {
       if (['changeOpponentType', 'nullifyOpponentCard', 'revealOpponent', 'forceOpponentNext'].includes(effect.type) && state.players[enemy].hand.length)
-        requests.push({ actor, kind: 'opponent', options: state.players[enemy].hand, effect });
+        requests.push({ actor, kind: 'opponent', options: state.players[enemy].hand, effect, optional: effect.type === 'changeOpponentType' });
+      if (effect.type === 'changeAllOpponentType' && state.players[enemy].hand.length)
+        requests.push({ actor, kind: 'allOpponent', options: state.players[enemy].hand, effect, optional: true });
       if (effect.type === 'changeOwnType' && state.players[actor].hand.length)
         requests.push({ actor, kind: 'own', options: state.players[actor].hand, effect });
       if (effect.type === 'encrypt' && state.players[actor].hand.length)
@@ -268,8 +270,13 @@ export function finishRound(state: BattleState, selection?: string | RoundChoice
         players[enemy].blind = true;
         events.push({ kind: 'status', actor, text: '相手は残りカードをランダムに出す' });
       } else if (effect.type === 'changeAllOpponentType') {
-        players[enemy].hand = players[enemy].hand.map((card) => ({ ...card, currentType: effect.to, publicType: true }));
-        events.push({ kind: 'status', actor, text: '相手の残りカードをすべてパーに変更' });
+        const choice = take(effect);
+        if (!players[enemy].hand.length) events.push({ kind: 'noTarget', actor });
+        else if (!choice?.targetId) events.push({ kind: 'status', actor, text: '変更しないを選びました' });
+        else {
+          players[enemy].hand = players[enemy].hand.map((card) => ({ ...card, currentType: effect.to, publicType: true }));
+          events.push({ kind: 'status', actor, text: '相手の残りカードをすべてパーに変更' });
+        }
       } else if (effect.type === 'encrypt') {
         players[actor].encrypted = true;
         const choice = take(effect);
@@ -291,7 +298,12 @@ export function finishRound(state: BattleState, selection?: string | RoundChoice
         const choice = take(effect);
         const target = choice?.targetId;
         const side = effect.type === 'changeOwnType' ? actor : enemy;
-        if (!target) { events.push({ kind: 'noTarget', actor }); continue; }
+        if (!target) {
+          events.push(effect.type === 'changeOpponentType' && players[enemy].hand.length
+            ? { kind: 'status', actor, text: '変更しないを選びました' }
+            : { kind: 'noTarget', actor });
+          continue;
+        }
         players[side].hand = players[side].hand.map((card) => {
           if (card.instanceId !== target) return card;
           if (effect.type === 'changeOpponentType') return { ...card, currentType: effect.to, publicType: true };

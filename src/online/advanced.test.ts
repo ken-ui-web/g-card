@@ -30,6 +30,22 @@ async function verify(battle: OnlineRoom, round: number): Promise<void> {
 }
 
 describe('オンライン対戦の40枚ルール', () => {
+  it.each(['P001', 'P002', 'P017', 'P015'])('%sの「変更しない」を両端末で同じ状態として再計算する', async (cardId) => {
+    const left = [cardId, 'G001', 'C008', 'P003'];
+    const right = ['G001', 'G002', 'C008', 'P003'];
+    const battle = await room(left, right);
+    await revealRound(battle, 1, pick(0, cardId, 'a'), pick(0, 'G001', 'b'));
+    const pending = await deriveView(battle);
+    expect(pending.phase).toBe('target');
+    expect(pending.targetRequests?.[0].optional).toBe(true);
+    battle.rounds!['1'].choices = { host: JSON.stringify([{ index: -1 }]) };
+    const skipped = await deriveView(battle);
+    expect(skipped.phase).toBe('verify');
+    expect(skipped.types[1]).toEqual(battle.decks!.guest.types);
+    expect(skipped.events).toContain('変更しないを選びました');
+    await verify(battle, 1);
+    expect((await deriveView(battle)).phase).toBe('select');
+  });
   it('新しい通信手順でも基本カード4ラウンドを最後まで照合する', async () => {
     const left = ['G001', 'G002', 'C008', 'P003'];
     const right = ['C008', 'G001', 'P003', 'G002'];

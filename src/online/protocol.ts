@@ -130,9 +130,12 @@ async function deriveLegacyView(room: OnlineRoom): Promise<OnlineView> {
           if (candidates.length) {
             const target = record.choices?.[uids[actor]];
             if (target === undefined) return { ...view, used, phase: 'target', targetOwner: actor };
-            if (typeof target !== 'number' || !candidates.includes(target)) return invalid(view, '手品の対象が正しくありません');
-            nextTypes[loser][target] = effect.to;
-            view.events.push(`相手の残りカードの種類を変更`);
+            if (target === -1) view.events.push('変更しないを選びました');
+            else {
+              if (typeof target !== 'number' || !candidates.includes(target)) return invalid(view, '手品の対象が正しくありません');
+              nextTypes[loser][target] = effect.to;
+              view.events.push('相手の残りカードの種類を変更');
+            }
           }
         }
     }
@@ -227,7 +230,7 @@ function decodeChoices(value: number | string, requests: ChoiceRequest[]): Round
   const data = JSON.parse(value) as { index?: number; to?: CardType }[];
   if (!Array.isArray(data) || data.length !== requests.length) throw new Error('対象選択の数が正しくありません');
   return data.map((choice, index) => ({
-    targetId: choice.index === undefined ? undefined : `${requests[index].kind === 'own' || requests[index].kind === 'swapOwn' || requests[index].kind === 'encrypt' ? requests[index].actor : opposite(requests[index].actor)}-${choice.index}`,
+    targetId: choice.index === undefined || choice.index === -1 ? undefined : `${requests[index].kind === 'own' || requests[index].kind === 'swapOwn' || requests[index].kind === 'encrypt' ? requests[index].actor : opposite(requests[index].actor)}-${choice.index}`,
     to: choice.to,
   }));
 }

@@ -64,6 +64,10 @@ describe('オンライン対戦の公開情報', () => {
     expect(targeting.phase).toBe('target');
     expect(targeting.targetOwner).toBe(0);
     expect(targeting.used[1]).toContain(0);
+    room.rounds!['1'].choices = { host: -1 };
+    const skipped = await deriveView(room);
+    expect(skipped.phase).toBe('verify');
+    expect(skipped.types[1]).toEqual(room.decks!.guest.types);
     room.rounds!['1'].choices = { host: 1 };
     expect((await deriveView(room)).phase).toBe('verify');
   });

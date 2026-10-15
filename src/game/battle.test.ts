@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginRound, compareTypes, createBattle, effectOrder, finalDamage, finishRound, targetOptions, type BattleConfig } from './battle';
+import { beginRound, choiceRequests, compareTypes, createBattle, effectOrder, finalDamage, finishRound, targetOptions, type BattleConfig } from './battle';
 
 const config: BattleConfig = { initialLife: 100, cpuMaxLife: 100, cpuTraining: 0, damages: { G001: 20, G002: 20, C008: 50 } };
 const play = (state: ReturnType<typeof createBattle>, left: string, right: string, target?: string) =>
@@ -42,6 +42,24 @@ describe('初期4枚のバトル', () => {
     expect(next.players.map((player) => player.life)).toEqual([100, 100]);
     const round2 = beginRound(next, ['0-C008', '1-C008']);
     expect(round2.reveal?.winner).toBe(1);
+  });
+
+  it.each(['P001', 'P002', 'P017', 'P015'])('%sで変更しないを選ぶと相手の残りカードを変えない', (cardId) => {
+    const battle = createBattle('local', config, 1, [[cardId, 'G001', 'C008', 'P003'], ['G001', 'G002', 'C008', 'P003']]);
+    const revealed = beginRound(battle, [`0-${cardId}`, '1-G001']);
+    const before = revealed.players[1].hand.map((card) => [card.instanceId, card.currentType]);
+    expect(choiceRequests(revealed)[0]?.optional).toBe(true);
+    const next = finishRound(revealed, [{}]);
+    expect(next.players[1].hand.map((card) => [card.instanceId, card.currentType])).toEqual(before);
+    expect(next.history[0].events).toContainEqual({ kind: 'status', actor: 0, text: '変更しないを選びました' });
+  });
+
+  it('ハッキングで変更するを選ぶと相手の残りカードをすべてパーに変える', () => {
+    const battle = createBattle('local', config, 1, [['P015', 'G001', 'C008', 'P003'], ['G001', 'G002', 'C008', 'P003']]);
+    const revealed = beginRound(battle, ['0-P015', '1-G001']);
+    const targetId = choiceRequests(revealed)[0].options[0].instanceId;
+    const next = finishRound(revealed, [{ targetId }]);
+    expect(next.players[1].hand.every((card) => card.currentType === 'paper')).toBe(true);
   });
 
   it('最終ラウンドの手品に対象がなくても終了し、ライフで勝敗を決める', () => {

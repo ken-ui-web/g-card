@@ -1,9 +1,9 @@
 const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 // Add student-facing changes to this day's list; admin-only changes do not affect it.
 const studentRelease = {
-  version: '1.7',
-  date: '10/12',
-  changes: ['週間・月間・総合ランキング', 'CPU対戦の相手イラスト・直近10試合の成績', '勝ったカードの表示'],
+  version: '1.8',
+  date: '10/15',
+  changes: ['カードの種類を変える効果で「変更しない」を選べるようにしました'],
 } as const;
 
 function BrandContent() {
