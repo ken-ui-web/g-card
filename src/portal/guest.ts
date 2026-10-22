@@ -29,17 +29,18 @@ export function applyGuestShopConfig(data: BootstrapData, config: PublicShopConf
     economy: { ...data.economy, packDailyLimit: config.packDailyLimit, sellPrices: config.sellPrices },
   };
 }
-type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; loginWeekDays: string[]; weeklyBonusWeek: string; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
+type GuestState = { nickname: string; gPoint: number; tutorialCompleted: boolean; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; loginWeekDays: string[]; weeklyBonusWeek: string; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
 
 function fresh(): GuestState {
   const ownedCards = starter.map((cardId) => ({ ownedId: crypto.randomUUID(), cardId, trainLevel: 0, trainingSpent: 0, source: 'initial' }));
-  return { nickname: '', gPoint: 100, runCount: 0, pityCounter: 0, ownedCards, lastDeck: ownedCards.map((item) => item.ownedId), lastLoginDate: '', loginStreak: 0, loginWeekDays: [], weeklyBonusWeek: '', dailyDate: today(), daily: { cpuRewards: 0, onlineRewards: 0, packsBought: 0 }, firstWinGiven: false, missions: missionTemplates.map((item) => ({ ...item })), missionWeek: monday(today()), processed: {}, reportedBattles: {}, battleHistory: [] };
+  return { nickname: '', gPoint: 100, tutorialCompleted: false, runCount: 0, pityCounter: 0, ownedCards, lastDeck: ownedCards.map((item) => item.ownedId), lastLoginDate: '', loginStreak: 0, loginWeekDays: [], weeklyBonusWeek: '', dailyDate: today(), daily: { cpuRewards: 0, onlineRewards: 0, packsBought: 0 }, firstWinGiven: false, missions: missionTemplates.map((item) => ({ ...item })), missionWeek: monday(today()), processed: {}, reportedBattles: {}, battleHistory: [] };
 }
 
 function read(): GuestState {
   const raw = localStorage.getItem(key);
   if (!raw) { const state = fresh(); write(state); return state; }
   const state = JSON.parse(raw) as GuestState;
+  state.tutorialCompleted ??= false;
   state.reportedBattles ??= {};
   state.battleHistory ??= [];
   const weekStart = monday(today());
@@ -119,6 +120,7 @@ function bootstrap(state: GuestState): BootstrapData {
 export function guestAction(action: string, payload: Record<string, unknown>, requestId: string): BootstrapData | EconomyState | object {
   const state = read();
   if (action === 'bootstrap') return bootstrap(state);
+  if (action === 'getTutorialStatus') return { completed: state.tutorialCompleted };
   if (action === 'getCpuRecent') {
     const recent: Record<1 | 2 | 3, { battleId: string; result: string }[]> = { 1: [], 2: [], 3: [] };
     for (let index = state.battleHistory.length - 1; index >= 0; index--) {
@@ -134,6 +136,13 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
     state.nickname = name; write(state); return { nickname: name };
   }
   if (!state.nickname) throw new Error('先にニックネームを決めてください');
+  if (action === 'completeTutorial') {
+    const awarded = state.tutorialCompleted ? 0 : 50;
+    state.tutorialCompleted = true;
+    state.gPoint += awarded;
+    write(state);
+    return { completed: true, awarded, gPoint: state.gPoint };
+  }
   if (state.processed[requestId]) return state.processed[requestId];
   let extra: Partial<EconomyState> = {};
   if (action === 'buyCard') {

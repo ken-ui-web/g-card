@@ -416,8 +416,8 @@ function App() {
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
   if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><LoadingState text="オンライン対戦を読み込み中" /></main>}><OnlinePage /></Suspense>;
   if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><LoadingState text="ランキングを読み込み中" /></main>}><RankingPage /></Suspense>;
-  if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
-    const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
+  if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || hash === '#/tutorial' || (!hash && portalConfigured)) {
+    const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : hash === '#/tutorial' ? 'tutorial' : 'home';
     return <Portal page={page} />;
   }
 

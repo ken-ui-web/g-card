@@ -233,6 +233,8 @@ function gcDispatch_(request) {
     case 'login': return gcLogin_(request.payload || {});
     case 'bootstrap': return gcBootstrap_(request.session);
     case 'getPlayLimit': return gcGetPlayLimit_(request.session);
+    case 'getTutorialStatus': return gcTutorialStatus_(request.session);
+    case 'completeTutorial': return gcCompleteTutorial_(request.session);
     case 'adminImportRoster': return gcImportRoster_(request.session, request.payload || {});
     case 'buyCard': return gcBuyCard_(request.session, request.payload || {}, request.requestId);
     case 'sellCard': return gcSellCard_(request.session, request.payload || {}, request.requestId);
@@ -436,6 +438,27 @@ function gcPointLogEntry_(email, reason, refId) {
   if (sheet.getLastRow() < 2) return null;
   const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 5).getValues();
   return rows.find(function (row) { return String(row[0]).toLowerCase() === email && row[2] === reason && gcDateKey_(row[3]) === refId; }) || null;
+}
+
+function gcTutorialStatus_(token) {
+  const identity = gcSession_(token, false);
+  return { completed: Boolean(gcPointLogEntry_(identity.email, 'tutorial', 'intro-v1')) };
+}
+
+function gcCompleteTutorial_(token) {
+  const identity = gcSession_(token, false);
+  return gcWithLock_(function () {
+    const previous = gcPointLogEntry_(identity.email, 'tutorial', 'intro-v1');
+    if (previous) return { completed: true, awarded: 0, gPoint: Number(gcUserObject_(gcFindUser_(identity.email)).gPoint || 0) };
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    user.gPoint = Number(user.gPoint || 0) + 50;
+    user.totalEarned = Number(user.totalEarned || 0) + 50;
+    user.updatedAt = new Date().toISOString();
+    gcWriteUser_(record, user);
+    gcPointLog_(identity.email, 50, 'tutorial', 'intro-v1', user.gPoint);
+    return { completed: true, awarded: 50, gPoint: user.gPoint };
+  });
 }
 
 function gcEnsureWelcome_(identity, user) {

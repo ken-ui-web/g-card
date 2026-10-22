@@ -184,6 +184,13 @@ assert.throws(() => call('gcOpenPack_', token, { packId: 'starter' }, id()), /�
 const student = `student@${domain}`;
 sheets.get('Users').appendRow([student, 'student', '', '', '学習者', '以前のニックネーム', 0, 0, 0, 0, today, 0, '', true, '', '']);
 const studentToken = call('gcSignSession_', student, 'student', call('gcSettings_'));
+assert.equal(call('gcDispatch_', { action: 'getTutorialStatus', session: studentToken }).completed, false);
+const beforeTutorial = Number(call('gcUserObject_', call('gcFindUser_', student)).gPoint);
+assert.equal(call('gcDispatch_', { action: 'completeTutorial', session: studentToken }).awarded, 50);
+assert.equal(call('gcDispatch_', { action: 'completeTutorial', session: studentToken }).awarded, 0, 'チュートリアル報酬は再送しても一度だけ');
+assert.equal(call('gcDispatch_', { action: 'getTutorialStatus', session: studentToken }).completed, true);
+assert.equal(Number(call('gcUserObject_', call('gcFindUser_', student)).gPoint), beforeTutorial + 50);
+assert.equal(sheets.get('PointLog').rows.filter((row) => row[1] === student && row[3] === 'tutorial').length, 1);
 assert.throws(() => call('gcAdminSaveSettings_', studentToken, { key: 'muscleCostBase', value: '1' }), /管理者のみ/);
 assert.throws(() => call('gcBuyCard_', studentToken, { cardId: 'P003' }, id()), /準備中/);
 const returning = `returning@${domain}`;

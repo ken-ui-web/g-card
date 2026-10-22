@@ -26,6 +26,16 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('ゲストの端末内保存', () => {
+  it('チュートリアルの50Gは端末内で一度だけ受け取る', () => {
+    guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
+    expect(guestAction('getTutorialStatus', {}, crypto.randomUUID())).toEqual({ completed: false });
+    const before = (guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint;
+    const first = guestAction('completeTutorial', {}, crypto.randomUUID()) as { awarded: number; gPoint: number };
+    const again = guestAction('completeTutorial', {}, crypto.randomUUID()) as { awarded: number; gPoint: number };
+    expect(first).toMatchObject({ awarded: 50, gPoint: before + 50 });
+    expect(again).toMatchObject({ awarded: 0, gPoint: first.gPoint });
+    expect(guestAction('getTutorialStatus', {}, crypto.randomUUID())).toEqual({ completed: true });
+  });
   it('週内の異なる4日目に100Gを一度だけ付与し、翌週は進捗を戻す', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
