@@ -1,13 +1,13 @@
 const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 // Add student-facing changes to this day's list; admin-only changes do not affect it.
 const studentRelease = {
-  version: '1.9',
-  date: '10/22',
-  changes: ['練習対戦のチュートリアルを追加。初回完了で50Gを受け取れます'],
+  version: '1.8',
+  date: '10/15',
+  changes: ['カードの種類を変える効果で「変更しない」を選べるようにしました'],
 } as const;
 
 function BrandContent() {
-  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver{studentRelease.version} · 最終更新 {studentRelease.date}</small><span>{studentRelease.changes.join('・')}</span></span></>;
+  return <><img src={logoUrl} alt="Gカード" /><span className="brand-identity__details"><small>ver{studentRelease.version} · 最終更新 {studentRelease.date}</small><span>{studentRelease.changes.join('・')}を更新しました。</span></span></>;
 }
 
 export function BrandIdentity({ onClick, href = '#/home' }: { onClick?: () => void; href?: string }) {

@@ -3,7 +3,7 @@ import { getApiActivity, subscribeApiActivity } from '../portal/api';
 
 const actionLabels: Record<string, string> = {
   login: '学校アカウントを確認中', setNickname: '名前を保存中', bootstrap: '学校の記録を読み込み中',
-  getPublicShopConfig: 'ショップの設定を確認中', getBattleConfig: '対戦用カードを確認中', getPublicBattleConfig: '対戦用カードを確認中', getTutorialStatus: 'チュートリアルの記録を確認中', completeTutorial: '50Gを保存中',
+  getPublicShopConfig: 'ショップの設定を確認中', getBattleConfig: '対戦用カードを確認中', getPublicBattleConfig: '対戦用カードを確認中',
   buyCard: 'カードを購入中', openPack: 'パックを開封中', sellCard: 'カードを売却中', train: 'トレーニングを保存中', saveDeck: 'デッキを保存中', reportBattle: '対戦結果を保存中',
   listTests: 'テスト一覧を読み込み中', getTest: 'テストを読み込み中', submitTest: '回答を採点・保存中', getTestResult: 'テスト結果を読み込み中',
   listReflections: '振り返りを確認中', syncReflections: '提出記録を確認中',

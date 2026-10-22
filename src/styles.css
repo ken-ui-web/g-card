@@ -622,43 +622,6 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 }
 
 @keyframes portal-sync-spin { to { transform: rotate(360deg); } }
-.portal-tutorial-link{display:inline-flex;margin-top:10px;color:#ffdc69;font-size:13px;font-weight:800;text-decoration:none}
-.portal-tutorial-link:hover{text-decoration:underline}
-.tutorial-page{width:min(1080px,calc(100% - 48px));margin:30px auto;padding:30px 34px}
-.tutorial-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.tutorial-heading h1{margin:0;font:clamp(24px,3vw,38px) 'Dela Gothic One',sans-serif}
-.tutorial-lead{max-width:780px;line-height:1.8;color:#e8efff}
-.tutorial-page h2{margin:18px 0 10px;color:#ffdc69;font:clamp(20px,2.3vw,28px) 'Dela Gothic One',sans-serif}
-.tutorial-page h3{margin:22px 0 10px;font-size:17px}
-.tutorial-page>p:not(.eyebrow){line-height:1.7}
-.tutorial-progress{display:flex;gap:9px;margin:21px 0 24px}
-.tutorial-progress span{display:grid;place-items:center;width:36px;height:36px;border:1px solid #a4b2d166;border-radius:50%;color:#b8c8e6;font-weight:800}
-.tutorial-progress span.is-current{border-color:#ffdc69;color:#ffdc69;box-shadow:0 0 14px #ffdc6966}
-.tutorial-progress span.is-done{border-color:#ffdc69;background:#ffdc69;color:#101a37}
-.tutorial-types{display:flex;flex-wrap:wrap;gap:9px;margin:18px 0 23px}
-.tutorial-types span,.tutorial-life span{border:1px solid #ffd96577;border-radius:12px;padding:10px 14px;background:#16254c;color:#fff;font-weight:800}
-.tutorial-types b{color:#ffdc69}
-.tutorial-intro-cards,.tutorial-hand,.tutorial-opponent,.tutorial-reveal{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 24px}
-.tutorial-intro-cards>div,.tutorial-opponent>div,.tutorial-reveal>div{display:flex;flex-direction:column;align-items:center;gap:7px;border:1px solid #ffffff35;border-radius:15px;padding:12px;background:#111e3e}
-.tutorial-intro-cards .card,.tutorial-hand .card,.tutorial-reveal .card{max-width:100%}
-.tutorial-intro-cards>div{width:calc(25% - 9px)}
-.tutorial-intro-cards strong,.tutorial-reveal strong{font-size:15px}
-.tutorial-intro-cards small,.tutorial-opponent span{color:#b8c8e6}
-.tutorial-guide{border-left:4px solid #ffdc69;padding:12px 17px;background:#ffdc691a;color:#ffe28c;font-size:18px;font-weight:800}
-.tutorial-life{display:flex;flex-wrap:wrap;gap:9px;margin:18px 0}
-.tutorial-life span{display:flex;gap:20px;justify-content:space-between;min-width:175px}
-.tutorial-opponent>div{width:92px;padding:8px}
-.tutorial-hand{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
-.tutorial-hand button{display:flex;flex-direction:column;align-items:center;gap:8px;border:1px solid #ffffff55;border-radius:15px;padding:12px;background:#17264c;color:#fff;cursor:pointer}
-.tutorial-hand button:hover,.tutorial-hand button:focus-visible{border-color:#ffdc69;box-shadow:0 0 15px #ffdc6955}
-.tutorial-hand small{line-height:1.5;color:#d5e2fb}
-.tutorial-reveal{justify-content:center;gap:20px}
-.tutorial-reveal>div{width:205px}
-.tutorial-reveal>div.is-winner{border-color:#ffdc69;box-shadow:0 0 23px #ffdc6988}
-.tutorial-finished{text-align:center}
-.tutorial-finished .button-row{justify-content:center;flex-wrap:wrap;margin-top:22px}
-.tutorial-reward{display:inline-block;border:1px solid #ffdc69;border-radius:13px;padding:13px 22px;background:#ffdc6922;color:#ffdc69;font-size:20px;font-weight:900}
-@media(max-width:650px){.tutorial-page{width:calc(100% - 28px);padding:20px 15px}.tutorial-heading{flex-direction:column}.tutorial-intro-cards>div{width:calc(50% - 6px)}.tutorial-hand{grid-template-columns:repeat(2,minmax(0,1fr))}.tutorial-hand button{padding:8px}.tutorial-reveal>div{width:calc(50% - 10px)}.tutorial-guide{font-size:16px}}
 .online-action-working {
   display: flex;
   align-items: center;
