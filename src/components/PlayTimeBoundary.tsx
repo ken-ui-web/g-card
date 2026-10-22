@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { callApi, isGuest, saveSession, savedSession } from '../portal/api';
 import { clearBootstrapCache } from '../portal/bootstrapCache';
-import { acknowledgePlayLimit, hasPlayTimeCheck, japanDay, playLimitEvent, readPlayLimit, type PlayLimit, type SavedPlayLimit } from '../portal/playTime';
-import { LoadingState } from './LoadingState';
+import { acknowledgePlayLimit, japanDay, playLimitEvent, readPlayLimit, type PlayLimit, type SavedPlayLimit } from '../portal/playTime';
 
 function RemainingTime({ expiresAt }: { expiresAt: number }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, expiresAt - Date.now()));
@@ -20,8 +19,6 @@ export function PlayTimeBoundary({ children }: { children: ReactNode }) {
   const [session, setSession] = useState(savedSession);
   const [limit, setLimit] = useState<SavedPlayLimit | null>(() => readPlayLimit(savedSession()));
   const [expired, setExpired] = useState(() => Boolean(readPlayLimit(savedSession()) && Date.now() >= readPlayLimit(savedSession())!.localExpiresAt));
-  const [verified, setVerified] = useState(() => hasPlayTimeCheck(savedSession()));
-  const [verificationError, setVerificationError] = useState('');
   const [checking, setChecking] = useState(false);
 
   const sync = useCallback(() => {
@@ -30,15 +27,14 @@ export function PlayTimeBoundary({ children }: { children: ReactNode }) {
     setSession(current);
     setLimit(next);
     setExpired(Boolean(next && Date.now() >= next.localExpiresAt));
-    setVerified(hasPlayTimeCheck(current));
   }, []);
 
   const refresh = useCallback(async (current: string) => {
     if (isGuest(current)) return;
     setChecking(true);
-    try { await callApi<PlayLimit | null>('getPlayLimit', current); setVerificationError(''); }
+    try { await callApi<PlayLimit | null>('getPlayLimit', current); }
     catch (failure) {
-      if ((failure as Error & { code?: string }).code !== 'PLAY_TIME_EXPIRED') setVerificationError((failure as Error).message);
+      if ((failure as Error & { code?: string }).code !== 'PLAY_TIME_EXPIRED') console.error('利用時間の確認に失敗しました', failure);
     }
     finally { setChecking(false); sync(); }
   }, [sync]);
@@ -80,8 +76,6 @@ export function PlayTimeBoundary({ children }: { children: ReactNode }) {
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [refresh, sync]);
-
-  if (session && !isGuest(session) && !verified) return <main className="app-shell play-time-shell"><section className="panel play-time-panel"><LoadingState text="利用時間を確認中" />{verificationError && <><p role="alert">{verificationError}</p><button type="button" className="button button--ghost" disabled={checking} onClick={() => { void refresh(session); }}>もう一度確認</button></>}</section></main>;
 
   if (session && limit?.noticePending && !expired) return <main className="app-shell play-time-shell"><section className="panel play-time-panel" role="alertdialog" aria-modal="true" aria-labelledby="play-time-notice-title"><p className="eyebrow">利用時間のお知らせ</p><h1 id="play-time-notice-title">今日は10分間利用できます</h1><p>あなたはプレイ時間の超過により制限がかかりました。<br />今日は、今から１０分だけ利用できます。</p><p className="play-time-remaining">残り <RemainingTime expiresAt={limit.localExpiresAt} /></p><button type="button" className="button button--primary" onClick={() => acknowledgePlayLimit(session)}>確認して始める</button></section></main>;
 
