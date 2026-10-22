@@ -1126,10 +1126,18 @@ function gcAdminDashboard_(token) {
   const reflections = gcAdminRows_('ReflectionResponses');
   const logs = gcAdminRows_('PointLog');
   const todayLogs = logs.filter(function (row) { return gcAdminDay_(row[6]) === today; });
+  const todayLoginUsers = users.filter(function (row) { return gcDateKey_(row[10]) === today; }).map(function (row) {
+    return {
+      email: String(row[0]).trim().toLowerCase(), role: String(row[1] || ''),
+      className: String(row[2] || ''), number: String(row[3] || ''),
+      name: String(row[4] || row[5] || (row[1] === 'admin' ? '管理者' : '未登録')),
+    };
+  });
   return {
     date: today,
     students: users.filter(function (row) { return row[1] !== 'admin'; }).length,
-    logins: users.filter(function (row) { return gcDateKey_(row[10]) === today; }).length,
+    logins: todayLoginUsers.length,
+    todayLoginUsers: todayLoginUsers,
     testAttempts: tests.filter(function (row) { return gcAdminDay_(row[11]) === today; }).length,
     reflectionSubmissions: reflections.filter(function (row) { return gcAdminDay_(row[5]) === today; }).length,
     pointsIssued: todayLogs.reduce(function (sum, row) { return sum + Math.max(0, Number(row[2] || 0)); }, 0),

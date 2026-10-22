@@ -282,6 +282,14 @@ assert.equal(call('gcSyncReflections_', studentToken).awarded, 0, '同じ授業�
 assert.equal(call('gcFindUser_', student).values[6], beforeReflection + 20);
 assert.equal(sheets.get('ReflectionResponses').rows[1][3], '', '本文をGカードに複製しない');
 const dashboard = call('gcAdminDashboard_', token);
+assert.equal(dashboard.logins, dashboard.todayLoginUsers.length, '今日のログイン人数と利用者一覧を一致させる');
+assert.ok(dashboard.todayLoginUsers.some((user) => user.email === student && user.name === '学習者'), 'ログインした生徒の名簿名を表示する');
+assert.ok(dashboard.todayLoginUsers.some((user) => user.email === email && user.role === 'admin'), '管理者のログインも従来の人数に含める');
+assert.equal(JSON.stringify(dashboard).includes('ここに本文'), false, 'ダッシュボードに振り返り本文を返さない');
+assert.throws(() => call('gcAdminDashboard_', studentToken), /管理者のみ/, 'ログイン一覧は管理者だけが取得する');
+sheets.get('Users').appendRow(['not-today@school.example.jp', 'student', '3-1', '9', '未ログイン', '', 0, 0, 0, 0, '2026-01-01']);
+assert.equal(call('gcAdminDashboard_', token).todayLoginUsers.some((user) => user.name === '未ログイン'), false, '前日のログイン利用者を一覧に含めない');
+sheets.get('Users').deleteRow(sheets.get('Users').getLastRow());
 assert.equal(dashboard.testAttempts, 3, '今日のテスト受験回数を集計する');
 assert.equal(dashboard.reflectionSubmissions, 1, '振り返りの初回提出を集計する');
 assert.ok(dashboard.pointsIssued > 0 && dashboard.pointsSpent > 0, '発行と消費を分けて集計する');
