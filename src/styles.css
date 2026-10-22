@@ -361,6 +361,7 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .admin-stage-note{color:#b9c9df;font-size:14px}
 .admin-stage-panel label{display:grid;gap:7px;margin:13px 0;color:#e7effc}
 .admin-stage-panel input:not([type=file]),.admin-stage-panel select{width:100%;min-height:44px;border:1px solid #8da2c366;border-radius:9px;background:#0d1935;color:#fff;padding:9px 12px}
+.admin-stage-panel .admin-ranking-toggle{display:inline-flex;align-items:center;gap:8px;margin:0;white-space:nowrap;cursor:pointer}.admin-stage-panel .admin-ranking-toggle input[type=checkbox]{width:20px;min-height:20px;height:20px;margin:0;padding:0;accent-color:#ffd451;cursor:pointer}.admin-ranking-toggle span{font-size:14px}
 .admin-roster-import{border:1px solid #ffffff38;border-radius:12px;padding:14px;margin:15px 0 20px}
 .admin-roster-import summary{color:#ffdc70;font-weight:800;cursor:pointer}
 .admin-roster-import input[type=file]{display:block;margin:12px 0;max-width:100%}

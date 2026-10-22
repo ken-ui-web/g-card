@@ -266,6 +266,7 @@ function gcDispatch_(request) {
     case 'adminTestResponses': return gcAdminTestResponses_(request.session, request.payload || {});
     case 'adminDashboard': return gcAdminDashboard_(request.session);
     case 'adminListStudents': return gcAdminListStudents_(request.session);
+    case 'adminSetRankingExcluded': return gcAdminSetRankingExcluded_(request.session, request.payload || {});
     case 'adminStudentDetail': return gcAdminStudentDetail_(request.session, request.payload || {});
     case 'adminAdjustPoints': return gcAdminAdjustPoints_(request.session, request.payload || {}, request.requestId);
     case 'adminExportData': return gcAdminExportData_(request.session, request.payload || {});
@@ -1143,7 +1144,38 @@ function gcAdminStudent_(row, identity, ownedCounts) {
     name: String(row[4] || ''), nickname: String(row[5] || ''), gPoint: Number(row[6] || 0),
     maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(row[7] || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
     ownedCount: ownedCounts[email] || 0,
+    rankingExcluded: gcRankingExcludedEmails_(identity.settings).indexOf(email) >= 0,
   };
+}
+
+function gcRankingExcludedEmails_(settings) {
+  const value = String(settings.rankingExcludedEmails || '').trim();
+  if (!value) return [];
+  let emails;
+  try { emails = JSON.parse(value); }
+  catch (_) { gcError_('BAD_SETTING', 'ランキング除外設定を確認してください'); }
+  if (!Array.isArray(emails) || emails.some(function (email) { return typeof email !== 'string'; })) gcError_('BAD_SETTING', 'ランキング除外設定を確認してください');
+  return emails.map(function (email) { return email.trim().toLowerCase(); });
+}
+
+function gcAdminSetRankingExcluded_(token, payload) {
+  gcSession_(token, true);
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!email || typeof payload.excluded !== 'boolean') gcError_('BAD_REQUEST', 'ランキングの設定を確認してください');
+  return gcWithLock_(function () {
+    if (!gcFindUser_(email)) gcError_('NOT_FOUND', '利用者が見つかりません');
+    const excluded = new Set(gcRankingExcludedEmails_(gcSettings_()));
+    if (payload.excluded) excluded.add(email);
+    else excluded.delete(email);
+    const value = JSON.stringify(Array.from(excluded).sort());
+    if (value.length > 45000) gcError_('BAD_REQUEST', 'ランキング除外の登録件数が多すぎます');
+    const sheet = gcSheet_('Settings');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === 'rankingExcludedEmails'; });
+    if (index < 1) sheet.appendRow(['rankingExcludedEmails', value, 'ランキングから除外する学校メールの配列。管理画面で変更']);
+    else sheet.getRange(index + 1, 2).setValue(value);
+    return { email: email, rankingExcluded: payload.excluded };
+  });
 }
 
 function gcAdminListStudents_(token) {
@@ -1377,6 +1409,7 @@ function gcOnlineResult_(token, payload) {
 function gcGetRanking_(token) {
   const identity = gcSession_(token, false);
   if (identity.settings.rankingEnabled === '0') return { enabled: false };
+  const excluded = new Set(gcRankingExcludedEmails_(identity.settings));
   const today = gcToday_();
   const weekStart = gcMissionPeriod_('weekly', today);
   const monthStart = today.slice(0, 7) + '-01';
@@ -1390,6 +1423,7 @@ function gcGetRanking_(token) {
     const day = gcAdminDay_(row[8]);
     if (!day || day > today) return;
     const email = String(row[1]).toLowerCase();
+    if (excluded.has(email)) return;
     ['overall', ...(day >= monthStart ? ['monthly'] : []), ...(day >= weekStart ? ['weekly'] : [])].forEach(function (period) {
       const modeCounts = counts[period][row[3]];
       modeCounts[email] = (modeCounts[email] || 0) + 1;

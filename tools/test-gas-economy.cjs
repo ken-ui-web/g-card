@@ -333,6 +333,21 @@ assert.equal(expandedRanking.periods.overall.sample[0].wins, 2, '総合は過去
 assert.equal(expandedRanking.periods.weekly.owned[0].wins, 1, '自分のカード部門を分ける');
 assert.equal(expandedRanking.periods.overall.self.sample.rank, 1, '本人の順位を返す');
 assert.equal(JSON.stringify(expandedRanking).includes(student), false, 'どの期間でも学校メールを返さない');
+assert.throws(() => call('gcAdminSetRankingExcluded_', studentToken, { email: student, excluded: true }), /管理者のみ/, '生徒は除外設定を変更できない');
+assert.throws(() => call('gcAdminSetRankingExcluded_', token, { email: 'unknown@school.example.jp', excluded: true }), /利用者が見つかりません/);
+sheets.get('BattleLog').appendRow([id(), email, 'online', 'sample', '', 'win', '', 0, today + 'T12:00:00Z']);
+assert.equal(call('gcAdminSetRankingExcluded_', token, { email: student.toUpperCase(), excluded: true }).rankingExcluded, true);
+assert.equal(call('gcAdminListStudents_', token).find((user) => user.email === student).rankingExcluded, true, '管理画面に除外状態を返す');
+const hiddenRanking = call('gcGetRanking_', studentToken);
+for (const period of ['weekly', 'monthly', 'overall']) {
+  assert.equal(hiddenRanking.periods[period].sample.length, 1, `${period}でテスト用アカウントを除外する`);
+  assert.equal(hiddenRanking.periods[period].sample[0].rank, 1, '残る利用者の順位を詰める');
+  assert.equal(hiddenRanking.periods[period].self.sample, null, '除外された本人にも順位を返さない');
+  assert.equal(hiddenRanking.periods[period].self.owned, null, '自分のカード部門からも除外する');
+}
+assert.equal(sheets.get('BattleLog').rows.filter((row) => row[1] === student && row[2] === 'online').length, 3, '除外しても過去の対戦記録を消さない');
+assert.equal(call('gcAdminSetRankingExcluded_', token, { email: student, excluded: false }).rankingExcluded, false);
+assert.equal(call('gcGetRanking_', studentToken).periods.overall.sample[0].nickname, '学習者', '表示を戻すと過去の成績も復活する');
 const invalidBattle = id();
 call('gcOnlineJoin_', studentToken, { battleId: invalidBattle, uid: 'studentfirebaseuid123', deckMode: 'sample' });
 call('gcOnlineJoin_', token, { battleId: invalidBattle, uid: 'teacherfirebaseuid123', deckMode: 'sample' });
