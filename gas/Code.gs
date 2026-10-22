@@ -232,6 +232,7 @@ function gcDispatch_(request) {
   switch (request.action) {
     case 'login': return gcLogin_(request.payload || {});
     case 'bootstrap': return gcBootstrap_(request.session);
+    case 'getPlayLimit': return gcGetPlayLimit_(request.session);
     case 'adminImportRoster': return gcImportRoster_(request.session, request.payload || {});
     case 'buyCard': return gcBuyCard_(request.session, request.payload || {}, request.requestId);
     case 'sellCard': return gcSellCard_(request.session, request.payload || {}, request.requestId);
@@ -267,6 +268,7 @@ function gcDispatch_(request) {
     case 'adminDashboard': return gcAdminDashboard_(request.session);
     case 'adminListStudents': return gcAdminListStudents_(request.session);
     case 'adminSetRankingExcluded': return gcAdminSetRankingExcluded_(request.session, request.payload || {});
+    case 'adminSetPlayLimited': return gcAdminSetPlayLimited_(request.session, request.payload || {});
     case 'adminStudentDetail': return gcAdminStudentDetail_(request.session, request.payload || {});
     case 'adminAdjustPoints': return gcAdminAdjustPoints_(request.session, request.payload || {}, request.requestId);
     case 'adminExportData': return gcAdminExportData_(request.session, request.payload || {});
@@ -388,7 +390,9 @@ function gcSession_(token, requireAdmin) {
   const record = gcFindUser_(email);
   if (!record) gcError_('LOGIN_REQUIRED', 'ログインしてください');
   if (!admin && !String(record.values[4] || '').trim()) gcError_('NAME_REQUIRED', '名簿の氏名が未登録です。先生に伝えてください');
-  return { email: email, admin: admin, record: record, settings: settings };
+  const playLimit = admin ? null : gcPlayLimit_(email, settings);
+  if (playLimit && Date.now() >= Date.parse(playLimit.expiresAt)) gcError_('PLAY_TIME_EXPIRED', '本日の利用時間は終了しました。明日また利用できます。');
+  return { email: email, admin: admin, record: record, settings: settings, playLimit: playLimit };
 }
 
 function gcEqual_(a, b) {
@@ -420,7 +424,7 @@ function gcLogin_(payload) {
     });
   }
   if (!admin && !String(record.values[4] || '').trim()) gcError_('NAME_REQUIRED', '名簿の氏名が未登録です。先生に伝えてください');
-  return { session: gcSignSession_(email, admin ? 'admin' : 'student', settings), needsNickname: false, role: admin ? 'admin' : 'student' };
+  return { session: gcSignSession_(email, admin ? 'admin' : 'student', settings), needsNickname: false, role: admin ? 'admin' : 'student', playLimit: admin ? null : gcPlayLimit_(email, settings) };
 }
 
 function gcPointLog_(email, delta, reason, refId, balance) {
@@ -617,6 +621,7 @@ function gcBootstrap_(token) {
   return {
       profile: { nickname: String(user.name || (identity.admin ? user.nickname || '先生' : '')).trim(), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: false,
+      playLimit: identity.playLimit,
       loginBonus: Object.assign({}, bonus, { dailyAmount: dailyAmount, weeklyBonus: weeklyAmount }),
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
@@ -1153,6 +1158,7 @@ function gcAdminStudent_(row, identity, ownedCounts) {
     maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(row[7] || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
     ownedCount: ownedCounts[email] || 0,
     rankingExcluded: gcRankingExcludedEmails_(identity.settings).indexOf(email) >= 0,
+    playLimited: gcPlayLimitedEmails_(identity.settings).indexOf(email) >= 0,
   };
 }
 
@@ -1164,6 +1170,83 @@ function gcRankingExcludedEmails_(settings) {
   catch (_) { gcError_('BAD_SETTING', 'ランキング除外設定を確認してください'); }
   if (!Array.isArray(emails) || emails.some(function (email) { return typeof email !== 'string'; })) gcError_('BAD_SETTING', 'ランキング除外設定を確認してください');
   return emails.map(function (email) { return email.trim().toLowerCase(); });
+}
+
+function gcPlayLimitedEmails_(settings) {
+  const value = String(settings.playLimitedEmails || '').trim();
+  if (!value) return [];
+  let emails;
+  try { emails = JSON.parse(value); }
+  catch (_) { gcError_('BAD_SETTING', '利用時間の設定を確認してください'); }
+  if (!Array.isArray(emails) || emails.some(function (email) { return typeof email !== 'string'; })) gcError_('BAD_SETTING', '利用時間の設定を確認してください');
+  return emails.map(function (email) { return email.trim().toLowerCase(); });
+}
+
+function gcPlayLimitToday_(settings, email, today) {
+  const value = String(settings.playLimitToday || '').trim();
+  if (!value) return null;
+  let state;
+  try { state = JSON.parse(value); }
+  catch (_) { gcError_('BAD_SETTING', '利用時間の記録を確認してください'); }
+  if (!state || typeof state !== 'object' || typeof state.dateKey !== 'string' || !state.expiresByEmail || typeof state.expiresByEmail !== 'object') gcError_('BAD_SETTING', '利用時間の記録を確認してください');
+  if (state.dateKey !== today || !state.expiresByEmail[email]) return null;
+  const expiresAt = String(state.expiresByEmail[email]);
+  if (!Number.isFinite(Date.parse(expiresAt))) gcError_('BAD_SETTING', '利用時間の記録を確認してください');
+  return { dateKey: today, expiresAt: expiresAt, firstLoginToday: false, serverNow: new Date().toISOString() };
+}
+
+function gcPlayLimit_(email, settings) {
+  if (gcPlayLimitedEmails_(settings).indexOf(email) < 0) return null;
+  const today = gcToday_();
+  const existing = gcPlayLimitToday_(settings, email, today);
+  if (existing) return existing;
+  return gcWithLock_(function () {
+    const current = gcSettings_();
+    if (gcPlayLimitedEmails_(current).indexOf(email) < 0) return null;
+    const started = gcPlayLimitToday_(current, email, today);
+    if (started) return started;
+    let state = { dateKey: today, expiresByEmail: {} };
+    if (current.playLimitToday) {
+      const previous = JSON.parse(current.playLimitToday);
+      if (previous.dateKey === today) state = previous;
+    }
+    const now = Date.now();
+    const expiresAt = new Date(now + 10 * 60 * 1000).toISOString();
+    state.expiresByEmail[email] = expiresAt;
+    const value = JSON.stringify(state);
+    if (value.length > 45000) gcError_('BAD_SETTING', '利用時間の記録が多すぎます');
+    const sheet = gcSheet_('Settings');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === 'playLimitToday'; });
+    if (index < 1) sheet.appendRow(['playLimitToday', value, '利用制限対象者の当日の利用期限。管理画面から設定']);
+    else sheet.getRange(index + 1, 2).setValue(value);
+    return { dateKey: today, expiresAt: expiresAt, firstLoginToday: true, serverNow: new Date(now).toISOString() };
+  });
+}
+
+function gcGetPlayLimit_(token) {
+  return gcSession_(token, false).playLimit;
+}
+
+function gcAdminSetPlayLimited_(token, payload) {
+  const identity = gcSession_(token, true);
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!email || typeof payload.limited !== 'boolean') gcError_('BAD_REQUEST', '利用時間の設定を確認してください');
+  if (gcAdminEmails_(identity.settings).indexOf(email) >= 0) gcError_('BAD_REQUEST', '管理者アカウントには設定できません');
+  return gcWithLock_(function () {
+    if (!gcFindUser_(email)) gcError_('NOT_FOUND', '利用者が見つかりません');
+    const limited = new Set(gcPlayLimitedEmails_(gcSettings_()));
+    if (payload.limited) limited.add(email);
+    else limited.delete(email);
+    const value = JSON.stringify(Array.from(limited).sort());
+    if (value.length > 45000) gcError_('BAD_REQUEST', '利用制限の登録件数が多すぎます');
+    const sheet = gcSheet_('Settings');
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex(function (row) { return row[0] === 'playLimitedEmails'; });
+    if (index < 1) sheet.appendRow(['playLimitedEmails', value, '1日10分の利用制限対象。管理画面から設定']);
+    else sheet.getRange(index + 1, 2).setValue(value);
+    return { email: email, playLimited: payload.limited };
+  });
 }
 
 function gcAdminSetRankingExcluded_(token, payload) {

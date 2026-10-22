@@ -374,4 +374,37 @@ const legacyOwnedId = id();
 sheets.get('OwnedCards').appendRow([legacyOwnedId, email, 'G002', 2, 'initial', new Date().toISOString(), '']);
 const beforeLegacySale = call('gcState_', call('gcSession_', token, false)).gPoint;
 assert.equal(call('gcSellCard_', token, { ownedId: legacyOwnedId }, id()).gPoint, beforeLegacySale + 52, '以前から筋トレしたカードも売却額に反映する');
+assert.throws(() => call('gcAdminSetPlayLimited_', studentToken, { email: student, limited: true }), /管理者のみ/);
+assert.throws(() => call('gcAdminSetPlayLimited_', token, { email, limited: true }), /管理者アカウント/);
+assert.equal(call('gcAdminSetPlayLimited_', token, { email: student, limited: true }).playLimited, true);
+assert.equal(call('gcAdminListStudents_', token).find((user) => user.email === student).playLimited, true);
+const validateBeforeLimit = context.gcValidateGoogle_;
+context.gcValidateGoogle_ = () => student;
+const firstLimitedLogin = call('gcLogin_', { idToken: 'test' });
+assert.equal(firstLimitedLogin.playLimit.firstLoginToday, true, '制限対象の初回ログインだけ注意を出す');
+assert.equal(Date.parse(firstLimitedLogin.playLimit.expiresAt) - Date.parse(firstLimitedLogin.playLimit.serverNow), 600000, '最初の利用から10分');
+const secondLimitedLogin = call('gcLogin_', { idToken: 'test' });
+assert.equal(secondLimitedLogin.playLimit.firstLoginToday, false, '再ログインで注意を繰り返さない');
+assert.equal(secondLimitedLogin.playLimit.expiresAt, firstLimitedLogin.playLimit.expiresAt, '再ログインで期限を延ばさない');
+assert.equal(call('gcGetPlayLimit_', studentToken).expiresAt, firstLimitedLogin.playLimit.expiresAt);
+assert.equal(call('gcBootstrap_', studentToken).playLimit.expiresAt, firstLimitedLogin.playLimit.expiresAt, 'ホームの再表示でも同じ期限を返す');
+const realNow = Date.now;
+const todayBeforeLimit = context.gcToday_;
+try {
+  Date.now = () => Date.parse(firstLimitedLogin.playLimit.expiresAt) + 1;
+  assert.throws(() => call('gcGetRanking_', studentToken), (error) => error.code === 'PLAY_TIME_EXPIRED', '期限後はAPIも利用できない');
+  assert.equal(call('gcLogin_', { idToken: 'test' }).playLimit.expiresAt, firstLimitedLogin.playLimit.expiresAt, '期限後の再ログインでも復活しない');
+  call('gcAdminSetPlayLimited_', token, { email: student, limited: false });
+  assert.doesNotThrow(() => call('gcGetRanking_', studentToken), '先生の解除後は利用できる');
+  call('gcAdminSetPlayLimited_', token, { email: student, limited: true });
+  assert.throws(() => call('gcGetRanking_', studentToken), (error) => error.code === 'PLAY_TIME_EXPIRED', '同日に再設定しても10分をやり直せない');
+  const nextDay = new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+  context.gcToday_ = () => nextDay;
+  assert.equal(call('gcLogin_', { idToken: 'test' }).playLimit.firstLoginToday, true, '翌日は新しい10分を開始する');
+} finally {
+  Date.now = realNow;
+  context.gcToday_ = todayBeforeLimit;
+  context.gcValidateGoogle_ = validateBeforeLimit;
+  call('gcAdminSetPlayLimited_', token, { email: student, limited: false });
+}
 console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export OK');

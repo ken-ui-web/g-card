@@ -7,7 +7,7 @@ import { LoadingState } from '../components/LoadingState';
 type Tab = 'dashboard' | 'students' | 'tests' | 'economy' | 'exports';
 type TodayLoginUser = { email: string; role: string; className: string; number: string; name: string };
 type Dashboard = { date: string; students: number; logins: number; todayLoginUsers: TodayLoginUser[]; testAttempts: number; reflectionSubmissions: number; pointsIssued: number; pointsSpent: number };
-type Student = { email: string; role: string; className: string; number: string; name: string; gPoint: number; maxLife: number; ownedCount: number; rankingExcluded: boolean };
+type Student = { email: string; role: string; className: string; number: string; name: string; gPoint: number; maxLife: number; ownedCount: number; rankingExcluded: boolean; playLimited: boolean };
 type Detail = { student: Student; ownedCards: { ownedId: string; cardId: string; name: string; trainLevel: number; source: string }[]; pointHistory: { delta: number; reason: string; note: string; balanceAfter: number; at: string }[] };
 type ExportPage = { headers: string[]; rows: unknown[][]; total: number; nextCursor: number | null };
 
@@ -44,6 +44,7 @@ function StudentPanel({ session }: { session: string }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [rankingBusyEmail, setRankingBusyEmail] = useState<string | null>(null);
+  const [playLimitBusyEmail, setPlayLimitBusyEmail] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const adjustId = useRef<string | null>(null);
   const loadStudents = () => callApi<Student[]>('adminListStudents', session).then(setStudents).catch((failure: Error) => setMessage(failure.message));
@@ -58,6 +59,16 @@ function StudentPanel({ session }: { session: string }) {
       setMessage(result.rankingExcluded ? `${student.name || student.email} をオンライン対戦ランキングから除外しました。` : `${student.name || student.email} をランキングに表示します。`);
     } catch (failure) { setMessage((failure as Error).message); }
     finally { setRankingBusyEmail(null); }
+  };
+  const setPlayLimited = async (student: Student) => {
+    if (playLimitBusyEmail || student.role === 'admin') return;
+    setPlayLimitBusyEmail(student.email); setMessage('利用時間の設定を保存中…');
+    try {
+      const result = await callApi<{ playLimited: boolean }>('adminSetPlayLimited', session, { email: student.email, limited: !student.playLimited });
+      setStudents((current) => current?.map((item) => item.email === student.email ? { ...item, playLimited: result.playLimited } : item) ?? null);
+      setMessage(result.playLimited ? `${student.name || student.email} を1日10分に制限しました。` : `${student.name || student.email} の利用制限を解除しました。`);
+    } catch (failure) { setMessage((failure as Error).message); }
+    finally { setPlayLimitBusyEmail(null); }
   };
   useEffect(() => { void loadStudents(); }, [session]);
   const adjust = async () => {
@@ -84,10 +95,10 @@ function StudentPanel({ session }: { session: string }) {
   const filtered = students?.filter((student) => `${student.className} ${student.number} ${student.name} ${student.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   return <section className="panel admin-stage-panel"><p className="eyebrow">STUDENTS</p><h2>生徒管理</h2>
     <details className="admin-roster-import"><summary>名簿CSVを取り込む</summary><p>CSVは、学校の生徒名簿を表計算ソフトから保存したファイルです。1行目を <code>email,class,number,name</code> とし、2行目から学校メール・クラス・番号・氏名を1人ずつ記入します。</p><p>取り込んだ情報は学校側のスプレッドシートに保存されます。既存の生徒は名簿情報だけ更新し、Gポイントやカードは変わりません。GitHubには保存しません。</p><input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setCsv).catch(() => setMessage('CSVを読めませんでした')); }} /><button className="button button--ghost" disabled={!csv || busy} onClick={() => { void importRoster(); }}>取り込む</button></details>
-    <p className="admin-stage-note">テスト用アカウントは「ランキングに表示」をオフにできます。過去の勝利も週間・月間・総合の順位から外れます。対戦記録とGポイントは残ります。</p>
+    <p className="admin-stage-note">テスト用アカウントは「ランキングに表示」をオフにできます。利用時間を制限した生徒は、その日の初回利用から10分間だけ使えます。設定しても過去の記録やGポイントは残ります。</p>
     <label>氏名・クラス・メールで検索<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="例：3年1組" /></label>
     {!students && !message && <LoadingState text="生徒を読み込み中" />}
-    <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>G</th><th>最大ライフ</th><th>カード</th><th>ランキングに表示</th><th></th></tr></thead><tbody>{filtered.map((student) => <tr key={student.email}><td>{student.className}</td><td>{student.number}</td><td>{student.name || (student.role === 'admin' ? '管理者' : '未登録')}</td><td>{student.gPoint}</td><td>{student.maxLife}</td><td>{student.ownedCount}</td><td><label className="admin-ranking-toggle"><input type="checkbox" checked={!student.rankingExcluded} disabled={Boolean(rankingBusyEmail)} aria-label={`${student.name || student.email}をランキングに表示`} onChange={() => { void setRankingExcluded(student); }} /><span>{rankingBusyEmail === student.email ? '保存中…' : student.rankingExcluded ? '非表示' : '表示'}</span></label></td><td><button className="button button--ghost" onClick={() => { setMessage(''); void loadDetail(student.email); }}>詳細</button></td></tr>)}</tbody></table></div>
+    <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>G</th><th>最大ライフ</th><th>カード</th><th>ランキングに表示</th><th>利用時間</th><th></th></tr></thead><tbody>{filtered.map((student) => <tr key={student.email}><td>{student.className}</td><td>{student.number}</td><td>{student.name || (student.role === 'admin' ? '管理者' : '未登録')}</td><td>{student.gPoint}</td><td>{student.maxLife}</td><td>{student.ownedCount}</td><td><label className="admin-ranking-toggle"><input type="checkbox" checked={!student.rankingExcluded} disabled={Boolean(rankingBusyEmail)} aria-label={`${student.name || student.email}をランキングに表示`} onChange={() => { void setRankingExcluded(student); }} /><span>{rankingBusyEmail === student.email ? '保存中…' : student.rankingExcluded ? '非表示' : '表示'}</span></label></td><td>{student.role === 'admin' ? '対象外' : <button type="button" className={`button ${student.playLimited ? 'button--primary' : 'button--ghost'}`} aria-pressed={student.playLimited} disabled={Boolean(playLimitBusyEmail)} onClick={() => { void setPlayLimited(student); }}>{playLimitBusyEmail === student.email ? '保存中…' : student.playLimited ? '1日10分' : '制限なし'}</button>}</td><td><button className="button button--ghost" onClick={() => { setMessage(''); void loadDetail(student.email); }}>詳細</button></td></tr>)}</tbody></table></div>
     {detail && <div className="admin-student-detail"><div className="admin-stage-heading"><h3>{detail.student.name || '管理者'} の詳細</h3><button className="button button--ghost" onClick={() => setDetail(null)}>閉じる</button></div><p>{detail.student.email} · 所持 {detail.student.gPoint}G · 最大ライフ {detail.student.maxLife}</p><div className="admin-adjust"><label>Gポイントの増減額<input type="number" min="-100000" max="100000" value={delta} placeholder="例：20 または -20" onChange={(event) => { setDelta(event.target.value); adjustId.current = null; }} /></label><label>調整理由（必須）<input maxLength={200} value={reason} placeholder="例：授業での特別報酬" onChange={(event) => { setReason(event.target.value); adjustId.current = null; }} /></label><button className="button button--primary" disabled={busy || !delta || reason.trim().length < 5} onClick={() => { void adjust(); }}>Gポイントを調整</button></div><h4>所持カード</h4>{detail.ownedCards.length ? <div className="admin-card-list">{detail.ownedCards.map((card) => <span key={card.ownedId}>{card.name} · 筋トレ {card.trainLevel}</span>)}</div> : <p>所持カードはありません。</p>}<h4>最近のGポイント履歴</h4><div className="learning-table-wrap"><table><thead><tr><th>日時</th><th>内容</th><th>増減</th><th>残高</th></tr></thead><tbody>{detail.pointHistory.map((entry, index) => <tr key={`${entry.at}-${index}`}><td>{entry.at ? new Date(entry.at).toLocaleString('ja-JP') : '—'}</td><td>{reasonNames[entry.reason] || entry.reason}{entry.note && <small>：{entry.note}</small>}</td><td>{entry.delta > 0 ? '+' : ''}{entry.delta}</td><td>{entry.balanceAfter}</td></tr>)}</tbody></table></div></div>}
     {message && <p role="status" className="economy-message">{message}</p>}
   </section>;

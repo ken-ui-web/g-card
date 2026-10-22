@@ -8,7 +8,7 @@ const actionLabels: Record<string, string> = {
   listTests: 'テスト一覧を読み込み中', getTest: 'テストを読み込み中', submitTest: '回答を採点・保存中', getTestResult: 'テスト結果を読み込み中',
   listReflections: '振り返りを確認中', syncReflections: '提出記録を確認中',
   adminDashboard: '管理者画面を更新中', adminListStudents: '生徒一覧を読み込み中', adminStudentDetail: '生徒の記録を読み込み中',
-  adminAdjustPoints: 'Gポイントを調整中', adminImportRoster: '名簿を保存中', adminExportData: 'データを書き出し中', adminSetRankingExcluded: 'ランキングの設定を保存中',
+  adminAdjustPoints: 'Gポイントを調整中', adminImportRoster: '名簿を保存中', adminExportData: 'データを書き出し中', adminSetRankingExcluded: 'ランキングの設定を保存中', adminSetPlayLimited: '利用時間の設定を保存中', getPlayLimit: '利用時間を確認中',
   adminGetEconomy: 'カードの設定を読み込み中', adminSaveSettings: 'ゲーム設定を保存中', adminSaveCard: 'カード設定を保存中',
   adminSavePack: 'パック設定を保存中', adminSaveMission: 'ミッションを保存中', adminSaveDeck: '対戦設定を保存中',
   adminListTests: 'テスト設定を読み込み中', adminGetTest: 'テストを読み込み中', adminSaveTest: 'テストを保存中',

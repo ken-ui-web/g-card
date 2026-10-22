@@ -1,4 +1,5 @@
 import { guestAction } from './guest';
+import { clearPlayLimit, markPlayLimitExpired, updatePlayLimit, type PlayLimit } from './playTime';
 
 export interface ApiError {
   code: string;
@@ -50,6 +51,7 @@ export interface EconomyState {
 export interface BootstrapData {
   profile: Profile;
   needsNickname: boolean;
+  playLimit?: PlayLimit | null;
   loginBonus: { awarded: boolean; amount: number; dailyAmount?: number; weeklyBonus?: number; weekDays?: string[]; weekStart?: string; weeklyAwarded?: boolean; weeklyCompleted?: boolean; completedMissions?: { label: string; reward: number }[] };
   ownedCards: OwnedCard[];
   cardMaster: CardMaster[];
@@ -100,6 +102,8 @@ export function saveSession(session: string | null): void {
     if (session) localStorage.setItem(sessionKey, session);
     else localStorage.removeItem(sessionKey);
   } catch { /* Private browsing may deny storage; current login still works. */ }
+  if (!session || isGuest(session)) clearPlayLimit();
+  window.dispatchEvent(new Event('g-card-session-changed'));
 }
 
 export async function callApi<T>(action: string, session: string | null, payload: object = {}, requestId: string = crypto.randomUUID()): Promise<T> {
@@ -124,7 +128,15 @@ export async function callApi<T>(action: string, session: string | null, payload
       if (!result?.ok || result.data === undefined) {
         const error = new Error(result?.error?.message ?? '処理できませんでした') as Error & { code?: string };
         error.code = result?.error?.code;
+        if (error.code === 'PLAY_TIME_EXPIRED' && session) markPlayLimitExpired(session);
         throw error;
+      }
+      if (action === 'login') {
+        const login = result.data as { session?: string; playLimit?: PlayLimit | null };
+        if (login.session) updatePlayLimit(login.session, login.playLimit ?? null);
+      } else if ((action === 'bootstrap' || action === 'getPlayLimit') && session && savedSession() === session) {
+        const limit = action === 'bootstrap' ? (result.data as BootstrapData).playLimit ?? null : result.data as PlayLimit | null;
+        updatePlayLimit(session, limit);
       }
       return result.data;
     } catch (failure) {
