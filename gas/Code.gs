@@ -1126,27 +1126,49 @@ function gcAdminDay_(value) {
 function gcAdminDashboard_(token) {
   gcSession_(token, true);
   const today = gcToday_();
+  const yesterday = new Date(Date.parse(today + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
   const users = gcAdminRows_('Users');
   const tests = gcAdminRows_('TestResponses');
   const reflections = gcAdminRows_('ReflectionResponses');
   const logs = gcAdminRows_('PointLog');
-  const todayLogs = logs.filter(function (row) { return gcAdminDay_(row[6]) === today; });
-  const todayLoginUsers = users.filter(function (row) { return gcDateKey_(row[10]) === today; }).map(function (row) {
+  const yesterdayLogins = new Set(logs.filter(function (row) {
+    return row[3] === 'login_bonus' && gcDateKey_(row[4]) === yesterday;
+  }).map(function (row) { return String(row[1]).trim().toLowerCase(); }));
+  const studentCount = users.filter(function (row) { return row[1] !== 'admin'; }).length;
+  const summarize = function (date) {
+    const dayLogs = logs.filter(function (row) { return gcAdminDay_(row[6]) === date; });
+    const loginUsers = users.filter(function (row) {
+      const email = String(row[0]).trim().toLowerCase();
+      return gcDateKey_(row[10]) === date || (date === yesterday && yesterdayLogins.has(email));
+    }).map(function (row) {
+      return {
+        email: String(row[0]).trim().toLowerCase(), role: String(row[1] || ''),
+        className: String(row[2] || ''), number: String(row[3] || ''),
+        name: String(row[4] || row[5] || (row[1] === 'admin' ? '管理者' : '未登録')),
+      };
+    });
     return {
-      email: String(row[0]).trim().toLowerCase(), role: String(row[1] || ''),
-      className: String(row[2] || ''), number: String(row[3] || ''),
-      name: String(row[4] || row[5] || (row[1] === 'admin' ? '管理者' : '未登録')),
+      date: date,
+      students: studentCount,
+      logins: loginUsers.length,
+      loginUsers: loginUsers,
+      testAttempts: tests.filter(function (row) { return gcAdminDay_(row[11]) === date; }).length,
+      reflectionSubmissions: reflections.filter(function (row) { return gcAdminDay_(row[5]) === date; }).length,
+      pointsIssued: dayLogs.reduce(function (sum, row) { return sum + Math.max(0, Number(row[2] || 0)); }, 0),
+      pointsSpent: dayLogs.reduce(function (sum, row) { return sum + Math.max(0, -Number(row[2] || 0)); }, 0),
     };
-  });
+  };
+  const current = summarize(today);
   return {
-    date: today,
-    students: users.filter(function (row) { return row[1] !== 'admin'; }).length,
-    logins: todayLoginUsers.length,
-    todayLoginUsers: todayLoginUsers,
-    testAttempts: tests.filter(function (row) { return gcAdminDay_(row[11]) === today; }).length,
-    reflectionSubmissions: reflections.filter(function (row) { return gcAdminDay_(row[5]) === today; }).length,
-    pointsIssued: todayLogs.reduce(function (sum, row) { return sum + Math.max(0, Number(row[2] || 0)); }, 0),
-    pointsSpent: todayLogs.reduce(function (sum, row) { return sum + Math.max(0, -Number(row[2] || 0)); }, 0),
+    date: current.date,
+    students: current.students,
+    logins: current.logins,
+    todayLoginUsers: current.loginUsers,
+    testAttempts: current.testAttempts,
+    reflectionSubmissions: current.reflectionSubmissions,
+    pointsIssued: current.pointsIssued,
+    pointsSpent: current.pointsSpent,
+    yesterday: summarize(yesterday),
   };
 }
 

@@ -5,8 +5,9 @@ import { AdminTests } from './AdminTests';
 import { LoadingState } from '../components/LoadingState';
 
 type Tab = 'dashboard' | 'students' | 'tests' | 'economy' | 'exports';
-type TodayLoginUser = { email: string; role: string; className: string; number: string; name: string };
-type Dashboard = { date: string; students: number; logins: number; todayLoginUsers: TodayLoginUser[]; testAttempts: number; reflectionSubmissions: number; pointsIssued: number; pointsSpent: number };
+type LoginUser = { email: string; role: string; className: string; number: string; name: string };
+type DashboardDay = { date: string; students: number; logins: number; loginUsers: LoginUser[]; testAttempts: number; reflectionSubmissions: number; pointsIssued: number; pointsSpent: number };
+type Dashboard = Omit<DashboardDay, 'loginUsers'> & { todayLoginUsers: LoginUser[]; yesterday: DashboardDay };
 type Student = { email: string; role: string; className: string; number: string; name: string; gPoint: number; maxLife: number; ownedCount: number; rankingExcluded: boolean; playLimited: boolean };
 type Detail = { student: Student; ownedCards: { ownedId: string; cardId: string; name: string; trainLevel: number; source: string }[]; pointHistory: { delta: number; reason: string; note: string; balanceAfter: number; at: string }[] };
 type ExportPage = { headers: string[]; rows: unknown[][]; total: number; nextCursor: number | null };
@@ -17,19 +18,25 @@ const reasonNames: Record<string, string> = { welcome: '初回登録', login_bon
 function DashboardPanel({ session }: { session: string }) {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
-  const [showTodayLogins, setShowTodayLogins] = useState(false);
+  const [period, setPeriod] = useState<'today' | 'yesterday'>('today');
+  const [showLogins, setShowLogins] = useState(false);
   const refresh = () => { setError(''); callApi<Dashboard>('adminDashboard', session).then(setData).catch((failure: Error) => setError(failure.message)); };
   useEffect(() => { refresh(); }, [session]);
-  return <section className="panel admin-stage-panel"><div className="admin-stage-heading"><div><p className="eyebrow">TODAY</p><h2>今日のダッシュボード</h2></div><button className="button button--ghost" onClick={refresh}>更新</button></div>
-    {data ? <><p>{data.date} の記録</p><div className="admin-metric-grid">
-      <div className="admin-metric"><small>登録生徒</small><strong>{data.students} 人</strong></div>
-      <button type="button" className="admin-metric admin-metric--button" aria-expanded={showTodayLogins} aria-controls="admin-today-logins" onClick={() => setShowTodayLogins((current) => !current)}><small>今日のログイン</small><strong>{data.logins} 人</strong><span>{showTodayLogins ? '一覧を閉じる ▲' : '利用者を見る ▼'}</span></button>
-      <div className="admin-metric"><small>テスト受験</small><strong>{data.testAttempts} 件</strong></div>
-      <div className="admin-metric"><small>振り返りの初回提出</small><strong>{data.reflectionSubmissions} 件</strong></div>
-      <div className="admin-metric"><small>Gポイント発行</small><strong>+{data.pointsIssued} G</strong></div>
-      <div className="admin-metric"><small>Gポイント消費</small><strong>−{data.pointsSpent} G</strong></div>
+  const summary: DashboardDay | null = data ? period === 'today' ? { ...data, loginUsers: data.todayLoginUsers } : data.yesterday : null;
+  const periodLabel = period === 'today' ? '今日' : '昨日';
+  return <section className="panel admin-stage-panel"><div className="admin-stage-heading"><div><p className="eyebrow">ADMIN DASHBOARD</p><h2>ダッシュボード</h2></div><button className="button button--ghost" onClick={refresh}>更新</button></div>
+    <div className="admin-stage-tabs" role="group" aria-label="集計日を選択">
+      {(['today', 'yesterday'] as const).map((day) => <button key={day} type="button" className={period === day ? 'is-active' : ''} aria-pressed={period === day} onClick={() => { setPeriod(day); setShowLogins(false); }}>{day === 'today' ? '今日' : '昨日'}</button>)}
     </div>
-      {showTodayLogins && <div id="admin-today-logins" className="admin-today-logins"><h3>今日ログインした利用者</h3>{data.todayLoginUsers.length ? <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>学校メール</th></tr></thead><tbody>{data.todayLoginUsers.map((user) => <tr key={user.email}><td>{user.role === 'admin' ? '管理者' : user.className || '—'}</td><td>{user.number || '—'}</td><td>{user.name}</td><td>{user.email}</td></tr>)}</tbody></table></div> : <p>今日はまだログインした利用者がいません。</p>}</div>}
+    {summary ? <><p>{summary.date} の記録</p><div className="admin-metric-grid">
+      <div className="admin-metric"><small>登録生徒（現在）</small><strong>{summary.students} 人</strong></div>
+      <button type="button" className="admin-metric admin-metric--button" aria-expanded={showLogins} aria-controls="admin-day-logins" onClick={() => setShowLogins((current) => !current)}><small>{periodLabel}のログイン</small><strong>{summary.logins} 人</strong><span>{showLogins ? '一覧を閉じる ▲' : '利用者を見る ▼'}</span></button>
+      <div className="admin-metric"><small>テスト受験</small><strong>{summary.testAttempts} 件</strong></div>
+      <div className="admin-metric"><small>振り返りの初回提出</small><strong>{summary.reflectionSubmissions} 件</strong></div>
+      <div className="admin-metric"><small>Gポイント発行</small><strong>+{summary.pointsIssued} G</strong></div>
+      <div className="admin-metric"><small>Gポイント消費</small><strong>−{summary.pointsSpent} G</strong></div>
+    </div>
+      {showLogins && <div id="admin-day-logins" className="admin-today-logins"><h3>{periodLabel}ログインした利用者</h3>{summary.loginUsers.length ? <div className="learning-table-wrap"><table><thead><tr><th>クラス</th><th>番号</th><th>氏名</th><th>学校メール</th></tr></thead><tbody>{summary.loginUsers.map((user) => <tr key={user.email}><td>{user.role === 'admin' ? '管理者' : user.className || '—'}</td><td>{user.number || '—'}</td><td>{user.name}</td><td>{user.email}</td></tr>)}</tbody></table></div> : <p>{periodLabel}はログインした利用者がいません。</p>}</div>}
       <p className="admin-stage-note">人数は学校アカウントごとに数えます。振り返りはGカードが受け取った初回提出だけを集計します。</p></> : <LoadingState text="ダッシュボードを読み込み中" />}
     {error && <p role="alert" className="portal-error">{error}</p>}
   </section>;
