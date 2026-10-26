@@ -8,14 +8,14 @@ import { OnlineBattleBoard } from './OnlineBattleBoard';
 import { LoadingState } from '../components/LoadingState';
 import { SoundToggle } from '../components/SoundToggle';
 import { playSfx } from '../audio/sfx';
-import { availableCards, defaultDeckIds, getCard, ssrCount, type CardType, typeLabels } from '../data/cards';
+import { availableCards, getCard, ssrCount, type CardType, typeLabels } from '../data/cards';
 import { selectedFromSlots, toDeckSlots, toggleDeckSlot, validDeckSlots, type DeckSlots } from '../data/deckSlots';
 import { callApi, isGuest, savedSession, type BootstrapData } from '../portal/api';
 import { isBootstrapFresh, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from '../portal/bootstrapCache';
 import { compareCards } from '../data/cardOrder';
 import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
 import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
-import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type DeckMode, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
+import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
 import { initialOnlineSelection, type OnlinePoolItem } from './selection';
 
 type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
@@ -30,10 +30,9 @@ function encryptProofs(roomId: string): EncryptProof[] {
 const roomFromHash = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('room') || '';
 const battleBackgroundStyle = { '--battle-bg': `url("${import.meta.env.BASE_URL}images/bg/battle.webp")` } as CSSProperties;
 
-function onlinePool(account: BootstrapData, mode: DeckMode): OnlinePoolItem[] {
-  const entries = mode === 'owned' ? account.ownedCards.filter((item) => availableCards.some((card) => card.cardId === item.cardId)).map((item) => ({ id: item.ownedId, cardId: item.cardId, trainLevel: item.trainLevel })) :
-    account.battleConfig.find((item) => item.deckId === 'sample')?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id)).map((cardId) => ({ id: cardId, cardId, trainLevel: 0 })) || [];
-  return entries;
+function onlinePool(account: BootstrapData): OnlinePoolItem[] {
+  return account.ownedCards.filter((item) => availableCards.some((card) => card.cardId === item.cardId))
+    .map((item) => ({ id: item.ownedId, cardId: item.cardId, trainLevel: item.trainLevel }));
 }
 
 function onlineCardDamage(pick: RoundPick): number | null {
@@ -114,9 +113,8 @@ export function OnlinePage() {
   const [roomId, setRoomId] = useState(roomFromHash);
   const [room, setRoom] = useState<OnlineRoom | null>(null);
   const [view, setView] = useState<OnlineView | null>(null);
-  const [deckMode, setDeckMode] = useState<DeckMode>('owned');
   const [code, setCode] = useState('');
-  const [selectedSlots, setSelectedSlots] = useState<DeckSlots>(() => toDeckSlots(defaultDeckIds));
+  const [selectedSlots, setSelectedSlots] = useState<DeckSlots>(() => toDeckSlots([]));
   const [deckType, setDeckType] = useState<CardType | 'all'>('all');
   const [entries, setEntries] = useState<OnlineEntry[] | null>(null);
   const [salt, setSalt] = useState('');
@@ -167,12 +165,10 @@ export function OnlinePage() {
     Promise.all([profileRequest, connectFirebase()]).then(([profile, connection]) => {
       if (!active) return;
       setAccount(profile); setDb(connection.db); setUid(connection.uid);
-      const initialMode: DeckMode = initialOnlineSelection(onlinePool(profile, 'owned')).length === 4 ? 'owned' : 'sample';
-      setDeckMode(initialMode);
-      setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(profile, initialMode))));
+      setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(profile))));
       if (!roomId) return;
       const saved = sessionStorage.getItem(`g-card-online:${roomId}`);
-      if (saved) try { const parsed = JSON.parse(saved) as { entries: OnlineEntry[]; salt: string; mode: DeckMode }; setEntries(parsed.entries); setSalt(parsed.salt); setDeckMode(parsed.mode); } catch { /* 再接続時に入力し直す */ }
+      if (saved) try { const parsed = JSON.parse(saved) as { entries: OnlineEntry[]; salt: string; mode: string }; if (parsed.mode === 'owned') { setEntries(parsed.entries); setSalt(parsed.salt); } } catch { /* 再接続時に入力し直す */ }
     }).catch((failure: Error) => { if (active) setError(failure.message); });
     return () => { active = false; disconnectFirebase(); };
   }, [session]);
@@ -199,15 +195,16 @@ export function OnlinePage() {
   useEffect(() => {
     if (!db || !uid || !room || !session || !account || joined || !room.meta.guestUid) return;
     if (room.meta.hostUid !== uid && room.meta.guestUid !== uid) { setError('この部屋には参加できません。'); return; }
+    if (room.meta.deckMode !== 'owned') { setError('サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。'); return; }
     if (entered.current) return;
     entered.current = true;
     void (async () => {
       try {
-        const maxLife = room.meta.deckMode === 'owned' ? account.profile.maxLife : account.battleConfig.find((item) => item.deckId === 'sample')?.maxLife ?? 100;
+        const maxLife = account.profile.maxLife;
         if (room.meta.teacherTest && account.profile.role !== 'admin') throw new Error('この部屋は管理者のテスト用です。');
         await setPresence(db, roomId, uid, room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname, maxLife);
         if (!room.meta.teacherTest) await callApi('onlineJoin', session, { battleId: roomId, uid, deckMode: room.meta.deckMode });
-        setDeckMode(room.meta.deckMode); setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account, room.meta.deckMode)))); setJoined(true);
+        setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account)))); setJoined(true);
       } catch (failure) { entered.current = false; setError((failure as Error).message); }
     })();
   }, [db, uid, room, session, account, joined, roomId]);
@@ -221,7 +218,7 @@ export function OnlinePage() {
       setLocalConnected(connected);
       if (!seenConnection) { seenConnection = true; return; }
       if (!connected) return;
-      const maxLife = room.meta.deckMode === 'owned' ? account.profile.maxLife : account.battleConfig.find((item) => item.deckId === 'sample')?.maxLife ?? 100;
+      const maxLife = account.profile.maxLife;
       const nickname = room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname;
       void setPresence(db, roomId, uid, nickname, maxLife).catch((failure: Error) => {
         if (active) setError(`再接続できません：${failure.message}`);
@@ -331,8 +328,9 @@ export function OnlinePage() {
 
   const pool = useMemo(() => {
     if (!account) return [];
-    return onlinePool(account, deckMode).sort((a, b) => compareCards(getCard(a.cardId), getCard(b.cardId)));
-  }, [account, deckMode]);
+    return onlinePool(account).sort((a, b) => compareCards(getCard(a.cardId), getCard(b.cardId)));
+  }, [account]);
+  const canBuildDeck = initialOnlineSelection(pool).length === 4;
   const selectedValidSlots = validDeckSlots(selectedSlots, pool.map((item) => item.id));
   const selectedValid = selectedFromSlots(selectedValidSlots);
   const dockCards = selectedValidSlots.map((id) => {
@@ -340,7 +338,6 @@ export function OnlinePage() {
     return item ? getCard(item.cardId) : null;
   });
   const selectedSsr = ssrCount(selectedValid.map((id) => pool.find((item) => item.id === id)!.cardId));
-  const chooseMode = (next: DeckMode) => { setDeckMode(next); setSelectedSlots(toDeckSlots(account ? initialOnlineSelection(onlinePool(account, next)) : defaultDeckIds)); };
   const toggleSelectedCard = (id: string) => setSelectedSlots((slots) => {
     const valid = validDeckSlots(slots, pool.map((item) => item.id));
     const card = pool.find((item) => item.id === id);
@@ -349,19 +346,19 @@ export function OnlinePage() {
     const canAdd = Boolean(card && (getCard(card.cardId).rarity !== 'SSR' || !selectedHasSsr));
     return toggleDeckSlot(valid, id, canAdd);
   });
-  const maxLife = deckMode === 'owned' ? account?.profile.maxLife || 100 : account?.battleConfig.find((item) => item.deckId === 'sample')?.maxLife || 100;
+  const maxLife = account?.profile.maxLife || 100;
 
   const startCode = async () => {
-    if (!db || !uid || !account || busy) return;
+    if (!db || !uid || !account || busy || !canBuildDeck) return;
     setBusy(true); setError('');
-    try { const created = await createCodeRoom(db, uid, teacherTestMode ? '先生A' : account.profile.nickname, maxLife, deckMode, teacherTestMode); enterRoom(created.roomId); setCode(created.code); }
+    try { const created = await createCodeRoom(db, uid, teacherTestMode ? '先生A' : account.profile.nickname, maxLife, 'owned', teacherTestMode); enterRoom(created.roomId); setCode(created.code); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
   const joinCode = async () => {
-    if (!db || !uid || busy) return;
+    if (!db || !uid || busy || !canBuildDeck) return;
     setBusy(true); setError('');
-    try { enterRoom(await joinCodeRoom(db, uid, code.trim(), deckMode)); }
+    try { enterRoom(await joinCodeRoom(db, uid, code.trim(), 'owned')); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
@@ -369,9 +366,9 @@ export function OnlinePage() {
     if (!db || !uid || !room || selectedValid.length !== 4 || selectedSsr > 1 || !joined || !localConnected || busy) return;
     setBusy(true); setError('');
     try {
-      const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ...(deckMode === 'owned' ? { ownedId: id } : {}), trainLevel: item.trainLevel }; });
+      const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ownedId: id, trainLevel: item.trainLevel }; });
       const nextSalt = randomSalt();
-      sessionStorage.setItem(`g-card-online:${roomId}`, JSON.stringify({ entries: deck, salt: nextSalt, mode: deckMode }));
+      sessionStorage.setItem(`g-card-online:${roomId}`, JSON.stringify({ entries: deck, salt: nextSalt, mode: 'owned' }));
       await set(ref(db, `${roomPath(roomId)}/decks/${uid}`), { types: deck.map((item) => getCard(item.cardId).type), ssr: deck.map((item) => getCard(item.cardId).rarity === 'SSR'), commit: await deckCommit(deck, nextSalt) });
       setEntries(deck); setSalt(nextSalt);
     } catch (failure) { setError((failure as Error).message); }
@@ -464,7 +461,7 @@ export function OnlinePage() {
       {room && !room.meta.teacherTest && account?.profile.role === 'admin' && <p role="status">通常対戦の部屋です。同じ学校アカウント同士では参加できません。</p>}
       {room && joined && !localConnected && view?.outcome === null && <p role="status">通信が切れています。再接続を待っています。制限時間は一時停止中です。</p>}
       {room && joined && localConnected && opponentAway && !opponentOffline && view?.outcome === null && <p role="status">相手との通信を確認中です。制限時間は一時停止中です。</p>}
-      {!session ? <p>学校アカウントでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>自分のカードかサンプルカードを選び、同じ部門の相手と対戦します。</p><div className="online-mode"><button className="button button--ghost" aria-pressed={deckMode === 'sample'} onClick={() => chooseMode('sample')}>サンプルカード</button><button className="button button--ghost" aria-pressed={deckMode === 'owned'} disabled={initialOnlineSelection(onlinePool(account, 'owned')).length < 4} onClick={() => chooseMode('owned')}>自分のカード</button></div><div className="button-row"><button className="button button--primary" disabled={busy} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <LoadingState text="部屋を読み込み中" /> : <><p>部門：{room.meta.deckMode === 'owned' ? '自分のカード' : 'サンプルカード'}{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'} VS {room.players?.[room.meta.guestUid || '']?.nickname || '相手を待っています…'}</p>
+      {!session ? <p>学校アカウントでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>所持しているカードから4枚を選び、友達と対戦します。</p>{!canBuildDeck && <p role="alert">オンライン対戦には自分のカードが4枚必要です。SSRは1枚まで使えます。カード購入でそろえてください。</p>}<div className="button-row"><button className="button button--primary" disabled={busy || !canBuildDeck} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || !canBuildDeck || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <LoadingState text="部屋を読み込み中" /> : room.meta.deckMode !== 'owned' ? <><p role="alert">サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。</p><div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></> : <><p>自分のカード{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'} VS {room.players?.[room.meta.guestUid || '']?.nickname || '相手を待っています…'}</p>
         {!room.meta.guestUid ? <LoadingState text="相手を待っています。コードを友達に伝えてください" /> : !joined ? <LoadingState text="対戦相手の参加を確認中" /> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻らなかったため、勝敗を確定しています…</p></div> : view?.phase === 'deck' ? <>
           <h2>カードを4枚選ぶ</h2>
           <p>制限時間90秒。相手には種類とSSRかどうかが見え、カード名はラウンドまで隠れます。SSRは1枚までです。</p>

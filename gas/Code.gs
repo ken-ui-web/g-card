@@ -1398,6 +1398,7 @@ function gcOnlineJoin_(token, payload) {
   return gcWithLock_(function () {
     const found = gcOnlineMatch_(battleId);
     if (!found) {
+      if (mode !== 'owned') gcError_('BAD_REQUEST', 'オンライン対戦は自分のカードで参加してください');
       gcSheet_('OnlineMatches').appendRow([battleId, mode, identity.email, uid, '', '', '', '', '', '', new Date().toISOString(), 'waiting', '']);
       return { status: 'waiting' };
     }

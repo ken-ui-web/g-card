@@ -48,7 +48,7 @@ function GoogleButton({ onCredential }: { onCredential: (credential: string) => 
 
 const menuItems = [
   { icon: 'test', title: 'テストを受ける', key: 'tests' },
-  { icon: 'reflection', title: '振り返りを書く', key: 'reflections' },
+  { icon: 'reflection', title: '振り返り報酬', key: 'reflections' },
   { icon: 'battle', title: '対戦する', key: 'battle' },
   { icon: 'battle', title: 'オンライン対戦', key: 'online' },
   { icon: 'deck', title: 'デッキ・図鑑', key: 'deck' },

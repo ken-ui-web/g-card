@@ -105,7 +105,7 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
   const missing = currentQuestions.filter((q) => q.required && !answerPresent(q, answers[q.questionId]));
   return <section className="learning-page panel"><p className="eyebrow">{page === 'tests' ? 'LEARNING TEST' : 'LESSON REFLECTION'}</p>
     {page === 'reflections' ? <>
-      <h1>授業の振り返り</h1>
+      <h1>振り返り報酬</h1>
       <p>提出と修正は、これまで使っている「振り返りアプリ」で行います。Gカードに本文は保存しません。</p>
       {reflections?.appUrl ? <a className="button button--primary" href={reflections.appUrl} target="_blank" rel="noopener noreferrer">振り返りアプリを開く</a> : <LoadingState text="振り返りの情報を読み込み中" />}
       <p>初めて提出した授業ごとに{reflections ? `${reflections.reward}G` : '設定されたGポイント'}を受け取れます。修正では追加されません。戻ってきたら、下のボタンを押してください。</p>

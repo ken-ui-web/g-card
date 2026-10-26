@@ -339,6 +339,11 @@ assert.throws(() => call('gcAdminExportData_', token, { table: 'Unknown' }), /�
 call('gcAdminSaveSettings_', token, { key: 'onlineEnabled', value: '1' });
 const onlineBattle = id();
 const onlineDeck = ['G001', 'G002', 'C008', 'P001'].map((cardId) => ({ cardId, trainLevel: 0 }));
+assert.throws(() => call('gcOnlineJoin_', studentToken, { battleId: onlineBattle, uid: 'studentfirebaseuid123', deckMode: 'sample' }), /自分のカード/, '新しいサンプル対戦を作れない');
+assert.equal(sheets.get('OnlineMatches').rows.some((row) => row[0] === onlineBattle), false, '拒否したサンプル対戦を記録しない');
+const ownedBattle = id();
+assert.equal(call('gcOnlineJoin_', studentToken, { battleId: ownedBattle, uid: 'studentfirebaseuid123', deckMode: 'owned' }).status, 'waiting', '新しい所持カード対戦は作れる');
+sheets.get('OnlineMatches').appendRow([onlineBattle, 'sample', student, 'studentfirebaseuid123', '', '', '', '', '', '', new Date().toISOString(), 'waiting', '']);
 assert.equal(call('gcOnlineJoin_', studentToken, { battleId: onlineBattle, uid: 'studentfirebaseuid123', deckMode: 'sample' }).status, 'waiting');
 assert.equal(call('gcOnlineJoin_', token, { battleId: onlineBattle, uid: 'teacherfirebaseuid123', deckMode: 'sample' }).status, 'active');
 assert.throws(() => call('gcOnlineJoin_', token, { battleId: onlineBattle, uid: 'differentfirebaseuid', deckMode: 'sample' }), /参加できません/);
@@ -381,6 +386,7 @@ assert.equal(sheets.get('BattleLog').rows.filter((row) => row[1] === student && 
 assert.equal(call('gcAdminSetRankingExcluded_', token, { email: student, excluded: false }).rankingExcluded, false);
 assert.equal(call('gcGetRanking_', studentToken).periods.overall.sample[0].nickname, '学習者', '表示を戻すと過去の成績も復活する');
 const invalidBattle = id();
+sheets.get('OnlineMatches').appendRow([invalidBattle, 'sample', student, 'studentfirebaseuid123', '', '', '', '', '', '', new Date().toISOString(), 'waiting', '']);
 call('gcOnlineJoin_', studentToken, { battleId: invalidBattle, uid: 'studentfirebaseuid123', deckMode: 'sample' });
 call('gcOnlineJoin_', token, { battleId: invalidBattle, uid: 'teacherfirebaseuid123', deckMode: 'sample' });
 call('gcOnlineReport_', studentToken, { battleId: invalidBattle, result: 'win', stateHash: onlineHash, deck: onlineDeck });
