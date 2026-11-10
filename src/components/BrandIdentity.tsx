@@ -1,9 +1,9 @@
 const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 // Add student-facing changes to this day's list; admin-only changes do not affect it.
 const studentRelease = {
-  version: '1.9',
-  date: '10/26',
-  changes: ['オンライン対戦は自分のカードだけで遊べます。振り返り報酬の案内も変更しました。'],
+  version: '1.10',
+  date: '11/10',
+  changes: ['オンライン対戦で保存したデッキが最初から選ばれます。'],
 } as const;
 
 function BrandContent() {

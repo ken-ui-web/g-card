@@ -14,9 +14,10 @@ export function toggleOnlineSelection(selected: string[], id: string, pool: Onli
   return [...valid, id];
 }
 
-export function initialOnlineSelection(pool: OnlinePoolItem[]): string[] {
-  return pool.reduce<string[]>((selected, card) => {
-    if (selected.length >= 4 || getCard(card.cardId).rarity === 'SSR' && ssrCount(selected.map((id) => pool.find((item) => item.id === id)!.cardId)) >= 1) return selected;
-    return [...selected, card.id];
+export function initialOnlineSelection(pool: OnlinePoolItem[], savedDeck: string[] = []): string[] {
+  return [...savedDeck, ...pool.map((card) => card.id)].reduce<string[]>((selected, id) => {
+    const card = pool.find((item) => item.id === id);
+    if (!card || selected.includes(id) || selected.length >= 4 || getCard(card.cardId).rarity === 'SSR' && ssrCount(selected.map((selectedId) => pool.find((item) => item.id === selectedId)!.cardId)) >= 1) return selected;
+    return [...selected, id];
   }, []);
 }

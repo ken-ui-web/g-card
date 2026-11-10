@@ -165,7 +165,7 @@ export function OnlinePage() {
     Promise.all([profileRequest, connectFirebase()]).then(([profile, connection]) => {
       if (!active) return;
       setAccount(profile); setDb(connection.db); setUid(connection.uid);
-      setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(profile))));
+      setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(profile), profile.lastDeck)));
       if (!roomId) return;
       const saved = sessionStorage.getItem(`g-card-online:${roomId}`);
       if (saved) try { const parsed = JSON.parse(saved) as { entries: OnlineEntry[]; salt: string; mode: string }; if (parsed.mode === 'owned') { setEntries(parsed.entries); setSalt(parsed.salt); } } catch { /* 再接続時に入力し直す */ }
@@ -204,7 +204,7 @@ export function OnlinePage() {
         if (room.meta.teacherTest && account.profile.role !== 'admin') throw new Error('この部屋は管理者のテスト用です。');
         await setPresence(db, roomId, uid, room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname, maxLife);
         if (!room.meta.teacherTest) await callApi('onlineJoin', session, { battleId: roomId, uid, deckMode: room.meta.deckMode });
-        setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account)))); setJoined(true);
+        setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account), account.lastDeck))); setJoined(true);
       } catch (failure) { entered.current = false; setError((failure as Error).message); }
     })();
   }, [db, uid, room, session, account, joined, roomId]);

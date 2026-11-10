@@ -12,4 +12,9 @@ describe('オンライン対戦の4枚選択', () => {
   it('候補がちょうど4枚なら4枚とも選んだ状態にできる', () => {
     expect(initialOnlineSelection(fourCards)).toEqual(['G001', 'G002', 'C008', 'P001']);
   });
+  it('保存済みの自分のデッキを同じ順番で初期選択する', () => {
+    const pool = [...fourCards, { id: 'P003', cardId: 'P003', trainLevel: 0 }];
+    expect(initialOnlineSelection(pool, ['P003', 'C008', 'G002', 'G001'])).toEqual(['P003', 'C008', 'G002', 'G001']);
+    expect(initialOnlineSelection(pool, ['売却済み', 'P003', 'G002'])).toEqual(['P003', 'G002', 'G001', 'C008']);
+  });
 });
