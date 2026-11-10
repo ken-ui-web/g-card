@@ -26,6 +26,23 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('ゲストの端末内保存', () => {
+  it('旧データの筋トレ超過分とお詫びを一度だけ付与し、確認後は通知しない', () => {
+    guestAction('setNickname', { nickname: 'ゲスト' }, crypto.randomUUID());
+    const raw = JSON.parse(storage.get('g-card-guest-v1')!) as Record<string, unknown> & { ownedCards: { ownedId: string; cardId: string; trainLevel: number; trainingSpent: number }[] };
+    const trained = raw.ownedCards.find((item) => item.cardId === 'G001')!;
+    trained.cardId = 'G007'; trained.trainLevel = 10; trained.trainingSpent = 290;
+    raw.gPoint = 100;
+    raw.trainingPolicy = undefined;
+    storage.set('g-card-guest-v1', JSON.stringify(raw));
+    const migrated = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    expect(migrated.trainingPolicyNotice).toMatchObject({ bonus: 100, refund: 140 });
+    expect(migrated.profile.gPoint).toBe(350);
+    expect(migrated.ownedCards.find((item) => item.ownedId === trained.ownedId)).toMatchObject({ trainLevel: 6, trainingSpent: 150 });
+    expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(350);
+    expect(() => guestAction('train', { items: [{ kind: 'muscle', ownedId: trained.ownedId, count: 1 }] }, crypto.randomUUID())).toThrow('上限');
+    guestAction('ackTrainingPolicy', { version: migrated.trainingPolicyNotice!.version }, crypto.randomUUID());
+    expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).trainingPolicyNotice).toBeNull();
+  });
   it('週内の異なる4日目に100Gを一度だけ付与し、翌週は進捗を戻す', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
@@ -37,12 +54,12 @@ describe('ゲストの端末内保存', () => {
       expect(result.loginBonus.amount).toBe(offset === 3 ? 110 : 10);
       expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).loginBonus.awarded).toBe(false);
     }
-    expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(240);
+    expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(340);
     vi.setSystemTime(new Date('2026-10-12T03:00:00Z'));
     const nextWeek = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
     expect(nextWeek.loginBonus.weekDays).toEqual(['2026-10-12']);
     expect(nextWeek.loginBonus.weeklyCompleted).toBe(false);
-    expect(nextWeek.profile.gPoint).toBe(250);
+    expect(nextWeek.profile.gPoint).toBe(350);
   });
 
   it('ウィークリーミッションは日付が変わっても保持し、翌週に更新する', () => {
@@ -67,7 +84,7 @@ describe('ゲストの端末内保存', () => {
     expect(first.needsNickname).toBe(true);
     guestAction('setNickname', { nickname: 'ゲストA' }, crypto.randomUUID());
     const loggedIn = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
-    expect(loggedIn.profile.gPoint).toBe(110);
+    expect(loggedIn.profile.gPoint).toBe(210);
     const bought = guestAction('buyCard', { cardId: 'P003' }, crypto.randomUUID()) as EconomyState;
     expect(bought.ownedCards).toHaveLength(5);
     const saved = guestAction('saveDeck', { ownedIds: bought.ownedCards.slice(1).map((item) => item.ownedId) }, crypto.randomUUID()) as EconomyState;
@@ -127,10 +144,10 @@ describe('ゲストの端末内保存', () => {
     expect(() => guestAction('buyCard', { cardId: 'P003' }, crypto.randomUUID())).toThrow('購入できません');
     expect(() => guestAction('openPack', { packId: 'all-cards' }, crypto.randomUUID())).toThrow('パックを購入できません');
     const bought = guestAction('buyCard', { cardId: 'G001' }, crypto.randomUUID()) as EconomyState;
-    expect(bought.gPoint).toBe(85);
+    expect(bought.gPoint).toBe(185);
     const opened = guestAction('openPack', { packId: 'restricted' }, crypto.randomUUID()) as EconomyState;
     expect(opened.acquired?.map((card) => card.cardId)).toEqual(['G001']);
-    expect(opened.gPoint).toBe(5);
+    expect(opened.gPoint).toBe(105);
     expect(() => guestAction('openPack', { packId: 'restricted' }, crypto.randomUUID())).toThrow('パックを購入できません');
   });
 });

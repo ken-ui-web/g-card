@@ -3,7 +3,7 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '1.10',
   date: '11/10',
-  changes: ['オンライン対戦で保存したデッキが最初から選ばれます。'],
+  changes: ['オンライン対戦で保存したデッキが最初から選ばれます。', 'カードの筋トレ上限を調整し、超過分のGを返還しました。全員にお詫びの100Gを配布します。'],
 } as const;
 
 function BrandContent() {

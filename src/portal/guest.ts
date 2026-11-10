@@ -1,5 +1,6 @@
 import { availableCards } from '../data/cards';
-import type { BootstrapData, EconomyState, MissionState, OwnedCard, PublicShopConfig } from './api';
+import { TRAINING_POLICY_BONUS, TRAINING_POLICY_VERSION, trainingCap, trainingCostBetween } from '../data/trainingCaps';
+import type { BootstrapData, EconomyState, MissionState, OwnedCard, PublicShopConfig, TrainingPolicyNotice } from './api';
 
 const key = 'g-card-guest-v1';
 const starter = ['G001', 'G002', 'C008', 'P001'];
@@ -29,7 +30,7 @@ export function applyGuestShopConfig(data: BootstrapData, config: PublicShopConf
     economy: { ...data.economy, packDailyLimit: config.packDailyLimit, sellPrices: config.sellPrices },
   };
 }
-type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; loginWeekDays: string[]; weeklyBonusWeek: string; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[] };
+type GuestState = { nickname: string; gPoint: number; runCount: number; pityCounter: number; ownedCards: OwnedCard[]; lastDeck: string[]; lastLoginDate: string; loginStreak: number; loginWeekDays: string[]; weeklyBonusWeek: string; dailyDate: string; daily: EconomyState['daily']; firstWinGiven: boolean; missions: MissionState[]; missionWeek: string; processed: Record<string, EconomyState>; reportedBattles: Record<string, EconomyState>; battleHistory: { battleId: string; result: string; cpuLevel: number; deckMode: string; awarded: number; at: string }[]; trainingPolicy?: TrainingPolicyNotice & { acknowledged: boolean } };
 
 function fresh(): GuestState {
   const ownedCards = starter.map((cardId) => ({ ownedId: crypto.randomUUID(), cardId, trainLevel: 0, trainingSpent: 0, source: 'initial' }));
@@ -38,8 +39,24 @@ function fresh(): GuestState {
 
 function read(): GuestState {
   const raw = localStorage.getItem(key);
-  if (!raw) { const state = fresh(); write(state); return state; }
-  const state = JSON.parse(raw) as GuestState;
+  const state = raw ? JSON.parse(raw) as GuestState : fresh();
+  if (state.trainingPolicy?.version !== TRAINING_POLICY_VERSION) {
+    const changes: TrainingPolicyNotice['changes'] = [];
+    for (const owned of state.ownedCards) {
+      const card = availableCards.find((item) => item.cardId === owned.cardId);
+      if (!card || card.type !== 'rock' || owned.trainLevel <= trainingCap(card.cardId)) continue;
+      const from = owned.trainLevel;
+      const to = trainingCap(card.cardId);
+      const refund = trainingCostBetween(from, to);
+      owned.trainingSpent = Math.max(0, (owned.trainingSpent ?? trainingCostBetween(from, 0)) - refund);
+      owned.trainLevel = to;
+      changes.push({ cardId: card.cardId, name: card.name, from, to, refund });
+    }
+    const refund = changes.reduce((sum, change) => sum + change.refund, 0);
+    state.gPoint += TRAINING_POLICY_BONUS + refund;
+    state.trainingPolicy = { version: TRAINING_POLICY_VERSION, bonus: TRAINING_POLICY_BONUS, refund, changes, acknowledged: false };
+    write(state);
+  }
   state.reportedBattles ??= {};
   state.battleHistory ??= [];
   const weekStart = monday(today());
@@ -107,7 +124,7 @@ function bootstrap(state: GuestState): BootstrapData {
   }
   const data: BootstrapData = {
     profile: { nickname: state.nickname, role: 'student', gPoint: state.gPoint, maxLife: 100 + state.runCount * 5, runCount: state.runCount, pityCounter: state.pityCounter },
-    needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, weeklyBonus: 100 }, ownedCards: state.ownedCards,
+    needsNickname: !state.nickname, loginBonus: { ...bonus, dailyAmount: 10, weeklyBonus: 100 }, trainingPolicyNotice: state.trainingPolicy && !state.trainingPolicy.acknowledged ? state.trainingPolicy : null, ownedCards: state.ownedCards,
     cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: null, inPack: false, active: false, sortOrder: order.indexOf(item.type) * 100 + index })),
     lastDeck: state.lastDeck, packs: [], battleConfig: [], missions: state.missions, daily: state.daily,
     economy: { enabled: true, muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5, cpuRewardDailyCap: 3, packDailyLimit: 10, sellPrices },
@@ -119,6 +136,12 @@ function bootstrap(state: GuestState): BootstrapData {
 export function guestAction(action: string, payload: Record<string, unknown>, requestId: string): BootstrapData | EconomyState | object {
   const state = read();
   if (action === 'bootstrap') return bootstrap(state);
+  if (action === 'ackTrainingPolicy') {
+    if (payload.version !== TRAINING_POLICY_VERSION || !state.trainingPolicy) throw new Error('お知らせを確認できません');
+    state.trainingPolicy.acknowledged = true;
+    write(state);
+    return { acknowledged: true };
+  }
   if (action === 'getCpuRecent') {
     const recent: Record<1 | 2 | 3, { battleId: string; result: string }[]> = { 1: [], 2: [], 3: [] };
     for (let index = state.battleHistory.length - 1; index >= 0; index--) {
@@ -154,6 +177,17 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
   } else if (action === 'train') {
     const items = payload.items as { kind: 'muscle' | 'run'; ownedId?: string; count: number }[];
     if (!Array.isArray(items) || !items.length || items.length > 20 || items.reduce((sum, item) => sum + Number(item.count), 0) > 100) throw new Error('回数を確認してください');
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      amount(item.count);
+      if (item.kind !== 'muscle' && item.kind !== 'run') throw new Error('トレーニングを選んでください');
+      if (item.kind !== 'muscle') continue;
+      const owned = state.ownedCards.find((entry) => entry.ownedId === item.ownedId);
+      if (!owned || card(owned.cardId).type !== 'rock') throw new Error('筋トレできるカードを選んでください');
+      const requested = (counts.get(owned.ownedId) ?? 0) + item.count;
+      if (owned.trainLevel + requested > trainingCap(owned.cardId)) throw new Error('このカードは筋トレの上限に達しています');
+      counts.set(owned.ownedId, requested);
+    }
     let trained = 0;
     let missionCount = 0;
     for (const item of items) for (let index = 0; index < amount(item.count); index++) {

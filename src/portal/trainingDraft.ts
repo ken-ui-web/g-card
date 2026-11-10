@@ -1,4 +1,5 @@
 import { isGuest, type BootstrapData } from './api';
+import { trainingCap } from '../data/trainingCaps';
 
 export interface TrainingDraft {
   requestId: string;
@@ -37,7 +38,7 @@ export function trainingCost(data: BootstrapData, draft: TrainingDraft | null): 
   if (!draft) return 0;
   return draft.items.reduce((sum, item) => {
     const owned = data.ownedCards.find((card) => card.ownedId === item.ownedId);
-    if (!owned || data.cardMaster.find((card) => card.cardId === owned.cardId)?.type !== 'rock') return Infinity;
+    if (!owned || data.cardMaster.find((card) => card.cardId === owned.cardId)?.type !== 'rock' || owned.trainLevel + item.count > trainingCap(owned.cardId)) return Infinity;
     return sum + item.count * (data.economy.muscleCostBase + data.economy.muscleCostStep * owned.trainLevel)
       + data.economy.muscleCostStep * item.count * (item.count - 1) / 2;
   }, 0);

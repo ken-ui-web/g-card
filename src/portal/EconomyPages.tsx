@@ -8,6 +8,7 @@ import { playSfx } from '../audio/sfx';
 import { formatPackChance, packContents } from './packContents';
 import { packArtKey, packArtUrl } from './packArt';
 import { readTrainingDraft, stageMuscle, trainingCost, trainingCount, writeTrainingDraft, type TrainingDraft } from './trainingDraft';
+import { trainingCap } from '../data/trainingCaps';
 import { useScrolledPast } from '../components/useScrolledPast';
 import { TrainingDock } from './TrainingDock';
 
@@ -147,7 +148,9 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     if (busyRef.current) return;
     try {
       const next = stageMuscle(trainingDraftRef.current, ownedId, crypto.randomUUID());
-      if (trainingCost(data, next) > data.profile.gPoint) { setMessage('Gポイントが足りません'); return; }
+      const nextCost = trainingCost(data, next);
+      if (!Number.isFinite(nextCost)) { setMessage('このカードは筋トレの上限に達しています'); return; }
+      if (nextCost > data.profile.gPoint) { setMessage('Gポイントが足りません'); return; }
       try { writeTrainingDraft(session, next); }
       catch { setMessage('端末に一時保存できません。ブラウザーの保存設定を確認してください。'); return; }
       trainingDraftRef.current = next;
@@ -192,7 +195,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       playSfx('point');
     } catch (failure) {
       const error = failure as Error & { code?: string };
-      if (error.code === 'BAD_REQUEST' || error.code === 'NOT_ENOUGH_POINTS') {
+      if (error.code === 'BAD_REQUEST' || error.code === 'NOT_ENOUGH_POINTS' || error.code === 'TRAINING_CAP') {
         const staged: TrainingDraft = { ...current, status: 'staged' };
         try { writeTrainingDraft(session, staged); trainingDraftRef.current = staged; setTrainingDraft(staged); } catch { /* Keep the saved draft for recovery. */ }
       }
@@ -261,7 +264,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       <div ref={trainingDockMarker} className="economy-training-dock-marker" aria-hidden="true" />
       <TrainingDock visible={trainingDockVisible} balance={remainingG} maxLife={currentLife} tab={trainingTab} onTab={(next) => { setTrainingTab(next); window.scrollTo(0, 0); }} draftCount={queuedCount} draftCost={projectedCost} submitting={trainingDraft?.status === 'submitting'} saveDisabled={busy || Boolean(trainingDraft?.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0))} onSave={() => trainingDraft?.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)} onDiscard={discardTraining} />
       {trainingTab === 'muscle' ? <div id="training-muscle-panel" role="tabpanel" className="economy-training-workspace panel"><div className="economy-training-toolbar"><div><h2>カードの筋トレ</h2><p>グーカード1枚ごとに筋トレ値が上がります。上がるダメージはカードによって異なります。</p><small>所持しているグーカード {rockCards.length}枚</small></div><CardSizeToggle compact={compactCards} onToggle={toggleCardSize} /></div>
-        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = trainingDraft?.items.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'has-draft' : ''}><dl className="economy-training-card-stats"><div><dt>{queued ? '仮の筋トレ値' : '筋トレ値'}</dt><dd>+{level} <span>→</span> +{level + 1}</dd></div><div><dt>次の費用</dt><dd>{cost.toLocaleString()} G</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage} → {damage + card.trainingMultiplier}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < cost || queuedCount >= 100} onClick={() => queueMuscle(owned.ownedId)}>筋トレする</button>{queued > 0 && <p className="economy-training-card-pending">未保存 {queued}回</p>}{powerUps[owned.ownedId] > 0 && <span key={powerUps[owned.ownedId]} className="training-power-burst" aria-hidden="true"><strong>+1</strong><small>POWER UP!</small></span>}</CardTile>; })}</div>
+        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = trainingDraft?.items.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cap = trainingCap(owned.cardId); const atCap = level >= cap; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'has-draft' : ''}><dl className="economy-training-card-stats"><div><dt>{queued ? '仮の筋トレ値' : '筋トレ値'}</dt><dd>+{level} / 上限 +{cap}</dd></div><div><dt>次の費用</dt><dd>{atCap ? '上限到達' : `${cost.toLocaleString()} G`}</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage}{!atCap && ` → ${damage + card.trainingMultiplier}`}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || atCap || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < cost || queuedCount >= 100} onClick={() => queueMuscle(owned.ownedId)}>{atCap ? '筋トレ完了' : '筋トレする'}</button>{queued > 0 && <p className="economy-training-card-pending">未保存 {queued}回</p>}{powerUps[owned.ownedId] > 0 && <span key={powerUps[owned.ownedId]} className="training-power-burst" aria-hidden="true"><strong>+1</strong><small>POWER UP!</small></span>}</CardTile>; })}</div>
       </div> : <div id="training-run-panel" role="tabpanel"><div className="economy-run economy-run--focused panel"><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>すべての対戦で使う最大ライフを育てます。</p><div className="economy-run-stats"><div><span>最大ライフ</span><strong>{currentLife} <em>→</em> {currentLife + data.economy.lifePerRun}</strong></div><div><span>次の費用</span><strong>{runCost.toLocaleString()} G</strong></div></div><button type="button" className="button button--primary" disabled={busy || Boolean(trainingDraft) || data.profile.gPoint < runCost} onClick={trainRun}>走り込む</button>{trainingDraft && <p className="economy-training-card-pending">先に仮の筋トレを保存してください。</p>}</div></div></div>}
       {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }

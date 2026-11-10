@@ -45,4 +45,9 @@ describe('筋トレの一時保存', () => {
     expect(readTrainingDraft('guest:local')).toEqual(draft);
     expect(() => stageMuscle(draft, 'a', crypto.randomUUID())).toThrow('保存結果を確認してから');
   });
+
+  it('上限に達したカードの下書き費用を無効とする', () => {
+    const capped = { ...data, ownedCards: [{ ownedId: 'a', cardId: 'G007', trainLevel: 6 }], cardMaster: [{ cardId: 'G007', type: 'rock' }] } as BootstrapData;
+    expect(trainingCost(capped, stageMuscle(null, 'a', requestId))).toBe(Infinity);
+  });
 });

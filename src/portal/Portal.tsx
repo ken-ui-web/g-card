@@ -3,7 +3,7 @@ import { SoundToggle } from '../components/SoundToggle';
 import { BrandIdentity } from '../components/BrandIdentity';
 import { LoadingState } from '../components/LoadingState';
 import { showRewardCelebration } from '../components/RewardCelebration';
-import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState, type PublicShopConfig } from './api';
+import { callApi, googleClientId, guestSession, isGuest, portalConfigured, saveSession, savedSession, type BootstrapData, type EconomyState, type PublicShopConfig, type TrainingPolicyNotice } from './api';
 import { clearBootstrapCache, isBootstrapFresh, isBootstrapFromToday, mergeEconomy, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from './bootstrapCache';
 import { applyGuestShopConfig, clearGuestShopConfig, createGuest } from './guest';
 import { loadGuestShopConfig } from './publicShopConfig';
@@ -63,6 +63,19 @@ function announceLoginRewards(data: BootstrapData) {
   if (bonus.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: bonus.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: bonus.completedMissions });
 }
 
+function TrainingPolicyDialog({ notice, busy, error, onConfirm }: { notice: TrainingPolicyNotice; busy: boolean; error: string; onConfirm: () => void }) {
+  return <div className="training-policy-backdrop"><section className="training-policy-dialog panel" role="dialog" aria-modal="true" aria-labelledby="training-policy-title">
+    <p className="eyebrow">大切なお知らせ</p><h2 id="training-policy-title">筋トレの上限を設定しました</h2>
+    <p>カードごとの強さを調整しました。上限を超えていた筋トレ値は上限まで戻し、その分に使ったGを全額返しました。</p>
+    <p>お詫びとして、全員に<strong>100G</strong>をお届けします。</p>
+    <div className="training-policy-gift"><span>今回受け取ったG</span><strong>+{(notice.bonus + notice.refund).toLocaleString()} G</strong><small>お詫び {notice.bonus}G{notice.refund > 0 && ` ＋ 筋トレ返還 ${notice.refund.toLocaleString()}G`}</small></div>
+    {notice.changes.length > 0 && <><h3>調整したカード</h3><ul>{notice.changes.map((change, index) => <li key={`${change.cardId}-${index}`}><span>{change.name}　+{change.from} → +{change.to}</span><strong>返還 {change.refund.toLocaleString()}G</strong></li>)}</ul></>}
+    <p className="training-policy-note">上限：連続パンチ +6、てこの原理 +10、電動アシスト +15、その他のグーカード +20。筋トレ済みカードの売却額も、返還分を差し引いた額に更新しています。</p>
+    {error && <p className="portal-error" role="alert">{error}</p>}
+    <button type="button" className="button button--primary" disabled={busy} onClick={onConfirm}>{busy ? '確認中…' : '確認して続ける'}</button>
+  </section></div>;
+}
+
 export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' | 'collection' | 'tests' | 'reflections' }) {
   const [session, setSession] = useState<string | null>(savedSession);
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(() => {
@@ -76,6 +89,14 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
   const [refreshing, setRefreshing] = useState(false);
   const [guestShopConfig, setGuestShopConfig] = useState<PublicShopConfig | null>(null);
   const [guestShopError, setGuestShopError] = useState('');
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyError, setPolicyError] = useState('');
+  const pendingLoginRewards = useRef<BootstrapData | null>(null);
+  const handleLoginRewards = (data: BootstrapData) => {
+    if (data.trainingPolicyNotice) {
+      if (data.loginBonus.awarded) pendingLoginRewards.current = data;
+    } else announceLoginRewards(data);
+  };
   const economyReady = Boolean(bootstrap?.economy?.enabled && bootstrap.packs && bootstrap.battleConfig);
   const learningReady = Boolean(bootstrap?.learning?.enabled);
   const dailyCurrent = !session || isGuest(session) || isBootstrapFromToday(readBootstrapCache(session));
@@ -105,7 +126,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
     if (!isGuest(activeSession)) writeBootstrapCache(activeSession, data);
     setBootstrap(data);
     setNeedsNickname(isGuest(activeSession) && data.needsNickname);
-    announceLoginRewards(data);
+    handleLoginRewards(data);
   };
 
   const applyEconomy = (state: EconomyState) => {
@@ -136,7 +157,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
           setBootstrap(data);
           setNeedsNickname(isGuest(session) && data.needsNickname);
           setError('');
-          announceLoginRewards(data);
+          handleLoginRewards(data);
           const loginMissions = new Set(data.loginBonus.completedMissions?.map((item) => item.label) ?? []);
           const completed = snapshot ? data.missions.filter((mission) => mission.completed && !snapshot.data.missions.some((previous) => previous.missionId === mission.missionId && previous.completed) && !loginMissions.has(mission.label)) : [];
           if (completed.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: completed.reduce((sum, item) => sum + item.reward, 0), items: completed });
@@ -188,6 +209,21 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
 
   const logout = () => { clearGuestShopConfig(); setGuestShopConfig(null); clearBootstrapCache(); saveSession(null); setSession(null); setBootstrap(null); setNeedsNickname(false); setError(''); };
 
+  const acknowledgeTrainingPolicy = async () => {
+    const notice = bootstrap?.trainingPolicyNotice;
+    if (!notice || !session || policyBusy) return;
+    setPolicyBusy(true); setPolicyError('');
+    try {
+      await callApi('ackTrainingPolicy', session, { version: notice.version });
+      const withoutNotice = (current: BootstrapData) => ({ ...current, trainingPolicyNotice: null });
+      setBootstrap((current) => current ? withoutNotice(current) : current);
+      if (!isGuest(session)) patchBootstrapCache(session, withoutNotice);
+      if (pendingLoginRewards.current) announceLoginRewards(pendingLoginRewards.current);
+      pendingLoginRewards.current = null;
+    } catch (failure) { setPolicyError((failure as Error).message); }
+    finally { setPolicyBusy(false); }
+  };
+
   const illustratedPage = session && bootstrap && !needsNickname && (page === 'home' || page === 'shop' || page === 'training' || page === 'tests') ? page : null;
   const backgroundName = illustratedPage === 'tests' ? 'test' : illustratedPage;
   const illustratedStyle = backgroundName ? { '--portal-bg': `url("${import.meta.env.BASE_URL}images/bg/${backgroundName}.webp")` } as CSSProperties : undefined;
@@ -205,6 +241,7 @@ export function Portal({ page }: { page: 'home' | 'admin' | 'shop' | 'training' 
                 <section className="portal-menu">{menuItems.filter((item) => !isGuest(session) || !['tests', 'reflections', 'online', 'ranking'].includes(item.key)).map((item) => { const href = item.key === 'tests' && learningReady ? '#/tests' : item.key === 'reflections' && learningReady ? '#/reflections' : item.key === 'battle' ? '#/battle' : item.key === 'online' && bootstrap.online?.enabled ? '#/online' : item.key === 'ranking' && bootstrap.online?.rankingEnabled ? '#/ranking' : economyReady && item.key === 'deck' ? '#/collection' : economyReady && item.key === 'shop' ? '#/shop' : economyReady && item.key === 'training' ? '#/training' : null; return href ? <a key={item.key} href={href} className="portal-menu-item panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong>{item.key === 'tests' && bootstrap.unreadTests > 0 && <small>{bootstrap.unreadTests}件の未受験</small>}</a> : <div key={item.key} className="portal-menu-item portal-menu-item--pending panel"><PortalIcon name={item.icon as PortalIconName} /><strong>{item.title}</strong><small>準備中</small></div>; })}</section>
                 <HomeRewards bonus={bootstrap.loginBonus} missions={bootstrap.missions ?? []} current={dailyCurrent} guest={isGuest(session)} /></>}
     {error && <p className="portal-error" role="alert">{error}</p>}
+    {session && bootstrap?.trainingPolicyNotice && !needsNickname && <TrainingPolicyDialog notice={bootstrap.trainingPolicyNotice} busy={policyBusy} error={policyError} onConfirm={() => void acknowledgeTrainingPolicy()} />}
     <footer className="app-footer">Gカード · {session ? isGuest(session) ? 'ゲスト' : '学校アカウント' : '未ログイン'}</footer>
   </main>;
 }

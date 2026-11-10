@@ -2,7 +2,7 @@
 // 秘密の値と名簿は、このソースではなくスクリプトプロパティとシートに保存する。
 const GC_TZ = 'Asia/Tokyo';
 const GC_HEADERS = {
-  Users: ['email', 'role', 'class', 'number', 'name', 'nickname', 'gPoint', 'runCount', 'totalEarned', 'loginStreak', 'lastLoginDate', 'pityCounter', 'lastDeckJson', 'welcomeGiven', 'createdAt', 'updatedAt'],
+  Users: ['email', 'role', 'class', 'number', 'name', 'nickname', 'gPoint', 'runCount', 'totalEarned', 'loginStreak', 'lastLoginDate', 'pityCounter', 'lastDeckJson', 'welcomeGiven', 'createdAt', 'updatedAt', 'trainingPolicyJson'],
   OwnedCards: ['ownedId', 'email', 'cardId', 'trainLevel', 'source', 'acquiredAt', 'soldAt', 'trainingSpent'],
   Cards: ['cardId', 'name', 'type', 'rarity', 'text', 'effects', 'trainingMultiplier', 'image', 'shopPrice', 'inPack', 'active', 'sortOrder', 'flavor', 'trainingBonus'],
   Packs: ['packId', 'name', 'price', 'cardsPerPack', 'rarityRatesJson', 'cardPoolJson', 'pityCount', 'startAt', 'endAt', 'active', 'imageKey'],
@@ -67,6 +67,10 @@ const GC_CARDS = [
   ["P014", "プログラミング", "paper", "SSR", "相手の次のカードを指定する", "[{\"type\":\"forceOpponentNext\"}]", 0, "P014-front.webp", "", true, true, 40, "", 0],
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
+const GC_TRAINING_POLICY_VERSION = '2026-11-10-v1';
+const GC_TRAINING_POLICY_BONUS = 100;
+const GC_TRAINING_CAPS = { G007: 6, G020: 10, G021: 15 };
+function gcTrainingCap_(cardId) { return GC_TRAINING_CAPS[cardId] || 20; }
 const GC_ECONOMY_SETTINGS = [
   ['loginBonus', '10', '1日1回のログインボーナス'],
   ['loginStreakBonus', '100', '週4日ログイン達成時のボーナス'],
@@ -118,6 +122,10 @@ function setup() {
       sheet.setFrozenRows(1);
     } else {
       const actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+      if (name === 'Users' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
+        sheet.getRange(1, headers.length).setValue('trainingPolicyJson');
+        actual[headers.length - 1] = 'trainingPolicyJson';
+      }
       if (name === 'OwnedCards' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
         sheet.getRange(1, headers.length).setValue('trainingSpent');
         actual[headers.length - 1] = 'trainingSpent';
@@ -232,6 +240,7 @@ function gcDispatch_(request) {
   switch (request.action) {
     case 'login': return gcLogin_(request.payload || {});
     case 'bootstrap': return gcBootstrap_(request.session);
+    case 'ackTrainingPolicy': return gcAckTrainingPolicy_(request.session, request.payload || {});
     case 'getPlayLimit': return gcGetPlayLimit_(request.session);
     case 'adminImportRoster': return gcImportRoster_(request.session, request.payload || {});
     case 'buyCard': return gcBuyCard_(request.session, request.payload || {}, request.requestId);
@@ -574,13 +583,15 @@ function gcBootstrap_(token) {
   const dailyAmount = gcNumber_(identity.settings, 'loginBonus', 10, 0, 100000);
   const weeklyAmount = gcNumber_(identity.settings, 'loginStreakBonus', 100, 0, 100000);
   const week = gcLoginWeek_(identity.email, today, dailyAmount, weeklyAmount);
+  const priorPolicy = user.trainingPolicyJson ? JSON.parse(user.trainingPolicyJson) : null;
   let bonus = { awarded: false, amount: 0, weeklyAwarded: false, weekDays: week.days, weekStart: week.start, weeklyCompleted: week.completed, completedMissions: [] };
-  if (user.welcomeGiven !== true || gcDateKey_(user.lastLoginDate) !== today || (week.days.length >= 4 && !week.completed)) {
+  if (user.welcomeGiven !== true || gcDateKey_(user.lastLoginDate) !== today || (week.days.length >= 4 && !week.completed) || !priorPolicy || priorPolicy.version !== GC_TRAINING_POLICY_VERSION || !priorPolicy.completed) {
     bonus = gcWithLock_(function () {
       const record = gcFindUser_(identity.email);
       const user = gcUserObject_(record);
       const outcome = { awarded: false, amount: 0, weeklyAwarded: false, weekDays: [], weekStart: '', weeklyCompleted: false, completedMissions: [] };
       gcEnsureWelcome_(identity, user);
+      gcTrainingPolicy_(identity, record, user);
       const previous = gcDateKey_(user.lastLoginDate);
       if (previous !== today) {
         const consecutive = previous && gcDayNumber_(today) - gcDayNumber_(previous) === 1;
@@ -618,11 +629,16 @@ function gcBootstrap_(token) {
     });
     user = gcUserObject_(gcFindUser_(identity.email));
   }
+  const policy = user.trainingPolicyJson ? JSON.parse(user.trainingPolicyJson) : null;
   return {
       profile: { nickname: String(user.name || (identity.admin ? user.nickname || '先生' : '')).trim(), role: identity.admin ? 'admin' : 'student', gPoint: Number(user.gPoint || 0), maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0) },
       needsNickname: false,
       playLimit: identity.playLimit,
       loginBonus: Object.assign({}, bonus, { dailyAmount: dailyAmount, weeklyBonus: weeklyAmount }),
+      trainingPolicyNotice: policy && policy.version === GC_TRAINING_POLICY_VERSION && policy.completed && !policy.acknowledged ? {
+        version: policy.version, bonus: policy.bonus, refund: policy.refund,
+        changes: policy.changes.map(function (change) { return { cardId: change.cardId, name: change.name, from: change.from, to: change.to, refund: change.refund }; }),
+      } : null,
       ownedCards: gcOwned_(identity.email),
       cardMaster: gcCardMaster_(),
       lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
@@ -690,6 +706,81 @@ function gcNumber_(settings, key, fallback, min, max) {
 function gcTrainingSpentEstimate_(level, settings) {
   const count = Number(level || 0);
   return gcNumber_(settings, 'muscleCostBase', 20, 0, 100000) * count + gcNumber_(settings, 'muscleCostStep', 2, 0, 100000) * count * (count - 1) / 2;
+}
+
+function gcEnsureTrainingPolicyColumn_() {
+  const sheet = gcSheet_('Users');
+  const column = GC_HEADERS.Users.length;
+  const header = sheet.getRange(1, column).getValues()[0][0];
+  if (header === '') sheet.getRange(1, column).setValue('trainingPolicyJson');
+  else if (header !== 'trainingPolicyJson') gcError_('NOT_SETUP', '利用者シートの見出しを確認してください');
+}
+
+function gcTrainingPolicy_(identity, record, user) {
+  gcEnsureTrainingPolicyColumn_();
+  let policy = user.trainingPolicyJson ? JSON.parse(user.trainingPolicyJson) : null;
+  if (!policy || policy.version !== GC_TRAINING_POLICY_VERSION) {
+    const sheet = gcSheet_('OwnedCards');
+    const rows = sheet.getDataRange().getValues();
+    const cards = gcCardMaster_();
+    const changes = [];
+    rows.slice(1).forEach(function (row) {
+      if (String(row[1]).toLowerCase() !== identity.email || row[6]) return;
+      const card = cards.find(function (item) { return item.cardId === row[2] && item.type === 'rock'; });
+      if (!card) return;
+      const from = Number(row[3] || 0);
+      const to = gcTrainingCap_(card.cardId);
+      if (from <= to) return;
+      const refund = gcTrainingSpentEstimate_(from, identity.settings) - gcTrainingSpentEstimate_(to, identity.settings);
+      const spent = row[7] === '' ? gcTrainingSpentEstimate_(from, identity.settings) : Number(row[7] || 0);
+      changes.push({ ownedId: String(row[0]), cardId: card.cardId, name: card.name, from: from, to: to, refund: refund, trainingSpentAfter: Math.max(0, spent - refund) });
+    });
+    const refund = changes.reduce(function (sum, change) { return sum + change.refund; }, 0);
+    const before = Number(user.gPoint || 0);
+    policy = { version: GC_TRAINING_POLICY_VERSION, bonus: GC_TRAINING_POLICY_BONUS, refund: refund, changes: changes, balanceBefore: before, completed: false, acknowledged: false };
+    user.gPoint = before + GC_TRAINING_POLICY_BONUS + refund;
+    user.totalEarned = Number(user.totalEarned || 0) + GC_TRAINING_POLICY_BONUS + refund;
+    user.trainingPolicyJson = JSON.stringify(policy);
+    user.updatedAt = new Date().toISOString();
+    // 残高と移行計画を同じ利用者行に保存し、中断後も二重付与せず再開する。
+    gcWriteUser_(record, user);
+  }
+  if (!policy.completed) {
+    const sheet = gcSheet_('OwnedCards');
+    const rows = sheet.getDataRange().getValues();
+    policy.changes.forEach(function (change) {
+      const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === change.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
+      if (index < 1 || Number(rows[index][3] || 0) <= change.to) return;
+      sheet.getRange(index + 1, 4, 1, 5).setValues([[change.to, rows[index][4], rows[index][5], rows[index][6], change.trainingSpentAfter]]);
+    });
+    if (!gcPointLogEntry_(identity.email, 'training_policy_bonus', GC_TRAINING_POLICY_VERSION)) {
+      gcPointLog_(identity.email, policy.bonus, 'training_policy_bonus', GC_TRAINING_POLICY_VERSION, policy.balanceBefore + policy.bonus);
+    }
+    if (policy.refund && !gcPointLogEntry_(identity.email, 'training_cap_refund', GC_TRAINING_POLICY_VERSION)) {
+      gcPointLog_(identity.email, policy.refund, 'training_cap_refund', GC_TRAINING_POLICY_VERSION, policy.balanceBefore + policy.bonus + policy.refund);
+    }
+    policy.completed = true;
+    user.trainingPolicyJson = JSON.stringify(policy);
+    gcWriteUser_(record, user);
+  }
+  return policy;
+}
+
+function gcAckTrainingPolicy_(token, payload) {
+  const identity = gcSession_(token, false);
+  if (payload.version !== GC_TRAINING_POLICY_VERSION) gcError_('BAD_REQUEST', 'お知らせの版を確認してください');
+  return gcWithLock_(function () {
+    const record = gcFindUser_(identity.email);
+    const user = gcUserObject_(record);
+    const policy = user.trainingPolicyJson ? JSON.parse(user.trainingPolicyJson) : null;
+    if (!policy || policy.version !== GC_TRAINING_POLICY_VERSION || !policy.completed) gcError_('BAD_REQUEST', 'お知らせを確認できません');
+    if (!policy.acknowledged) {
+      policy.acknowledged = true;
+      user.trainingPolicyJson = JSON.stringify(policy);
+      gcWriteUser_(record, user);
+    }
+    return { acknowledged: true };
+  });
 }
 
 function gcEconomyAccess_(identity) {
@@ -818,10 +909,16 @@ function gcTrain_(token, payload, requestId) {
     const record = gcFindUser_(identity.email);
     const user = gcUserObject_(record);
     if (payload.items.reduce(function (sum, item) { return sum + Number(item.count || 0); }, 0) > 100) gcError_('BAD_REQUEST', '一度に100回までにしてください');
+    const requestedMuscle = {};
     payload.items.forEach(function (item) {
       if (!Number.isInteger(Number(item.count)) || Number(item.count) < 1 || Number(item.count) > 100) gcError_('BAD_REQUEST', '回数を確認してください');
       if (item.kind !== 'muscle' && item.kind !== 'run') gcError_('BAD_REQUEST', 'トレーニングを選んでください');
       if (item.kind === 'muscle' && !rows.some(function (row, i) { return i > 0 && row[0] === item.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6] && cards.some(function (card) { return card.cardId === row[2] && card.type === 'rock'; }); })) gcError_('BAD_REQUEST', '筋トレできるカードを選んでください');
+      if (item.kind === 'muscle') requestedMuscle[item.ownedId] = (requestedMuscle[item.ownedId] || 0) + Number(item.count);
+    });
+    Object.keys(requestedMuscle).forEach(function (ownedId) {
+      const owned = rows.find(function (row, i) { return i > 0 && row[0] === ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
+      if (Number(owned[3] || 0) + requestedMuscle[ownedId] > gcTrainingCap_(owned[2])) gcError_('TRAINING_CAP', 'このカードは筋トレの上限に達しています');
     });
     let spent = 0;
     let trained = 0;

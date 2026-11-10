@@ -32,6 +32,7 @@ export interface PublicShopConfig {
 }
 export interface BattleDeckConfig { deckId: string; name: string; cardIds: string[]; maxLife: number; rockTrainLevel: number }
 export interface MissionState { missionId: string; period: string; condition: string; targetCount: number; reward: number; label: string; progress: number; completed: boolean }
+export interface TrainingPolicyNotice { version: string; bonus: number; refund: number; changes: { cardId: string; name: string; from: number; to: number; refund: number }[] }
 export interface EconomyState {
   gPoint: number;
   runCount: number;
@@ -53,6 +54,7 @@ export interface BootstrapData {
   needsNickname: boolean;
   playLimit?: PlayLimit | null;
   loginBonus: { awarded: boolean; amount: number; dailyAmount?: number; weeklyBonus?: number; weekDays?: string[]; weekStart?: string; weeklyAwarded?: boolean; weeklyCompleted?: boolean; completedMissions?: { label: string; reward: number }[] };
+  trainingPolicyNotice?: TrainingPolicyNotice | null;
   ownedCards: OwnedCard[];
   cardMaster: CardMaster[];
   lastDeck: string[];
