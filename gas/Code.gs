@@ -102,7 +102,7 @@ const GC_STARTER_DECKS = [
 ];
 const GC_STARTER_MISSIONS = [
   ['daily-test', 'daily', 'submit_test', 1, 30, 'テストを1回受ける', true, 1],
-  ['daily-win', 'daily', 'win_battle', 1, 20, 'CPU対戦で1回勝つ', true, 2],
+  ['daily-win', 'daily', 'win_cpu', 1, 20, 'CPU対戦で1回勝つ', true, 2],
   ['daily-train', 'daily', 'train', 1, 10, 'トレーニングを1回する', true, 3],
   ['weekly-test', 'weekly', 'submit_test', 3, 100, '今週テストを3回受ける', true, 4],
   ['weekly-reflection', 'weekly', 'submit_reflection', 2, 100, '今週振り返りを2回提出する', true, 5],
@@ -203,6 +203,14 @@ function setup() {
   }
   const missions = gcSheet_('Missions');
   if (missions.getLastRow() === 1) missions.getRange(2, 1, GC_STARTER_MISSIONS.length, GC_HEADERS.Missions.length).setValues(GC_STARTER_MISSIONS);
+  else {
+    const missionRows = missions.getDataRange().getValues();
+    missionRows.forEach(function (row, index) {
+      if (index > 0 && row[0] === 'daily-win' && row[2] === 'win_battle' && row[5] === 'CPU対戦で1回勝つ') {
+        missions.getRange(index + 1, 3).setValue('win_cpu');
+      }
+    });
+  }
   if (!properties.getProperty('SESSION_SECRET')) {
     properties.setProperty('SESSION_SECRET', [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('-'));
   }
@@ -1083,7 +1091,7 @@ function gcReportBattle_(token, payload) {
     gcWriteUser_(record, user);
     counter.sheet.getRange(counter.rowNumber, 1, 1, GC_HEADERS.DailyCounters.length).setValues([counter.values]);
     if (award) gcPointLog_(identity.email, award, 'battle', payload.battleId, user.gPoint);
-    const completedMissions = gcAwardMissions_(identity, user, { play_cpu: 1, win_battle: payload.result === 'win' ? 1 : 0 });
+    const completedMissions = gcAwardMissions_(identity, user, { play_cpu: 1, win_cpu: payload.result === 'win' ? 1 : 0, win_battle: payload.result === 'win' ? 1 : 0 });
     gcWriteUser_(record, user);
     log.appendRow([payload.battleId, identity.email, 'cpu', payload.deckMode, Number(payload.cpuLevel), payload.result, '', award, new Date().toISOString()]);
     return gcRememberResult_(identity.email, 'battle', payload.battleId, gcState_(identity, { awarded: award, completedMissions: completedMissions }));
@@ -1191,7 +1199,7 @@ function gcAdminSavePack_(token, payload) {
 
 function gcAdminSaveMission_(token, payload) {
   gcSession_(token, true);
-  const conditions = ['submit_test', 'perfect_test', 'submit_reflection', 'win_battle', 'play_online', 'play_cpu', 'train', 'open_pack', 'login'];
+  const conditions = ['submit_test', 'perfect_test', 'submit_reflection', 'win_battle', 'win_cpu', 'play_online', 'play_cpu', 'train', 'open_pack', 'login'];
   if (typeof payload.missionId !== 'string' || !/^[a-z0-9-]{1,40}$/.test(payload.missionId) || ['daily', 'weekly'].indexOf(payload.period) < 0 ||
       conditions.indexOf(payload.condition) < 0 || !Number.isInteger(Number(payload.targetCount)) || Number(payload.targetCount) < 1 || Number(payload.targetCount) > 1000 ||
       !Number.isInteger(Number(payload.reward)) || Number(payload.reward) < 0 || Number(payload.reward) > 100000 ||

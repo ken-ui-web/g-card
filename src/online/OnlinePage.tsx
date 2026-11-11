@@ -123,6 +123,7 @@ export function OnlinePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reward, setReward] = useState<Reward | null>(null);
+  const [reportRetry, setReportRetry] = useState(0);
   const [elapsed, setElapsed] = useState(() => Date.now());
   const [localConnected, setLocalConnected] = useState(false);
   const [presentation, setPresentation] = useState<OnlineView | null>(null);
@@ -150,7 +151,7 @@ export function OnlinePage() {
 
   const enterRoom = (id: string) => {
     if (currentRoom.current === id) return;
-    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); pointSoundPlayed.current = false; rewardCacheApplied.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
+    currentRoom.current = id; setRoomId(id); setRoom(null); setView(null); setEntries(null); setSalt(''); setJoined(false); setBusy(false); setReward(null); setReportRetry(0); setPresentation(null); setSeenRound(0); entered.current = false; actionKey.current.clear(); pointSoundPlayed.current = false; rewardCacheApplied.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
     window.history.replaceState(null, '', `#/online?room=${encodeURIComponent(id)}`);
   };
 
@@ -242,43 +243,52 @@ export function OnlinePage() {
   };
 
   useEffect(() => {
-    if (!db || !uid || !room || !view || !entries || !salt || !joined) return;
+    if (!session || !joined || reward || (view?.phase !== 'finished' && view?.phase !== 'invalid')) return;
+    const timer = window.setInterval(() => setReportRetry((count) => count + 1), 5000);
+    return () => window.clearInterval(timer);
+  }, [session, joined, reward, view?.phase]);
+
+  useEffect(() => {
+    if (!db || !uid || !room || !view || !joined) return;
+    if (view.phase !== 'finished' && view.phase !== 'invalid' && (!entries || !salt)) return;
+    const reportDeck = entries ?? room.final?.[uid]?.entries;
     const path = roomPath(roomId);
     const record = room.rounds?.[String(view.round)];
     if (view.phase === 'reveal' && record?.commit?.[uid] && !record.reveal?.[uid]) {
       const stored = sessionStorage.getItem(`g-card-pick:${roomId}:${view.round}`);
       if (stored) takeAction(`reveal-${view.round}`, async () => {
         const pick = JSON.parse(stored) as { index: number; salt: string };
-        const card = view.known?.[mySide]?.[pick.index] ?? entries[pick.index];
+        const card = view.known?.[mySide]?.[pick.index] ?? entries![pick.index];
         const secret = encryptProofs(roomId).find((item) => item.index === pick.index && item.round < view.round);
         const currentType = view.hidden?.[mySide]?.[pick.index] && secret ? secret.to : view.types[mySide][pick.index];
-        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: card.cardId, trainLevel: card.trainLevel }, ...(room.meta.protocolVersion === 2 ? { currentType, combo: entries.some((item) => item.cardId === 'C003') } : {}) });
+        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: card.cardId, trainLevel: card.trainLevel }, ...(room.meta.protocolVersion === 2 ? { currentType, combo: entries!.some((item) => item.cardId === 'C003') } : {}) });
       });
     }
     if (view.phase === 'swapReveal' && view.swapTargets && !record?.swapReveal?.[uid]) takeAction(`swap-${view.round}`, async () => {
       const index = view.swapTargets![mySide];
-      const card = view.known?.[mySide]?.[index] ?? entries[index];
+      const card = view.known?.[mySide]?.[index] ?? entries![index];
       await set(ref(db, `${path}/rounds/${view.round}/swapReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
     });
     if (view.phase === 'intelReveal' && view.targetOwner === mySide && view.intelTarget !== undefined && !record?.intelReveal?.[uid]) takeAction(`intel-${view.round}`, async () => {
-      const card = view.known?.[mySide]?.[view.intelTarget!] ?? entries[view.intelTarget!];
+      const card = view.known?.[mySide]?.[view.intelTarget!] ?? entries![view.intelTarget!];
       await set(ref(db, `${path}/rounds/${view.round}/intelReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
     });
     if (view.phase === 'verify' && !record?.stateHash?.[uid]) takeAction(`hash-${view.round}`, async () => {
       await set(ref(db, `${path}/rounds/${view.round}/stateHash/${uid}`), await stateDigest(view));
     });
     if (view.phase === 'final' && !room.final?.[uid]) takeAction('final', () => set(ref(db, `${path}/final/${uid}`), { entries, salt, ...(room.meta.protocolVersion === 2 ? { encryptProofs: encryptProofs(roomId) } : {}) }));
-    if ((view.phase === 'finished' || view.phase === 'invalid') && session && !reward) takeAction('report', async () => {
+    if ((view.phase === 'finished' || view.phase === 'invalid') && session && !reward && (reportDeck || view.phase === 'invalid')) takeAction('report', async () => {
       const result = view.phase === 'invalid' ? 'draw' : myResult(view, mySide);
       if (room.meta.teacherTest) {
         setReward({ status: view.phase === 'invalid' ? 'invalid' : 'complete', result, awarded: 0, gPoint: account?.profile.gPoint ?? 0, onlineRewards: 0 });
         return;
       }
       const stateHash = view.phase === 'invalid' ? await sha256(`invalid:${roomId}:${view.error}`) : await stateDigest(view);
-      const response = await callApi<Reward>('onlineReport', session, { battleId: roomId, result, stateHash, suspicious: view.phase === 'invalid', deck: entries });
+      const response = await callApi<Reward>('onlineReport', session, { battleId: roomId, result, stateHash, suspicious: view.phase === 'invalid', deck: reportDeck ?? [] });
       setReward(response);
+      setError('');
     });
-  }, [db, uid, room, view, entries, salt, joined, session, roomId, reward, mySide, account]);
+  }, [db, uid, room, view, entries, salt, joined, session, roomId, reward, mySide, account, reportRetry]);
 
   useEffect(() => {
     if (!db || !uid || !roomId || !room?.meta.guestUid || !joined || !opponentUid || !opponentOffline || room.forfeit || !view || view.outcome !== null || view.phase === 'invalid') return;
@@ -448,7 +458,7 @@ export function OnlinePage() {
   }, [elapsed, view, room, joined, entries, roomId, uid, selectedValid, pool, mySide, presentation, localConnected, opponentAway]);
 
   const leave = () => {
-    currentRoom.current = ''; setRoomId(''); setRoom(null); setView(null); setReward(null); setJoined(false); setPresentation(null); setSeenRound(0); entered.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
+    currentRoom.current = ''; setRoomId(''); setRoom(null); setView(null); setReward(null); setReportRetry(0); setJoined(false); setPresentation(null); setSeenRound(0); entered.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
     window.history.replaceState(null, '', '#/online');
   };
 
@@ -492,7 +502,7 @@ export function OnlinePage() {
               return <button key={item.id} disabled={selectedValid.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1} onClick={() => toggleSelectedCard(item.id)}><Card card={card} width={110} /><strong>{card.name}</strong><small>{card.rarity} · {typeLabels[card.type]}</small></button>;
             })}</div>
           </>}
-        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{myResult(view, mySide) === 'win' ? '勝利！' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため報酬はありません。' : '両者の結果と報酬を照合中…'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={opponent?.nickname || '相手'} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
+        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : '相手の結果を確認中です。照合が終わるまで勝利数と報酬は記録されません。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={opponent?.nickname || '相手'} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
           {view.phase === 'reveal' ? <p role="status">お互いのカードを公開中…</p>
             : view.phase === 'target' && view.targetOwner === mySide && room.meta.protocolVersion === 2 ? <TargetPicker view={view} side={mySide} selected={targetSelections} onSelect={setTargetSelections} type={targetType} onType={setTargetType} onSubmit={() => { void chooseTarget(); }} busy={busy} />
             : view.phase === 'target' && view.targetOwner === mySide ? <><p>相手の残りカードを1枚選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((_, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget([index]); }}>{typeLabels[view.types[mySide === 0 ? 1 : 0][index]]} · {index + 1}番</button>)}<button onClick={() => { void chooseTarget([-1]); }}>変更しない</button></div></>

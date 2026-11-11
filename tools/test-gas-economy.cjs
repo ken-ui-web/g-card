@@ -74,6 +74,10 @@ assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'starter').ima
 assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'first-wave').imageKey, 'first-wave');
 call('setup');
 assert.equal(sheets.get('Cards').getLastRow(), 41);
+const defaultWinMissionRow = sheets.get('Missions').rows.findIndex((row) => row[0] === 'daily-win') + 1;
+sheets.get('Missions').getRange(defaultWinMissionRow, 3).setValue('win_battle');
+call('setup');
+assert.equal(sheets.get('Missions').getRange(defaultWinMissionRow, 3).getValues()[0][0], 'win_cpu', '既存のCPU勝利ミッション条件を更新する');
 const domain = 'school.example.jp';
 const email = `teacher@${domain}`;
 const settings = sheets.get('Settings');
@@ -389,6 +393,9 @@ assert.throws(() => call('gcOnlineReport_', studentToken, { battleId: onlineBatt
 assert.equal(call('gcOnlineReport_', studentToken, { battleId: onlineBattle, result: 'win', stateHash: onlineHash, deck: onlineDeck }).status, 'active');
 const onlineComplete = call('gcOnlineReport_', token, { battleId: onlineBattle, result: 'loss', stateHash: onlineHash, deck: onlineDeck });
 assert.equal(onlineComplete.status, 'complete');
+assert.equal(sheets.get('MissionProgress').rows.filter((row) => row[0] === student && row[1] === 'daily-win').length, 0, 'オンライン勝利をCPU勝利ミッションとして記録しない');
+call('gcReportBattle_', studentToken, { battleId: id(), mode: 'cpu', deckMode: 'owned', cpuLevel: 1, result: 'win' });
+assert.equal(sheets.get('MissionProgress').rows.filter((row) => row[0] === student && row[1] === 'daily-win').length, 1, 'CPU勝利だけがCPU勝利ミッションを進める');
 assert.equal(call('gcOnlineResult_', studentToken, { battleId: onlineBattle }).awarded, 30, '勝利10Gと初勝利20G');
 assert.equal(call('gcOnlineResult_', token, { battleId: onlineBattle }).awarded, 3, '敗北でも3G');
 call('gcOnlineReport_', studentToken, { battleId: onlineBattle, result: 'win', stateHash: onlineHash, deck: onlineDeck });
