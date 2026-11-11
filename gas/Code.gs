@@ -209,6 +209,9 @@ function setup() {
       if (index > 0 && row[0] === 'daily-win' && row[2] === 'win_battle' && row[5] === 'CPU対戦で1回勝つ') {
         missions.getRange(index + 1, 3).setValue('win_cpu');
       }
+      if (index > 0 && row[2] === 'play_online' && row[5] === 'オンライン対戦で勝つ') {
+        missions.getRange(index + 1, 3).setValue('win_online');
+      }
     });
   }
   if (!properties.getProperty('SESSION_SECRET')) {
@@ -1199,7 +1202,7 @@ function gcAdminSavePack_(token, payload) {
 
 function gcAdminSaveMission_(token, payload) {
   gcSession_(token, true);
-  const conditions = ['submit_test', 'perfect_test', 'submit_reflection', 'win_battle', 'win_cpu', 'play_online', 'play_cpu', 'train', 'open_pack', 'login'];
+  const conditions = ['submit_test', 'perfect_test', 'submit_reflection', 'win_battle', 'win_cpu', 'win_online', 'play_online', 'play_cpu', 'train', 'open_pack', 'login'];
   if (typeof payload.missionId !== 'string' || !/^[a-z0-9-]{1,40}$/.test(payload.missionId) || ['daily', 'weekly'].indexOf(payload.period) < 0 ||
       conditions.indexOf(payload.condition) < 0 || !Number.isInteger(Number(payload.targetCount)) || Number(payload.targetCount) < 1 || Number(payload.targetCount) > 1000 ||
       !Number.isInteger(Number(payload.reward)) || Number(payload.reward) < 0 || Number(payload.reward) > 100000 ||
@@ -1548,7 +1551,7 @@ function gcOnlineAwardOne_(row, side) {
   gcWriteUser_(record, user);
   counter.sheet.getRange(counter.rowNumber, 1, 1, GC_HEADERS.DailyCounters.length).setValues([counter.values]);
   if (award) gcPointLog_(email, award, 'battle', battleId, user.gPoint);
-  gcAwardMissions_(identity, user, { play_online: 1, win_battle: result === 'win' ? 1 : 0 });
+  gcAwardMissions_(identity, user, { play_online: 1, win_online: result === 'win' ? 1 : 0, win_battle: result === 'win' ? 1 : 0 });
   gcWriteUser_(record, user);
   const opponentRecord = gcFindUser_(opponent);
   const opponentName = opponentRecord ? String(opponentRecord.values[5] || '') : '';
