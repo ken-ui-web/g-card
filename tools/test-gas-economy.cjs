@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const manifest = JSON.parse(fs.readFileSync('gas/appsscript.json', 'utf8'));
+assert.deepEqual(manifest.webapp, { access: 'ANYONE_ANONYMOUS', executeAs: 'USER_DEPLOYING' }, '再デプロイしても公開ウェブアプリの入口を維持する');
 const trainingCaps = JSON.parse(fs.readFileSync('seed/trainingCaps.json', 'utf8'));
 
 class Sheet {
