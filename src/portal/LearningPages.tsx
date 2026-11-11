@@ -8,6 +8,7 @@ type Question = { questionId: string; sectionId: string; type: string; text: str
 type Paper = { testId: string; title: string; description: string; sections: { sectionId: string; title: string; description: string }[]; questions: Question[]; attemptNo: number };
 type Result = { responseId: string; title: string; released: boolean; score?: number; maxScore?: number; gAwarded: number; gPoint: number; details?: { questionId: string; text: string; earned: number; points: number; answer?: unknown; feedback?: string }[]; completedMissions?: { label: string; reward: number }[] };
 type ReflectionList = { appUrl: string; reward: number; lessons: { lessonId: string; title: string; submitted: boolean; rewarded: boolean }[] };
+type ReflectionSync = { awarded: number; newSubmissions: number; gPoint: number; reflections: ReflectionList; completedMissions?: { label: string; reward: number }[] };
 
 function answerPresent(question: Question, value: unknown): boolean {
   if (value === undefined || value === null || value === '') return false;
@@ -39,10 +40,30 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
   const [note, setNote] = useState('');
   const submitId = useRef<string | null>(null);
   const sending = useRef(false);
+  const reflectionRequest = useRef<Promise<ReflectionSync> | null>(null);
+  const checkReflections = () => {
+    if (reflectionRequest.current) return reflectionRequest.current;
+    const request = callApi<ReflectionSync>('syncReflections', session);
+    reflectionRequest.current = request;
+    void request.then(() => { if (reflectionRequest.current === request) reflectionRequest.current = null; }, () => { if (reflectionRequest.current === request) reflectionRequest.current = null; });
+    return request;
+  };
+  const applyReflectionResult = (outcome: ReflectionSync) => {
+    onPoints(outcome.gPoint, 'reflection');
+    setReflections(outcome.reflections);
+    if (outcome.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: outcome.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: outcome.completedMissions });
+    setNote(outcome.newSubmissions ? `${outcome.newSubmissions}件の新しい提出を確認し、${outcome.awarded}Gを受け取りました。` : '新しく受け取れる報酬はありません。提出直後は少し待ってから再確認してください。');
+  };
   useEffect(() => {
     let active = true;
-    const action = page === 'tests' ? 'listTests' : 'listReflections';
-    callApi<TestListItem[] | ReflectionList>(action, session).then((data) => { if (!active) return; if (page === 'tests') setTests(data as TestListItem[]); else setReflections(data as ReflectionList); }).catch((failure: Error & { code?: string }) => { if (active) setError(failure.code === 'NOT_IMPLEMENTED' ? '先生によるサーバー更新後に使えます。' : failure.message); });
+    if (page === 'reflections') {
+      setBusy(true); setError(''); setNote(''); setReflections(null);
+      void checkReflections().then((outcome) => { if (active) applyReflectionResult(outcome); })
+        .catch((failure: Error & { code?: string }) => { if (active) setError(failure.code === 'NOT_IMPLEMENTED' ? '先生によるサーバー更新後に使えます。' : failure.message); })
+        .finally(() => { if (active) setBusy(false); });
+    } else {
+      callApi<TestListItem[]>('listTests', session).then((data) => { if (active) setTests(data); }).catch((failure: Error & { code?: string }) => { if (active) setError(failure.code === 'NOT_IMPLEMENTED' ? '先生によるサーバー更新後に使えます。' : failure.message); });
+    }
     return () => { active = false; };
   }, [page, session]);
   useEffect(() => {
@@ -92,11 +113,7 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
   const sync = async () => {
     setBusy(true); setError(''); setNote('');
     try {
-      const outcome = await callApi<{ awarded: number; newSubmissions: number; gPoint: number; completedMissions?: { label: string; reward: number }[] }>('syncReflections', session);
-      onPoints(outcome.gPoint, 'reflection');
-      if (outcome.completedMissions?.length) showRewardCelebration({ kind: 'mission', title: 'ミッション達成！', amount: outcome.completedMissions.reduce((sum, item) => sum + item.reward, 0), items: outcome.completedMissions });
-      setNote(outcome.newSubmissions ? `${outcome.newSubmissions}件の新しい提出を確認し、${outcome.awarded}Gを受け取りました。` : '新しくポイントを受け取る提出はありません。提出直後は少し待ってから再確認してください。');
-      setReflections(await callApi<ReflectionList>('listReflections', session));
+      applyReflectionResult(await checkReflections());
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
@@ -107,9 +124,9 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
     {page === 'reflections' ? <>
       <h1>振り返り報酬</h1>
       <p>提出と修正は、これまで使っている「振り返りアプリ」で行います。Gカードに本文は保存しません。</p>
-      {reflections?.appUrl ? <a className="button button--primary" href={reflections.appUrl} target="_blank" rel="noopener noreferrer">振り返りアプリを開く</a> : <LoadingState text="振り返りの情報を読み込み中" />}
-      <p>初めて提出した授業ごとに{reflections ? `${reflections.reward}G` : '設定されたGポイント'}を受け取れます。修正では追加されません。戻ってきたら、下のボタンを押してください。</p>
-      <button className="button button--ghost" disabled={busy || !reflections} onClick={() => { void sync(); }}>{busy ? '提出を確認中…' : '提出記録を確認してGを受け取る'}</button>
+      {reflections?.appUrl ? <a className="button button--primary" href={reflections.appUrl} target="_blank" rel="noopener noreferrer">振り返りアプリを開く</a> : reflections ? <p>振り返りアプリのリンクは準備中です。</p> : null}
+      <p>この画面を開くと提出を確認し、初めて提出した授業の報酬を自動で受け取ります。1授業につき{reflections ? `${reflections.reward}G` : '設定されたGポイント'}で、修正による追加報酬はありません。</p>
+      <button className="button button--ghost" disabled={busy} onClick={() => { void sync(); }}>{busy ? '提出を確認中…' : 'もう一度確認する'}</button>
       {reflections && <div className="learning-list">{reflections.lessons.map((item) => <article key={item.lessonId}><strong>{item.title}</strong><span>{item.submitted ? item.rewarded ? '提出済み・G受取済み' : '提出済み' : '未提出'}</span></article>)}</div>}
     </>
       : result ? <><h1>{result.released ? 'テスト結果' : '回答を受け付けました'}</h1><p>{result.title}</p>{result.released ? <div className="learning-score">{result.score} / {result.maxScore} 点</div> : <p>先生が結果を公開すると、得点を見られます。</p>}<p className="learning-reward">今回獲得したGポイント：+{result.gAwarded}G</p>{result.completedMissions?.map((mission) => <p key={mission.label}>ミッション達成：{mission.label} +{mission.reward}G</p>)}{result.details?.map((detail) => <article className="learning-result-question" key={detail.questionId}><strong>{detail.text}</strong><p>{detail.earned} / {detail.points} 点</p>{detail.answer !== undefined && <p>正解：{Array.isArray(detail.answer) ? detail.answer.join('、') : typeof detail.answer === 'object' ? JSON.stringify(detail.answer) : String(detail.answer)}</p>}{detail.feedback && <p>{detail.feedback}</p>}</article>)}<button className="button button--ghost" onClick={() => setResult(null)}>テスト一覧へ</button></>

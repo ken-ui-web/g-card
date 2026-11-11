@@ -206,10 +206,13 @@ function gcExternalSnapshot_(email) {
   const submissions = gcExternalSubmissionRows_().filter(function (row) { return row.code === code && row.key === code + '::' + row.lessonId; });
   return { code: code, lessons: lessons, submissions: submissions };
 }
+function gcReflectionList_(identity, source, rewarded) {
+  return { appUrl: PropertiesService.getScriptProperties().getProperty('REFLECTION_APP_URL') || '', reward: gcNumber_(identity.settings, 'defaultReflectionPoint', 20, 0, 100000), lessons: source.lessons.map(function (lesson) { return { lessonId: lesson.lessonId, title: lesson.title, submitted: source.submissions.some(function (row) { return row.lessonId === lesson.lessonId; }), rewarded: rewarded.has(lesson.lessonId) }; }) };
+}
 function gcListReflections_(token) {
   const identity = gcSession_(token, false); gcLearningAccess_(identity); const source = gcExternalSnapshot_(identity.email);
   const rewarded = new Set(gcLearnRows_('ReflectionResponses').filter(function (row) { return String(row[2]).toLowerCase() === identity.email; }).map(function (row) { return String(row[1]); }));
-  return { appUrl: PropertiesService.getScriptProperties().getProperty('REFLECTION_APP_URL') || '', reward: gcNumber_(identity.settings, 'defaultReflectionPoint', 20, 0, 100000), lessons: source.lessons.map(function (lesson) { return { lessonId: lesson.lessonId, title: lesson.title, submitted: source.submissions.some(function (row) { return row.lessonId === lesson.lessonId; }), rewarded: rewarded.has(lesson.lessonId) }; }) };
+  return gcReflectionList_(identity, source, rewarded);
 }
 function gcSyncReflections_(token) {
   const identity = gcSession_(token, false); gcLearningAccess_(identity); const source = gcExternalSnapshot_(identity.email);
@@ -217,7 +220,10 @@ function gcSyncReflections_(token) {
   if (!start) { start = new Date().toISOString(); properties.setProperty('REFLECTION_REWARD_START_AT', start); }
   const valid = new Set(source.lessons.map(function (lesson) { return lesson.lessonId; }));
   const fresh = source.submissions.filter(function (row) { return valid.has(row.lessonId) && Date.parse(row.createdAt) >= Date.parse(start); });
-  if (!fresh.length) return { awarded: 0, newSubmissions: 0, gPoint: Number(gcUserObject_(identity.record).gPoint || 0) };
+  if (!fresh.length) {
+    const rewarded = new Set(gcLearnRows_('ReflectionResponses').filter(function (row) { return String(row[2]).toLowerCase() === identity.email; }).map(function (row) { return String(row[1]); }));
+    return { awarded: 0, newSubmissions: 0, gPoint: Number(gcUserObject_(identity.record).gPoint || 0), reflections: gcReflectionList_(identity, source, rewarded) };
+  }
   return gcWithLock_(function () {
     const ledger = gcSheet_('ReflectionResponses');
     const prior = new Set(gcLearnRows_('ReflectionResponses').filter(function (row) { return String(row[2]).toLowerCase() === identity.email; }).map(function (row) { return String(row[1]); }));
@@ -239,7 +245,7 @@ function gcSyncReflections_(token) {
     });
     const missions = count ? gcAwardMissions_(identity, user, { submit_reflection: count }) : [];
     if (count) { user.updatedAt = new Date().toISOString(); gcWriteUser_(record, user); }
-    return { awarded: awarded, newSubmissions: count, gPoint: Number(user.gPoint || 0), completedMissions: missions };
+    return { awarded: awarded, newSubmissions: count, gPoint: Number(user.gPoint || 0), completedMissions: missions, reflections: gcReflectionList_(identity, source, prior) };
   });
 }
 

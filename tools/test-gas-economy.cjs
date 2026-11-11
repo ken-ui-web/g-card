@@ -321,7 +321,10 @@ assert.equal(JSON.stringify(listed).includes('ここに本文'), false, '既存�
 const beforeReflection = call('gcFindUser_', student).values[6];
 const reflection = call('gcSyncReflections_', studentToken);
 assert.equal(reflection.awarded, 20);
-assert.equal(call('gcSyncReflections_', studentToken).awarded, 0, '同じ授業の再確認では付与しない');
+assert.equal(reflection.reflections.lessons[0].rewarded, true, '受領時の応答だけで振り返り一覧を更新できる');
+const repeatedReflection = call('gcSyncReflections_', studentToken);
+assert.equal(repeatedReflection.awarded, 0, '同じ授業の再確認では付与しない');
+assert.equal(repeatedReflection.reflections.lessons[0].rewarded, true, '報酬がない場合も受領済み一覧を返す');
 assert.equal(call('gcFindUser_', student).values[6], beforeReflection + 20);
 assert.equal(sheets.get('ReflectionResponses').rows[1][3], '', '本文をGカードに複製しない');
 const dashboard = call('gcAdminDashboard_', token);

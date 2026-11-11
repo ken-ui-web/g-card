@@ -3,7 +3,7 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '2.0',
   date: '11/11',
-  changes: ['オンライン対戦の結果送信を改善し、勝利数の記録状況を分かりやすくしました。'],
+  changes: ['オンライン対戦の結果送信を改善し、勝利数の記録状況を分かりやすくしました。', '振り返り報酬を開くと、提出確認と受領を自動で行います。'],
 } as const;
 
 function BrandContent() {
