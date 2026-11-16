@@ -3,7 +3,7 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 const studentRelease = {
   version: '2.0',
   date: '11/16',
-  changes: ['カードパックの開封演出が新しくなりました。光の中からカードが1枚ずつ現れます。'],
+  changes: ['カードパックの開封演出が新しくなりました。光の中からカードが1枚ずつ現れ、カード画像を正しく表示します。'],
 } as const;
 
 function BrandContent() {

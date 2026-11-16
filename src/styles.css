@@ -288,14 +288,11 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 @keyframes pack-beam{0%,100%{opacity:0;transform:translateX(-50%) rotate(13deg) scaleX(.4)}48%{opacity:.85;transform:translateX(-50%) rotate(13deg) scaleX(1.2)}}
 @keyframes pack-spark{0%{opacity:0;transform:rotate(calc(var(--spark-index) * 30deg)) translateX(45px) scale(.3)}20%{opacity:1}85%,100%{opacity:0;transform:rotate(calc(var(--spark-index) * 30deg)) translateX(160px) scale(1.2)}}
 .economy-feedback__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;margin:8px 0 18px}
-.economy-feedback__acquired{margin:0;opacity:0;animation:pack-card-arrive .55s cubic-bezier(.2,.9,.3,1.2) calc(.15s + var(--reveal-index) * .55s) forwards}
-.economy-feedback__card-flip{position:relative;width:min(100%,155px);aspect-ratio:1024/1365;margin:auto;transform-style:preserve-3d;animation:pack-card-turn .85s cubic-bezier(.25,.7,.25,1) calc(.35s + var(--reveal-index) * .55s) both}
-.economy-feedback__card-flip img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain;backface-visibility:hidden;filter:drop-shadow(0 10px 14px #0008)}
-.economy-feedback__card-front{transform:rotateY(180deg)}
-.economy-feedback__acquired--sr .economy-feedback__card-flip,.economy-feedback__acquired--ssr .economy-feedback__card-flip{filter:drop-shadow(0 0 15px #ffe480bc)}
-.economy-feedback__acquired--ssr .economy-feedback__card-flip{filter:drop-shadow(0 0 20px #fff5c7) drop-shadow(0 0 23px #ffcc52)}
-@keyframes pack-card-arrive{from{opacity:0;transform:translateY(40px) scale(.65)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes pack-card-turn{from{transform:rotateY(0deg) scale(.92)}55%{transform:rotateY(100deg) scale(1.1)}to{transform:rotateY(180deg) scale(1)}}
+.economy-feedback__acquired{margin:0;animation:pack-card-arrive .72s cubic-bezier(.2,.9,.3,1.2) both}
+.economy-feedback__card-front{display:block;width:min(100%,155px);aspect-ratio:1024/1365;object-fit:contain;margin:auto;filter:drop-shadow(0 10px 14px #0008)}
+.economy-feedback__acquired--sr .economy-feedback__card-front{filter:drop-shadow(0 0 15px #ffe480bc)}
+.economy-feedback__acquired--ssr .economy-feedback__card-front{filter:drop-shadow(0 0 20px #fff5c7) drop-shadow(0 0 23px #ffcc52)}
+@keyframes pack-card-arrive{from{opacity:0;transform:translateY(45px) rotateY(-65deg) scale(.72)}65%{opacity:1;transform:translateY(-6px) rotateY(8deg) scale(1.07)}to{opacity:1;transform:translateY(0) rotateY(0) scale(1)}}
 .economy-feedback__acquired figcaption{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px;font-weight:900;font-size:14px}
 .economy-feedback--error{border-color:#ff8e91;box-shadow:0 25px 80px #000a,0 0 40px #fa596231}
 .economy-feedback .eyebrow{margin:12px 0 8px;color:#ffd86b}
