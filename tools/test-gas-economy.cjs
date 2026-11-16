@@ -490,4 +490,15 @@ try {
   context.gcValidateGoogle_ = validateBeforeLimit;
   call('gcAdminSetPlayLimited_', token, { email: student, limited: false });
 }
+const runnerEmail = `runner@${domain}`;
+sheets.get('Users').appendRow([runnerEmail, 'student', '', '', '走る人', '', 500, 0, 500, 0, '', 0, '', true, new Date().toISOString(), new Date().toISOString()]);
+const runnerToken = call('gcSignSession_', runnerEmail, 'student', call('gcSettings_'));
+const beforeRuns = call('gcBootstrap_', runnerToken);
+const runRequestId = id();
+const runResult = call('gcTrain_', runnerToken, { items: [{ kind: 'run', count: 3 }] }, runRequestId);
+assert.equal(runResult.trained, 3, '走り込み3回を一度に記録する');
+assert.equal(runResult.runCount, 3);
+assert.equal(runResult.maxLife, beforeRuns.profile.maxLife + 3 * beforeRuns.economy.lifePerRun);
+assert.equal(sheets.get('PointLog').rows.find((row) => row[4] === runRequestId)[2], -(60 + 66 + 72), '走り込みの費用上昇をまとめて計算する');
+assert.equal(call('gcTrain_', runnerToken, { items: [{ kind: 'run', count: 3 }] }, runRequestId).runCount, 3, '再送しても走り込みを二重に記録しない');
 console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export OK');

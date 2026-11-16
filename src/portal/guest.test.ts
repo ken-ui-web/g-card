@@ -97,6 +97,18 @@ describe('ゲストの端末内保存', () => {
     expect((guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData).profile.gPoint).toBe(sale.gPoint);
   });
 
+  it('走り込みを2回まとめて保存し、同じ操作IDで再送しても二重に引かない', () => {
+    guestAction('setNickname', { nickname: '走る人' }, crypto.randomUUID());
+    const before = guestAction('bootstrap', {}, crypto.randomUUID()) as BootstrapData;
+    const requestId = crypto.randomUUID();
+    const result = guestAction('train', { items: [{ kind: 'run', count: 2 }] }, requestId) as EconomyState;
+    expect(result.trained).toBe(2);
+    expect(result.runCount).toBe(before.profile.runCount + 2);
+    expect(result.maxLife).toBe(before.profile.maxLife + 2 * before.economy.lifePerRun);
+    expect(result.gPoint).toBe(before.profile.gPoint - 60 - 66 + 10);
+    expect((guestAction('train', { items: [{ kind: 'run', count: 2 }] }, requestId) as EconomyState).gPoint).toBe(result.gPoint);
+  });
+
   it('同じ対戦結果を再送してもGを二重に渡さない', () => {
     guestAction('setNickname', { nickname: 'プレイヤー' }, crypto.randomUUID());
     guestAction('bootstrap', {}, crypto.randomUUID());

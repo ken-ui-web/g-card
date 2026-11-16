@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BootstrapData } from './api';
-import { readTrainingDraft, stageMuscle, trainingCost, trainingCount, writeTrainingDraft } from './trainingDraft';
+import { readTrainingDraft, runTrainingCount, stageMuscle, stageRun, trainingCost, trainingCount, writeTrainingDraft } from './trainingDraft';
 
 const requestId = '12345678-1234-1234-1234-123456789abc';
 const data = {
-  economy: { muscleCostBase: 20, muscleCostStep: 2 },
+  economy: { muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5 },
+  profile: { runCount: 2, gPoint: 1000, maxLife: 110 },
   ownedCards: [{ ownedId: 'a', cardId: 'G001', trainLevel: 0 }, { ownedId: 'b', cardId: 'G002', trainLevel: 2 }],
   cardMaster: [{ cardId: 'G001', type: 'rock' }, { cardId: 'G002', type: 'rock' }],
 } as BootstrapData;
@@ -44,6 +45,27 @@ describe('筋トレの一時保存', () => {
     writeTrainingDraft('guest:local', draft);
     expect(readTrainingDraft('guest:local')).toEqual(draft);
     expect(() => stageMuscle(draft, 'a', crypto.randomUUID())).toThrow('保存結果を確認してから');
+  });
+
+  it('走り込みを連続で仮保存し、現在の回数から段階的な費用を計算する', () => {
+    let draft = stageRun(null, requestId);
+    draft = stageRun(draft, crypto.randomUUID());
+    draft = stageRun(draft, crypto.randomUUID());
+    expect(runTrainingCount(draft)).toBe(3);
+    expect(trainingCost(data, draft)).toBe(72 + 78 + 84);
+    expect(draft.items).toEqual([{ kind: 'run', count: 3 }]);
+    expect(draft.requestId).toBe(requestId);
+    writeTrainingDraft('guest:local', draft);
+    expect(readTrainingDraft('guest:local')).toEqual(draft);
+  });
+
+  it('筋トレと走り込みを1回の送信にまとめ、合計100回を超えない', () => {
+    let draft = stageMuscle(null, 'a', requestId);
+    draft = stageRun(draft, crypto.randomUUID());
+    expect(trainingCost(data, draft)).toBe(20 + 72);
+    expect(draft.items).toEqual([{ kind: 'muscle', ownedId: 'a', count: 1 }, { kind: 'run', count: 1 }]);
+    const submitting = { ...draft, status: 'submitting' as const };
+    expect(() => stageRun(submitting, crypto.randomUUID())).toThrow('保存結果を確認してから');
   });
 
   it('上限に達したカードの下書き費用を無効とする', () => {

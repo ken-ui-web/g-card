@@ -7,7 +7,7 @@ import { PortalIcon, type PortalIconName } from './Icons';
 import { playSfx } from '../audio/sfx';
 import { formatPackChance, packContents } from './packContents';
 import { packArtKey, packArtUrl } from './packArt';
-import { readTrainingDraft, stageMuscle, trainingCost, trainingCount, writeTrainingDraft, type TrainingDraft } from './trainingDraft';
+import { readTrainingDraft, runTrainingCount, stageMuscle, stageRun, trainingCost, trainingCount, writeTrainingDraft, type TrainingDraft } from './trainingDraft';
 import { trainingCap } from '../data/trainingCaps';
 import { useScrolledPast } from '../components/useScrolledPast';
 import { TrainingDock } from './TrainingDock';
@@ -51,10 +51,10 @@ function PackConfirmDialog({ pack, balance, onCancel, onConfirm }: { pack: PackM
 
 function TrainingConfirmDialog({ draft, data, onCancel, onConfirm }: { draft: TrainingDraft; data: BootstrapData; onCancel: () => void; onConfirm: () => void }) {
   const cost = trainingCost(data, draft);
-  return createPortal(<div className="economy-feedback-backdrop"><div className="economy-pack-confirm panel" role="dialog" aria-modal="true" aria-label="筋トレ内容の保存確認">
-    <p className="eyebrow">CONFIRM TRAINING</p><h2>筋トレ内容を保存しますか？</h2>
+  return createPortal(<div className="economy-feedback-backdrop"><div className="economy-pack-confirm panel" role="dialog" aria-modal="true" aria-label="トレーニング内容の保存確認">
+    <p className="eyebrow">CONFIRM TRAINING</p><h2>トレーニング内容を保存しますか？</h2>
     <p>{trainingCount(draft)}回分をまとめて記録します。</p>
-    <div className="training-confirm-list">{draft.items.map((item) => { const owned = data.ownedCards.find((card) => card.ownedId === item.ownedId); const card = data.cardMaster.find((entry) => entry.cardId === owned?.cardId); return <div key={item.ownedId}><span>{card?.name ?? '所持カード'} · 筋トレ値 +{owned?.trainLevel ?? 0} → +{(owned?.trainLevel ?? 0) + item.count}</span><strong>{item.count}回</strong></div>; })}</div>
+    <div className="training-confirm-list">{draft.items.map((item) => { if (item.kind === 'run') return <div key="run"><span>走り込み · 最大ライフ {data.profile.maxLife} → {data.profile.maxLife + item.count * data.economy.lifePerRun}</span><strong>{item.count}回</strong></div>; const owned = data.ownedCards.find((card) => card.ownedId === item.ownedId); const card = data.cardMaster.find((entry) => entry.cardId === owned?.cardId); return <div key={item.ownedId}><span>{card?.name ?? '所持カード'} · 筋トレ値 +{owned?.trainLevel ?? 0} → +{(owned?.trainLevel ?? 0) + item.count}</span><strong>{item.count}回</strong></div>; })}</div>
     <p>合計 {cost.toLocaleString()}G · 費用差引後 {Math.max(0, data.profile.gPoint - cost).toLocaleString()}G</p><small>ミッション報酬は保存後に加算されます。</small>
     <div className="button-row"><button type="button" className="button button--ghost" autoFocus onClick={onCancel}>戻る</button><button type="button" className="button button--primary" onClick={onConfirm}>この内容で保存</button></div>
   </div></div>, document.body);
@@ -103,6 +103,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
   const trainingDraftRef = useRef(trainingDraft);
   const [showTrainingConfirm, setShowTrainingConfirm] = useState(false);
   const [powerUps, setPowerUps] = useState<Record<string, number>>({});
+  const [runPowerUps, setRunPowerUps] = useState(0);
   const cardById = (id: string) => data.cardMaster.find((card) => card.cardId === id);
   const toggleCardSize = () => setCompactCards((current) => { const next = !current; try { localStorage.setItem(cardSizeKey, next ? 'compact' : 'regular'); } catch { /* Size still changes for this visit. */ } return next; });
   const pageClass = `economy-page${compactCards ? ' economy-page--compact' : ''}`;
@@ -167,9 +168,26 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     } catch (failure) { setMessage((failure as Error).message || '端末に一時保存できませんでした'); }
   };
 
+  const queueRun = () => {
+    if (busyRef.current) return;
+    try {
+      const next = stageRun(trainingDraftRef.current, crypto.randomUUID());
+      const nextCost = trainingCost(data, next);
+      if (!Number.isFinite(nextCost)) { setMessage('仮の筋トレ内容を確認してください'); return; }
+      if (nextCost > data.profile.gPoint) { setMessage('Gポイントが足りません'); return; }
+      try { writeTrainingDraft(session, next); }
+      catch { setMessage('端末に一時保存できません。ブラウザーの保存設定を確認してください。'); return; }
+      trainingDraftRef.current = next;
+      setTrainingDraft(next);
+      setMessage('');
+      setRunPowerUps((current) => current + 1);
+      playSfx('point');
+    } catch (failure) { setMessage((failure as Error).message || '端末に一時保存できませんでした'); }
+  };
+
   const discardTraining = () => {
-    if (!trainingDraftRef.current || trainingDraftRef.current.status === 'submitting' || !window.confirm('仮の筋トレ内容を破棄しますか？')) return;
-    try { writeTrainingDraft(session, null); trainingDraftRef.current = null; setTrainingDraft(null); setMessage('筋トレ内容を取り消しました。'); }
+    if (!trainingDraftRef.current || trainingDraftRef.current.status === 'submitting' || !window.confirm('仮のトレーニング内容を破棄しますか？')) return;
+    try { writeTrainingDraft(session, null); trainingDraftRef.current = null; setTrainingDraft(null); setMessage('トレーニング内容を取り消しました。'); }
     catch { setMessage('端末の一時保存を削除できませんでした'); }
   };
 
@@ -187,7 +205,7 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
     }
     busyRef.current = true;
     setBusy(true); setMessage('');
-    setFeedback({ phase: 'working', title: '筋トレ内容を保存中…' });
+    setFeedback({ phase: 'working', title: 'トレーニングを保存中…' });
     try {
       const result = await callApi<EconomyState>('train', session, { items: current.items }, current.requestId);
       onState(result);
@@ -195,9 +213,11 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       trainingDraftRef.current = null;
       setTrainingDraft(null);
       const trained = result.trained;
-      const detail = trained === undefined ? '保存済みの筋トレ内容を確認しました。' : trained === trainingCount(current) ? `${trained}回分の筋トレを記録しました。` : `予定${trainingCount(current)}回のうち${trained}回分を記録しました。`;
+      const runs = runTrainingCount(current);
+      const muscles = trainingCount(current) - runs;
+      const detail = trained === undefined ? '保存済みのトレーニング内容を確認しました。' : trained === trainingCount(current) ? `${runs ? `走り込み${runs}回` : ''}${runs && muscles ? '・' : ''}${muscles ? `筋トレ${muscles}回` : ''}を記録しました。` : `予定${trainingCount(current)}回のうち${trained}回分を記録しました。`;
       setMessage(detail);
-      setFeedback({ phase: 'done', title: '筋トレ完了！', detail, balance: result.gPoint, missions: result.completedMissions, icon: 'training' });
+      setFeedback({ phase: 'done', title: runs && !muscles ? '走り込み完了！' : 'トレーニング完了！', detail: `${detail} 最大ライフ ${result.maxLife}`, balance: result.gPoint, missions: result.completedMissions, icon: runs && !muscles ? 'life' : 'training' });
       playSfx('point');
     } catch (failure) {
       const error = failure as Error & { code?: string };
@@ -208,14 +228,6 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
       setMessage(error.message);
       setFeedback({ phase: 'error', title: '保存できませんでした', detail: error.message });
     } finally { busyRef.current = false; setBusy(false); }
-  };
-
-  const trainRun = () => {
-    if (trainingDraftRef.current) return;
-    void transact('train', { items: [{ kind: 'run', count: 1 }] }, (result) => `最大ライフが${result.maxLife}になりました。`, {
-      working: '走り込みを記録中…',
-      done: (result) => ({ title: '走り込み完了！', detail: `最大ライフは${result.maxLife}です。`, icon: 'life' }),
-    });
   };
 
   const feedbackOverlay = feedback && <EconomyFeedbackOverlay feedback={feedback} onClose={() => setFeedback(null)} />;
@@ -259,19 +271,21 @@ export function EconomyPages({ page, session, data, onState, onRefreshShop }: { 
   if (page === 'training') {
     const projectedCost = trainingCost(data, trainingDraft);
     const remainingG = data.profile.gPoint - projectedCost;
-    const runCost = data.economy.runCostBase + data.economy.runCostStep * data.profile.runCount;
+    const runQueued = runTrainingCount(trainingDraft);
+    const runCost = data.economy.runCostBase + data.economy.runCostStep * (data.profile.runCount + runQueued);
     const currentLife = data.profile.maxLife;
+    const projectedLife = currentLife + runQueued * data.economy.lifePerRun;
     const queuedCount = trainingCount(trainingDraft);
     const rockCards = data.ownedCards.filter((owned) => cardById(owned.cardId)?.type === 'rock').sort((a, b) => compareCards(cardById(a.cardId)!, cardById(b.cardId)!));
     return <>{feedbackOverlay}{showTrainingConfirm && trainingDraft && <TrainingConfirmDialog draft={trainingDraft} data={data} onCancel={() => setShowTrainingConfirm(false)} onConfirm={() => { setShowTrainingConfirm(false); void saveTraining(); }} />}<section className={`${pageClass} economy-training-page`}><p className="eyebrow">TRAINING</p><h1>トレーニング</h1>
-      <div className="economy-training-summary" aria-label="現在のトレーニング状況"><div><span>{trainingDraft ? '費用差引後' : '所持G'}</span><strong>{Number.isFinite(remainingG) ? `${remainingG.toLocaleString()} G` : '要確認'}</strong></div><div><span>最大ライフ</span><strong>{currentLife}</strong></div></div>
+      <div className="economy-training-summary" aria-label="現在のトレーニング状況"><div><span>{trainingDraft ? '費用差引後' : '所持G'}</span><strong>{Number.isFinite(remainingG) ? `${remainingG.toLocaleString()} G` : '要確認'}</strong></div><div><span>{runQueued ? '仮の最大ライフ' : '最大ライフ'}</span><strong>{runQueued ? `${currentLife} → ${projectedLife}` : currentLife}</strong></div></div>
       <div className="economy-training-tabs" role="tablist" aria-label="トレーニングの種類"><button type="button" role="tab" aria-selected={trainingTab === 'muscle'} aria-controls="training-muscle-panel" onClick={() => setTrainingTab('muscle')}><strong>カードの筋トレ</strong><small>グーカードを1枚ずつ強化</small></button><button type="button" role="tab" aria-selected={trainingTab === 'run'} aria-controls="training-run-panel" onClick={() => setTrainingTab('run')}><strong>走り込み</strong><small>最大ライフを増やす</small></button></div>
-      {trainingDraft && <div className="economy-training-draft panel" role="status"><div><strong>{trainingDraft.status === 'submitting' ? '保存結果を確認してください' : `仮の筋トレ ${queuedCount}回`}</strong><small>{trainingDraft.status === 'submitting' ? '同じ内容で再確認します。二重にGは引かれません。' : !Number.isFinite(projectedCost) || remainingG < 0 ? '所持カードや残高が変わりました。選び直してください。' : `端末に一時保存中 · 合計 ${projectedCost.toLocaleString()}G`}</small></div><div className="economy-training-draft__actions"><button type="button" className="button button--primary" disabled={busy || trainingDraft.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0)} onClick={() => trainingDraft.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)}>{trainingDraft.status === 'submitting' ? '保存結果を確認する' : '筋トレを終了する'}</button>{trainingDraft.status === 'staged' && <button type="button" className="button button--ghost" onClick={discardTraining}>選び直す</button>}</div></div>}
+      {trainingDraft && <div className="economy-training-draft panel" role="status"><div><strong>{trainingDraft.status === 'submitting' ? '保存結果を確認してください' : `仮のトレーニング ${queuedCount}回（走り込み ${runQueued}回）`}</strong><small>{trainingDraft.status === 'submitting' ? '同じ内容で再確認します。二重にGは引かれません。' : !Number.isFinite(projectedCost) || remainingG < 0 ? '所持カードや残高が変わりました。選び直してください。' : `端末に一時保存中 · 合計 ${projectedCost.toLocaleString()}G`}</small></div><div className="economy-training-draft__actions"><button type="button" className="button button--primary" disabled={busy || trainingDraft.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0)} onClick={() => trainingDraft.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)}>{trainingDraft.status === 'submitting' ? '保存結果を確認する' : 'トレーニングを終了する'}</button>{trainingDraft.status === 'staged' && <button type="button" className="button button--ghost" onClick={discardTraining}>選び直す</button>}</div></div>}
       <div ref={trainingDockMarker} className="economy-training-dock-marker" aria-hidden="true" />
-      <TrainingDock visible={trainingDockVisible} balance={remainingG} maxLife={currentLife} tab={trainingTab} onTab={(next) => { setTrainingTab(next); window.scrollTo(0, 0); }} draftCount={queuedCount} draftCost={projectedCost} submitting={trainingDraft?.status === 'submitting'} saveDisabled={busy || Boolean(trainingDraft?.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0))} onSave={() => trainingDraft?.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)} onDiscard={discardTraining} />
+      <TrainingDock visible={trainingDockVisible} balance={remainingG} maxLife={projectedLife} runDraftCount={runQueued} tab={trainingTab} onTab={(next) => { setTrainingTab(next); window.scrollTo(0, 0); }} draftCount={queuedCount} draftCost={projectedCost} submitting={trainingDraft?.status === 'submitting'} saveDisabled={busy || Boolean(trainingDraft?.status === 'staged' && (!Number.isFinite(projectedCost) || remainingG < 0))} onSave={() => trainingDraft?.status === 'submitting' ? void saveTraining() : setShowTrainingConfirm(true)} onDiscard={discardTraining} />
       {trainingTab === 'muscle' ? <div id="training-muscle-panel" role="tabpanel" className="economy-training-workspace panel"><div className="economy-training-toolbar"><div><h2>カードの筋トレ</h2><p>グーカード1枚ごとに筋トレ値が上がります。上がるダメージはカードによって異なります。</p><small>所持しているグーカード {rockCards.length}枚</small></div><CardSizeToggle compact={compactCards} onToggle={toggleCardSize} /></div>
-        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = trainingDraft?.items.find((item) => item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cap = trainingCap(owned.cardId); const atCap = level >= cap; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'has-draft' : ''}><dl className="economy-training-card-stats"><div><dt>{queued ? '仮の筋トレ値' : '筋トレ値'}</dt><dd>+{level} / 上限 +{cap}</dd></div><div><dt>次の費用</dt><dd>{atCap ? '上限到達' : `${cost.toLocaleString()} G`}</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage}{!atCap && ` → ${damage + card.trainingMultiplier}`}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || atCap || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < cost || queuedCount >= 100} onClick={() => queueMuscle(owned.ownedId)}>{atCap ? '筋トレ完了' : '筋トレする'}</button>{queued > 0 && <p className="economy-training-card-pending">未保存 {queued}回</p>}{powerUps[owned.ownedId] > 0 && <span key={powerUps[owned.ownedId]} className="training-power-burst" aria-hidden="true"><strong>+1</strong><small>POWER UP!</small></span>}</CardTile>; })}</div>
-      </div> : <div id="training-run-panel" role="tabpanel"><div className="economy-run economy-run--focused panel"><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>すべての対戦で使う最大ライフを育てます。</p><div className="economy-run-stats"><div><span>最大ライフ</span><strong>{currentLife} <em>→</em> {currentLife + data.economy.lifePerRun}</strong></div><div><span>次の費用</span><strong>{runCost.toLocaleString()} G</strong></div></div><button type="button" className="button button--primary" disabled={busy || Boolean(trainingDraft) || data.profile.gPoint < runCost} onClick={trainRun}>走り込む</button>{trainingDraft && <p className="economy-training-card-pending">先に仮の筋トレを保存してください。</p>}</div></div></div>}
+        <div className="economy-grid economy-training-grid">{rockCards.map((owned) => { const card = cardById(owned.cardId)!; const queued = trainingDraft?.items.find((item) => item.kind === 'muscle' && item.ownedId === owned.ownedId)?.count ?? 0; const level = owned.trainLevel + queued; const cap = trainingCap(owned.cardId); const atCap = level >= cap; const cost = data.economy.muscleCostBase + data.economy.muscleCostStep * level; const baseDamage = card.effects?.find((effect) => effect.type === 'damage')?.amount; const damage = baseDamage === undefined ? null : baseDamage + (level + card.trainingBonus) * card.trainingMultiplier; return <CardTile key={owned.ownedId} card={card} className={queued ? 'has-draft' : ''}><dl className="economy-training-card-stats"><div><dt>{queued ? '仮の筋トレ値' : '筋トレ値'}</dt><dd>+{level} / 上限 +{cap}</dd></div><div><dt>次の費用</dt><dd>{atCap ? '上限到達' : `${cost.toLocaleString()} G`}</dd></div></dl>{damage !== null && <p className="economy-training-damage">基本ダメージ {damage}{!atCap && ` → ${damage + card.trainingMultiplier}`}{card.effects?.some((effect) => effect.type === 'damage' && 'hits' in effect && Number(effect.hits) > 1) ? '（1回あたり）' : ''}</p>}<button type="button" className="button button--primary" disabled={busy || atCap || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < cost || queuedCount >= 100} onClick={() => queueMuscle(owned.ownedId)}>{atCap ? '筋トレ完了' : '筋トレする'}</button>{queued > 0 && <p className="economy-training-card-pending">未保存 {queued}回</p>}{powerUps[owned.ownedId] > 0 && <span key={powerUps[owned.ownedId]} className="training-power-burst" aria-hidden="true"><strong>+1</strong><small>POWER UP!</small></span>}</CardTile>; })}</div>
+      </div> : <div id="training-run-panel" role="tabpanel"><div className="economy-run economy-run--focused panel"><img className="economy-training-art economy-training-art--run" src={`${import.meta.env.BASE_URL}images/ui/run.webp`} alt="" /><div><h2>走り込み</h2><p>ボタンを押すたびに最大ライフを仮に増やします。最後にまとめて保存します。</p><div className="economy-run-stats"><div><span>{runQueued ? '仮の最大ライフ' : '最大ライフ'}</span><strong>{projectedLife} <em>→</em> {projectedLife + data.economy.lifePerRun}</strong></div><div><span>次の費用</span><strong>{runCost.toLocaleString()} G</strong></div></div><button type="button" className="button button--primary" disabled={busy || trainingDraft?.status === 'submitting' || !Number.isFinite(remainingG) || remainingG < runCost || queuedCount >= 100} onClick={queueRun}>走り込む</button>{runQueued > 0 && <p className="economy-training-card-pending">未保存 {runQueued}回 · 最大ライフ +{runQueued * data.economy.lifePerRun}</p>}{runPowerUps > 0 && <span key={runPowerUps} className="training-power-burst training-power-burst--run" aria-hidden="true"><strong>+{data.economy.lifePerRun}</strong><small>LIFE UP!</small></span>}</div></div></div>}
       {message && <p className="economy-message" role="status">{message}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a></section></>;
   }
 

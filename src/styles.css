@@ -264,6 +264,8 @@ h1,h2,h3,p{overflow-wrap:anywhere}
 .training-power-burst{position:absolute;z-index:5;top:16%;left:50%;display:grid;place-content:center;width:150px;height:150px;pointer-events:none;color:#fff;text-align:center;text-shadow:0 2px 8px #412304,0 0 18px #ffdb55;animation:training-power-up .55s ease-out both}
 .training-power-burst::before{content:'';position:absolute;inset:5px;border:3px solid #ffdf6b;border-radius:50%;box-shadow:0 0 20px #ffdc5d,inset 0 0 20px #ffdc5d66;animation:training-power-ring .55s ease-out both}
 .training-power-burst strong{font-size:44px;line-height:1}.training-power-burst small{font-size:13px;font-weight:900;letter-spacing:.12em}
+.training-power-burst--run{top:35%;color:#e4faff;text-shadow:0 2px 8px #073b74,0 0 18px #4ce4ff}
+.training-power-burst--run::before{border-color:#72e5ff;box-shadow:0 0 20px #51cfff,inset 0 0 20px #51cfff88}
 @keyframes training-power-up{0%{opacity:0;transform:translate(-50%,20px) scale(.5)}28%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1}100%{opacity:0;transform:translate(-50%,-30px) scale(1.3)}}
 @keyframes training-power-ring{from{opacity:0;transform:scale(.35)}40%{opacity:1}to{opacity:0;transform:scale(1.35)}}
 .training-confirm-list{display:grid;gap:5px;max-height:220px;overflow:auto;margin:14px 0;text-align:left}.training-confirm-list>div{display:flex;justify-content:space-between;gap:12px;padding:7px 9px;border:1px solid #ffffff33;border-radius:8px;background:#0e1b3b}.training-confirm-list strong{flex:none;color:#ffe07a}
