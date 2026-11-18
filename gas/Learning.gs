@@ -281,6 +281,29 @@ function gcLearnQuestionRow_(testId, q, order, sectionIds, published) {
   if (JSON.stringify(row).length > 40000) gcError_('BAD_TEST', '問題の入力が長すぎます');
   return row;
 }
+function gcAdminPreviewTest_(token, payload) {
+  gcSession_(token, true);
+  const questions = payload.questions;
+  const answers = payload.answers;
+  if (!Array.isArray(questions) || !questions.length || questions.length > 100 ||
+      !answers || typeof answers !== 'object' || JSON.stringify(answers).length > 100000) gcError_('BAD_TEST', '問題と回答を確認してください');
+  const details = questions.map(function (q, index) {
+    if (!q) gcError_('BAD_TEST', '問題を確認してください');
+    const row = gcLearnQuestionRow_('', q, index, [q.sectionId], true);
+    const question = { ...q, points: row[9], options: gcLearnJson_(row[7], {}), required: row[10] };
+    const answer = Object.prototype.hasOwnProperty.call(answers, q.questionId) ? answers[q.questionId] : undefined;
+    if (!gcLearnValidAnswer_(question, answer)) gcError_('BAD_ANSWER', '問題 ' + (index + 1) + ' の回答を確認してください');
+    const earned = gcLearnAutoScore_(question, answer);
+    return { questionId: q.questionId, text: q.text, earned: earned, points: question.points,
+      answer: q.answer, feedback: earned === question.points ? q.feedbackCorrect : q.feedbackWrong };
+  });
+  return {
+    score: details.reduce(function (sum, item) { return sum + item.earned; }, 0),
+    maxScore: details.reduce(function (sum, item) { return sum + item.points; }, 0),
+    details: details
+  };
+}
+
 function gcAdminSaveTest_(token, payload) {
   gcSession_(token, true);
   const test = payload.test || {}; const questions = payload.questions;

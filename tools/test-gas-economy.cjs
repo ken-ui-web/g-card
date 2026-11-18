@@ -284,6 +284,14 @@ const questions = [
   { questionId: singleId, sectionId, type: 'single', text: '正しいもの', options: { choices: ['A', 'B'] }, answer: 'A', points: 5, required: true, shuffleOptions: false, feedbackCorrect: '正解', feedbackWrong: 'もう一度' },
   { questionId: shortId, sectionId, type: 'short', text: '名前', options: {}, answer: ['ABC'], points: 5, required: true, shuffleOptions: false, feedbackCorrect: '', feedbackWrong: '' },
 ];
+const previewRequest = { action: 'adminPreviewTest', session: token, payload: { questions, answers: { [singleId]: 'B', [shortId]: 'ａｂｃ' } } };
+const beforePreview = JSON.stringify(['Users', 'Tests', 'Questions', 'TestResponses', 'TestBest', 'PointLog', 'MissionProgress'].map((name) => sheets.get(name).rows));
+const testPreview = call('gcDispatch_', previewRequest);
+assert.equal(testPreview.score, 5);
+assert.equal(testPreview.maxScore, 10);
+assert.equal(testPreview.details[0].feedback, 'もう一度');
+assert.throws(() => call('gcDispatch_', { ...previewRequest, session: studentToken }), /管理者のみ/);
+assert.equal(JSON.stringify(['Users', 'Tests', 'Questions', 'TestResponses', 'TestBest', 'PointLog', 'MissionProgress'].map((name) => sheets.get(name).rows)), beforePreview, '未保存のテストを試し採点しても成績やGは記録しない');
 call('gcAdminSaveTest_', token, { test: testDefinition, questions });
 const studentPaper = call('gcGetTest_', studentToken, { testId });
 assert.equal(JSON.stringify(studentPaper).includes('answer'), false, '受験データに正解を含めない');

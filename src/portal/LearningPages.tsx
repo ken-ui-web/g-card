@@ -1,32 +1,13 @@
+import { TestPaper, answerPresent, type Paper } from './TestPaper';
 import { useEffect, useRef, useState } from 'react';
 import { callApi } from './api';
 import { LoadingState } from '../components/LoadingState';
 import { showRewardCelebration } from '../components/RewardCelebration';
 
 type TestListItem = { testId: string; title: string; description: string; endAt: string; attempts: number; attemptLimit: number; bestScore: number | null; available: boolean; lastResponseId: string };
-type Question = { questionId: string; sectionId: string; type: string; text: string; imageUrl?: string; options: { choices?: string[]; rows?: string[]; columns?: string[]; min?: number; max?: number }; points: number; required: boolean };
-type Paper = { testId: string; title: string; description: string; sections: { sectionId: string; title: string; description: string }[]; questions: Question[]; attemptNo: number };
 type Result = { responseId: string; title: string; released: boolean; score?: number; maxScore?: number; gAwarded: number; gPoint: number; details?: { questionId: string; text: string; earned: number; points: number; answer?: unknown; feedback?: string }[]; completedMissions?: { label: string; reward: number }[] };
 type ReflectionList = { appUrl: string; reward: number; lessons: { lessonId: string; title: string; submitted: boolean; rewarded: boolean }[] };
 type ReflectionSync = { awarded: number; newSubmissions: number; gPoint: number; reflections: ReflectionList; completedMissions?: { label: string; reward: number }[] };
-
-function answerPresent(question: Question, value: unknown): boolean {
-  if (value === undefined || value === null || value === '') return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (question.type.startsWith('grid')) return (question.options.rows ?? []).every((row) => answerPresent({ ...question, type: question.type === 'gridSingle' ? 'single' : 'multi' }, (value as Record<string, unknown>)[row]));
-  return true;
-}
-function displayImageUrl(url: string) { const match = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/); return match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1280` : url; }
-function OptionInput({ question, answer, onChange }: { question: Question; answer: unknown; onChange: (value: unknown) => void }) {
-  const choices = question.options.choices ?? [];
-  if (question.type === 'single' || question.type === 'multi') return <div className="learning-options">{choices.map((choice) => <label key={choice}><input type={question.type === 'single' ? 'radio' : 'checkbox'} name={question.questionId} checked={question.type === 'single' ? answer === choice : Array.isArray(answer) && answer.includes(choice)} onChange={(event) => { if (question.type === 'single') onChange(choice); else { const selected = Array.isArray(answer) ? answer as string[] : []; onChange(event.target.checked ? [...selected, choice] : selected.filter((item) => item !== choice)); } }} />{choice}</label>)}</div>;
-  if (question.type === 'dropdown') return <select value={String(answer ?? '')} onChange={(event) => onChange(event.target.value)}><option value="">選んでください</option>{choices.map((choice) => <option key={choice}>{choice}</option>)}</select>;
-  if (question.type === 'short') return <input type="text" maxLength={500} value={String(answer ?? '')} onChange={(event) => onChange(event.target.value)} />;
-  if (question.type === 'paragraph') return <textarea rows={5} maxLength={5000} value={String(answer ?? '')} onChange={(event) => onChange(event.target.value)} />;
-  if (question.type === 'scale') return <div className="learning-options learning-options--inline">{Array.from({ length: Number(question.options.max ?? 5) - Number(question.options.min ?? 1) + 1 }, (_, i) => i + Number(question.options.min ?? 1)).map((value) => <label key={value}><input type="radio" name={question.questionId} checked={Number(answer) === value} onChange={() => onChange(value)} />{value}</label>)}</div>;
-  if (question.type === 'gridSingle' || question.type === 'gridMulti') return <div className="learning-grid">{(question.options.rows ?? []).map((row) => <fieldset key={row}><legend>{row}</legend>{(question.options.columns ?? []).map((column) => { const values = (answer && typeof answer === 'object' ? answer as Record<string, unknown> : {}); const selected = values[row]; return <label key={column}><input type={question.type === 'gridSingle' ? 'radio' : 'checkbox'} name={`${question.questionId}-${row}`} checked={question.type === 'gridSingle' ? selected === column : Array.isArray(selected) && selected.includes(column)} onChange={(event) => onChange({ ...values, [row]: question.type === 'gridSingle' ? column : event.target.checked ? [...(Array.isArray(selected) ? selected : []), column] : (Array.isArray(selected) ? selected : []).filter((item) => item !== column) })} />{column}</label>; })}</fieldset>)}</div>;
-  return <p>この問題形式は表示できません。</p>;
-}
 
 export function LearningPages({ page, session, onPoints }: { page: 'tests' | 'reflections'; session: string; onPoints: (gPoint: number, kind: 'test' | 'reflection') => void }) {
   const [tests, setTests] = useState<TestListItem[] | null>(null);
@@ -117,9 +98,6 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
-  const activeSection = paper?.sections[section];
-  const currentQuestions = paper?.questions.filter((q) => q.sectionId === activeSection?.sectionId) ?? [];
-  const missing = currentQuestions.filter((q) => q.required && !answerPresent(q, answers[q.questionId]));
   return <section className="learning-page panel"><p className="eyebrow">{page === 'tests' ? 'LEARNING TEST' : 'LESSON REFLECTION'}</p>
     {page === 'reflections' ? <>
       <h1>振り返り報酬</h1>
@@ -130,7 +108,7 @@ export function LearningPages({ page, session, onPoints }: { page: 'tests' | 're
       {reflections && <div className="learning-list">{reflections.lessons.map((item) => <article key={item.lessonId}><strong>{item.title}</strong><span>{item.submitted ? item.rewarded ? '提出済み・G受取済み' : '提出済み' : '未提出'}</span></article>)}</div>}
     </>
       : result ? <><h1>{result.released ? 'テスト結果' : '回答を受け付けました'}</h1><p>{result.title}</p>{result.released ? <div className="learning-score">{result.score} / {result.maxScore} 点</div> : <p>先生が結果を公開すると、得点を見られます。</p>}<p className="learning-reward">今回獲得したGポイント：+{result.gAwarded}G</p>{result.completedMissions?.map((mission) => <p key={mission.label}>ミッション達成：{mission.label} +{mission.reward}G</p>)}{result.details?.map((detail) => <article className="learning-result-question" key={detail.questionId}><strong>{detail.text}</strong><p>{detail.earned} / {detail.points} 点</p>{detail.answer !== undefined && <p>正解：{Array.isArray(detail.answer) ? detail.answer.join('、') : typeof detail.answer === 'object' ? JSON.stringify(detail.answer) : String(detail.answer)}</p>}{detail.feedback && <p>{detail.feedback}</p>}</article>)}<button className="button button--ghost" onClick={() => setResult(null)}>テスト一覧へ</button></>
-      : paper ? <><h1>{paper.title}</h1><p>{paper.description}</p><div className="learning-progress">{section + 1} / {paper.sections.length} ページ <div><span style={{ width: `${(section + 1) / paper.sections.length * 100}%` }} /></div></div><h2>{activeSection?.title || `ページ ${section + 1}`}</h2><p>{activeSection?.description}</p>{currentQuestions.map((q, i) => <article className="learning-question" key={q.questionId}><h3>{i + 1}. {q.text} {q.required && <small>必須</small>}</h3>{q.imageUrl && <img className="learning-question-image" src={displayImageUrl(q.imageUrl)} alt="問題の画像" />}<p>{q.points} 点</p><OptionInput question={q} answer={answers[q.questionId]} onChange={(value) => setAnswers((current) => ({ ...current, [q.questionId]: value }))} /></article>)}{missing.length > 0 && <p className="learning-hint">必須の問題に回答すると、次へ進めます。</p>}<div className="button-row"><button className="button button--ghost" disabled={section === 0 || busy} onClick={() => setSection(section - 1)}>戻る</button>{section < paper.sections.length - 1 ? <button className="button button--primary" disabled={missing.length > 0} onClick={() => setSection(section + 1)}>次へ</button> : <button className="button button--primary" disabled={missing.length > 0 || busy} onClick={() => { void submit(); }}>{busy ? '採点中…' : '回答を送信'}</button>}</div></>
+      : paper ? <TestPaper {...{ paper, answers, section, setSection, setAnswers, busy }} onSubmit={() => { void submit(); }} />
       : <><h1>テストを受ける</h1><p>回答は採点時にだけ送信され、学校のシートには得点と獲得Gだけを記録します。</p>{!tests && !error && <LoadingState text="テストを読み込み中" />}<div className="learning-list">{tests?.map((item) => <article key={item.testId}><div><h2>{item.title}</h2><p>{item.description}</p><small>{item.endAt ? `期限：${new Date(item.endAt).toLocaleString('ja-JP')}` : '期限なし'} · {item.attempts ? `受験済み・ベスト${item.bestScore}点` : '未受験'}</small></div><div className="learning-actions"><button className="button button--primary" disabled={!item.available || busy} onClick={() => { void openTest(item.testId); }}>{item.available ? item.attempts ? 'もう一度受ける' : '受ける' : '受験できません'}</button>{item.lastResponseId && <button className="button button--ghost" disabled={busy} onClick={() => { void viewResult(item.lastResponseId); }}>結果を見る</button>}</div></article>)}</div>{tests?.length === 0 && <p>現在受けられるテストはありません。</p>}</>}
     {busy && <LoadingState text={page === 'tests' ? 'テストの情報を確認中' : '提出記録を確認中'} />}
     {note && <p role="status" className="economy-message">{note}</p>}{error && <p role="alert" className="portal-error">{error}</p>}<a className="button button--ghost" href="#/home">ホームへ戻る</a>

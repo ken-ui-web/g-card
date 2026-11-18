@@ -283,6 +283,7 @@ function gcDispatch_(request) {
     case 'adminListTests': return gcAdminListTests_(request.session);
     case 'adminGetTest': return gcAdminGetTest_(request.session, request.payload || {});
     case 'adminSaveTest': return gcAdminSaveTest_(request.session, request.payload || {});
+    case 'adminPreviewTest': return gcAdminPreviewTest_(request.session, request.payload || {});
     case 'adminDeleteTest': return gcAdminDeleteTest_(request.session, request.payload || {});
     case 'adminTestResponses': return gcAdminTestResponses_(request.session, request.payload || {});
     case 'adminDashboard': return gcAdminDashboard_(request.session);
