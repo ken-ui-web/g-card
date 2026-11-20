@@ -128,7 +128,7 @@ function bootstrap(state: GuestState): BootstrapData {
     cardMaster: availableCards.map((item, index) => ({ cardId: item.cardId, name: item.name, type: item.type, rarity: item.rarity, image: item.frontImage, text: item.text, effects: item.effects, trainingMultiplier: item.trainingMultiplier, trainingBonus: item.trainingBonus, shopPrice: null, inPack: false, active: false, sortOrder: order.indexOf(item.type) * 100 + index })),
     lastDeck: state.lastDeck, packs: [], battleConfig: [], missions: state.missions, daily: state.daily,
     economy: { enabled: true, muscleCostBase: 20, muscleCostStep: 2, runCostBase: 60, runCostStep: 6, lifePerRun: 5, cpuRewardDailyCap: 3, packDailyLimit: 10, sellPrices },
-    learning: { enabled: false }, unreadTests: 0, pendingReflections: 0, online: { enabled: false, rankingEnabled: false, rewardDailyCap: 0 },
+    learning: { enabled: false }, unreadTests: 0, pendingReflections: 0, online: { enabled: true, rankingEnabled: false, rewardDailyCap: 0 },
   };
   return activeShopConfig ? applyGuestShopConfig(data, activeShopConfig) : data;
 }

@@ -1,7 +1,8 @@
 import { getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getDatabase, goOffline, goOnline, get, onDisconnect, ref, remove, runTransaction, serverTimestamp, set, update, type Database } from 'firebase/database';
+import { getDatabase, goOffline, goOnline, get, onDisconnect, onValue, ref, remove, runTransaction, serverTimestamp, set, update, type Database } from 'firebase/database';
 import type { DeckMode, OnlineRoom } from './protocol';
+import { requireMatchingOnlineMode } from './accountMode';
 
 const rawConfig = import.meta.env.VITE_FIREBASE_CONFIG || '';
 export const firebaseConfigured = Boolean(rawConfig.trim());
@@ -52,11 +53,11 @@ async function cleanupHostedRooms(db: Database, uid: string): Promise<void> {
   try { localStorage.setItem(hostedKey, JSON.stringify(remaining)); } catch { /* 保存できない端末 */ }
 }
 
-async function createRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, code: string, teacherTest: boolean): Promise<string> {
+async function createRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, code: string, teacherTest: boolean, guestBattle: boolean, expiresAt: number): Promise<string> {
   const battleId = crypto.randomUUID();
   const createdAt = Date.now();
   const room: OnlineRoom = {
-    meta: { battleId, deckMode, hostUid: uid, ...(teacherTest ? { teacherTest: true } : {}), protocolVersion: 2, seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt: createdAt + 30 * 60_000 },
+    meta: { battleId, deckMode, hostUid: uid, ...(teacherTest ? { teacherTest: true } : {}), ...(guestBattle ? { guestBattle: true } : {}), protocolVersion: 2, seed: crypto.getRandomValues(new Uint32Array(1))[0], code, createdAt, expiresAt },
     players: { [uid]: { nickname, maxLife, connected: true, lastSeen: createdAt } },
   };
   await set(ref(db, roomPath(battleId)), room);
@@ -65,14 +66,19 @@ async function createRoom(db: Database, uid: string, nickname: string, maxLife: 
   return battleId;
 }
 
-export async function createCodeRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, teacherTest = false): Promise<{ roomId: string; code: string }> {
+export async function createCodeRoom(db: Database, uid: string, nickname: string, maxLife: number, deckMode: DeckMode, teacherTest = false, guestBattle = false): Promise<{ roomId: string; code: string }> {
+  const clockOffset = await new Promise<number>((resolve, reject) => {
+    onValue(ref(db, '.info/serverTimeOffset'), (snapshot) => resolve(Number(snapshot.val()) || 0), reject, { onlyOnce: true });
+  });
   for (let attempt = 0; attempt < 12; attempt++) {
     const code = String(1000 + crypto.getRandomValues(new Uint32Array(1))[0] % 9000);
     const reservation = ref(db, `codes/${code}`);
-    const current = await runTransaction(reservation, (value) => value && value.expiresAt > Date.now() ? undefined : { hostUid: uid, deckMode, expiresAt: Date.now() + 30 * 60_000 }, { applyLocally: false });
+    // Leave room for clock measurement error beneath the rules' 30-minute limit.
+    const expiresAt = Date.now() + clockOffset + 30 * 60_000 - 5000;
+    const current = await runTransaction(reservation, (value) => value && value.expiresAt > Date.now() + clockOffset ? undefined : { hostUid: uid, deckMode, ...(guestBattle ? { guestBattle: true } : {}), expiresAt }, { applyLocally: false });
     if (!current.committed) continue;
     try {
-      const roomId = await createRoom(db, uid, nickname, maxLife, deckMode, code, teacherTest);
+      const roomId = await createRoom(db, uid, nickname, maxLife, deckMode, code, teacherTest, guestBattle, expiresAt);
       await update(reservation, { roomId });
       return { roomId, code };
     } catch (error) { await remove(reservation).catch(() => {}); throw error; }
@@ -80,12 +86,13 @@ export async function createCodeRoom(db: Database, uid: string, nickname: string
   throw new Error('空いているルームコードを作れませんでした。もう一度試してください。');
 }
 
-export async function joinCodeRoom(db: Database, uid: string, code: string, deckMode: DeckMode): Promise<string> {
+export async function joinCodeRoom(db: Database, uid: string, code: string, deckMode: DeckMode, guestBattle = false): Promise<string> {
   if (!/^\d{4}$/.test(code)) throw new Error('4桁のルームコードを入力してください。');
-  const mapping = (await get(ref(db, `codes/${code}`))).val() as { roomId?: string; deckMode?: DeckMode; expiresAt?: number } | null;
+  const mapping = (await get(ref(db, `codes/${code}`))).val() as { roomId?: string; deckMode?: DeckMode; guestBattle?: boolean; expiresAt?: number } | null;
   if (!mapping?.roomId || !mapping.expiresAt || mapping.expiresAt < Date.now()) throw new Error('このルームコードは利用できません。');
   const roomId = mapping.roomId;
   if (mapping.deckMode !== deckMode) throw new Error('カードセットの部門が異なります。');
+  requireMatchingOnlineMode(mapping.guestBattle, guestBattle);
   const transaction = await runTransaction(ref(db, `${roomPath(roomId)}/meta/guestUid`), (current) => current || uid, { applyLocally: false });
   if (!transaction.committed || transaction.snapshot.val() !== uid) throw new Error('この部屋は満員です。');
   return roomId;

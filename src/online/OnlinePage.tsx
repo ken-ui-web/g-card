@@ -17,6 +17,7 @@ import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured
 import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
 import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
 import { initialOnlineSelection, type OnlinePoolItem } from './selection';
+import { requireMatchingOnlineMode } from './accountMode';
 
 type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
 type EncryptProof = { round: number; index: number; to: CardType; salt: string };
@@ -106,7 +107,8 @@ function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; s
 }
 
 export function OnlinePage() {
-  const session = isGuest(savedSession()) ? null : savedSession();
+  const session = savedSession();
+  const guestBattle = isGuest(session);
   const [account, setAccount] = useState<BootstrapData | null>(null);
   const [db, setDb] = useState<Database | null>(null);
   const [uid, setUid] = useState('');
@@ -146,7 +148,7 @@ export function OnlinePage() {
   const opponent = room?.players?.[opponentUid];
   const opponentOffline = localConnected && opponentTimedOut(opponent?.lastSeen, elapsed);
   const opponentAway = opponent?.connected === false || Boolean(opponent?.lastSeen && elapsed - opponent.lastSeen >= 10_000);
-  const onlineAvailable = Boolean(account?.online?.enabled || account?.profile.role === 'admin');
+  const onlineAvailable = Boolean(guestBattle || account?.online?.enabled || account?.profile.role === 'admin');
   const teacherTestMode = Boolean(account?.profile.role === 'admin' && !account.online?.enabled);
 
   const enterRoom = (id: string) => {
@@ -159,7 +161,7 @@ export function OnlinePage() {
     if (!session || !firebaseConfigured) return;
     let active = true;
     const cached = readBootstrapCache(session);
-    const profileRequest = isBootstrapFresh(cached) ? Promise.resolve(cached!.data) : requestBootstrap(session).then((profile) => {
+    const profileRequest = !guestBattle && isBootstrapFresh(cached) ? Promise.resolve(cached!.data) : requestBootstrap(session).then((profile) => {
       writeBootstrapCache(session, profile, Date.now(), cached?.revision ?? 0);
       return readBootstrapCache(session)?.data ?? profile;
     });
@@ -183,6 +185,8 @@ export function OnlinePage() {
       const currentRevision = ++revision;
       const next = snapshot.val() as OnlineRoom | null;
       if (!next) { if (!['complete', 'invalid'].includes(rewardStatus.current) && viewPhase.current !== 'forfeit') { setError('部屋が終了しました。'); setRoom(null); } return; }
+      try { requireMatchingOnlineMode(next.meta.guestBattle, guestBattle); }
+      catch (failure) { setError((failure as Error).message); return; }
       setRoom(next);
       void deriveView(next).then((derived) => { if (active && revision === currentRevision) setView(derived); }).catch(() => { if (active && revision === currentRevision) setError('対戦データを確認できません。'); });
     }, (failure) => {
@@ -202,9 +206,10 @@ export function OnlinePage() {
     void (async () => {
       try {
         const maxLife = account.profile.maxLife;
+        requireMatchingOnlineMode(room.meta.guestBattle, guestBattle);
         if (room.meta.teacherTest && account.profile.role !== 'admin') throw new Error('この部屋は管理者のテスト用です。');
         await setPresence(db, roomId, uid, room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname, maxLife);
-        if (!room.meta.teacherTest) await callApi('onlineJoin', session, { battleId: roomId, uid, deckMode: room.meta.deckMode });
+        if (!guestBattle && !room.meta.teacherTest) await callApi('onlineJoin', session, { battleId: roomId, uid, deckMode: room.meta.deckMode });
         setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account), account.lastDeck))); setJoined(true);
       } catch (failure) { entered.current = false; setError((failure as Error).message); }
     })();
@@ -279,7 +284,7 @@ export function OnlinePage() {
     if (view.phase === 'final' && !room.final?.[uid]) takeAction('final', () => set(ref(db, `${path}/final/${uid}`), { entries, salt, ...(room.meta.protocolVersion === 2 ? { encryptProofs: encryptProofs(roomId) } : {}) }));
     if ((view.phase === 'finished' || view.phase === 'invalid') && session && !reward && (reportDeck || view.phase === 'invalid')) takeAction('report', async () => {
       const result = view.phase === 'invalid' ? 'draw' : myResult(view, mySide);
-      if (room.meta.teacherTest) {
+      if (guestBattle || room.meta.teacherTest) {
         setReward({ status: view.phase === 'invalid' ? 'invalid' : 'complete', result, awarded: 0, gPoint: account?.profile.gPoint ?? 0, onlineRewards: 0 });
         return;
       }
@@ -301,7 +306,7 @@ export function OnlinePage() {
   }, [db, uid, roomId, room, joined, opponentUid, opponentOffline, view, elapsed]);
 
   useEffect(() => {
-    if (!session || !roomId || !reward || room?.meta.teacherTest || reward.status === 'complete' || reward.status === 'invalid') return;
+    if (!session || guestBattle || !roomId || !reward || room?.meta.teacherTest || reward.status === 'complete' || reward.status === 'invalid') return;
     const timer = window.setInterval(() => { void callApi<Reward>('onlineResult', session, { battleId: roomId }).then(setReward).catch(() => {}); }, 3000);
     return () => window.clearInterval(timer);
   }, [session, roomId, reward?.status, room?.meta.teacherTest]);
@@ -314,7 +319,7 @@ export function OnlinePage() {
   }, [reward]);
 
   useEffect(() => {
-    if (!session || !reward || rewardCacheApplied.current || !['complete', 'invalid'].includes(reward.status) || room?.meta.teacherTest) return;
+    if (!session || guestBattle || !reward || rewardCacheApplied.current || !['complete', 'invalid'].includes(reward.status) || room?.meta.teacherTest) return;
     rewardCacheApplied.current = true;
     patchBootstrapCache(session, (current) => ({ ...current, profile: { ...current.profile, gPoint: reward.gPoint }, daily: { ...current.daily, onlineRewards: reward.onlineRewards } }), true);
   }, [session, reward, room?.meta.teacherTest]);
@@ -340,7 +345,7 @@ export function OnlinePage() {
     if (!account) return [];
     return onlinePool(account).sort((a, b) => compareCards(getCard(a.cardId), getCard(b.cardId)));
   }, [account]);
-  const canBuildDeck = initialOnlineSelection(pool).length === 4;
+  const canBuildDeck = !account?.needsNickname && initialOnlineSelection(pool).length === 4;
   const selectedValidSlots = validDeckSlots(selectedSlots, pool.map((item) => item.id));
   const selectedValid = selectedFromSlots(selectedValidSlots);
   const dockCards = selectedValidSlots.map((id) => {
@@ -357,18 +362,19 @@ export function OnlinePage() {
     return toggleDeckSlot(valid, id, canAdd);
   });
   const maxLife = account?.profile.maxLife || 100;
+  const playerName = (name: string) => guestBattle ? name + '（ゲスト）' : name;
 
   const startCode = async () => {
     if (!db || !uid || !account || busy || !canBuildDeck) return;
     setBusy(true); setError('');
-    try { const created = await createCodeRoom(db, uid, teacherTestMode ? '先生A' : account.profile.nickname, maxLife, 'owned', teacherTestMode); enterRoom(created.roomId); setCode(created.code); }
+    try { const created = await createCodeRoom(db, uid, teacherTestMode ? '先生A' : account.profile.nickname, maxLife, 'owned', teacherTestMode, guestBattle); enterRoom(created.roomId); setCode(created.code); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
   const joinCode = async () => {
     if (!db || !uid || busy || !canBuildDeck) return;
     setBusy(true); setError('');
-    try { enterRoom(await joinCodeRoom(db, uid, code.trim(), 'owned')); }
+    try { enterRoom(await joinCodeRoom(db, uid, code.trim(), 'owned', guestBattle)); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
@@ -462,16 +468,16 @@ export function OnlinePage() {
     window.history.replaceState(null, '', '#/online');
   };
 
-  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><SoundToggle /></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1', room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2']} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
-  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><div className="online-header-actions"><SoundToggle /><a href="#/ranking" className="text-link">ランキング</a></div></header>
-    <section className="panel online-panel"><p className="eyebrow">ONLINE BATTLE</p><h1>友達とカードで対戦</h1>
+  if (presentation) return <main className="app-shell online-shell app-shell--battle" style={battleBackgroundStyle}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><SoundToggle /></header><section className="online-panel">{room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}<RoundPresentation key={presentation.round} view={presentation} side={mySide} names={[playerName(room?.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'), playerName(room?.players?.[room.meta.guestUid || '']?.nickname || 'プレイヤー2')]} onClose={() => { setSeenRound(presentation.round); setPresentation(null); }} /></section></main>;
+  return <main className={`app-shell online-shell${roomId ? ' app-shell--battle' : ''}`} style={roomId ? battleBackgroundStyle : undefined}><header className="app-header"><BrandIdentity /><strong>オンライン対戦</strong><div className="online-header-actions"><SoundToggle />{!guestBattle && <a href="#/ranking" className="text-link">ランキング</a>}</div></header>
+    <section className="panel online-panel"><p className="eyebrow">ONLINE BATTLE</p><h1>友達とカードで対戦</h1>{guestBattle && <p role="status">ゲスト同士の対戦です。自分の所持カード・筋トレ値・最大ライフを使います。ランキングとG報酬は対象外です。</p>}
       {teacherTestMode && !roomId && <p role="status">管理者テストモードです。同じ学校アカウントを別端末でも開いて対戦できます。Gポイントは増減しません。</p>}
       {account?.profile.role === 'admin' && account.online?.enabled && !roomId && <p role="alert">オンライン対戦を生徒に公開中です。同じ学校アカウントで試す場合は、管理者設定の「オンライン対戦を受付」を0にして再読み込みしてください。</p>}
       {room?.meta.teacherTest && <p role="status">管理者テスト対戦 · Gポイントは増減しません</p>}
       {room && !room.meta.teacherTest && account?.profile.role === 'admin' && <p role="status">通常対戦の部屋です。同じ学校アカウント同士では参加できません。</p>}
       {room && joined && !localConnected && view?.outcome === null && <p role="status">通信が切れています。再接続を待っています。制限時間は一時停止中です。</p>}
       {room && joined && localConnected && opponentAway && !opponentOffline && view?.outcome === null && <p role="status">相手との通信を確認中です。制限時間は一時停止中です。</p>}
-      {!session ? <p>学校アカウントでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>所持しているカードから4枚を選び、友達と対戦します。</p>{!canBuildDeck && <p role="alert">オンライン対戦には自分のカードが4枚必要です。SSRは1枚まで使えます。カード購入でそろえてください。</p>}<div className="button-row"><button className="button button--primary" disabled={busy || !canBuildDeck} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || !canBuildDeck || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <LoadingState text="部屋を読み込み中" /> : room.meta.deckMode !== 'owned' ? <><p role="alert">サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。</p><div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></> : <><p>自分のカード{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1'} VS {room.players?.[room.meta.guestUid || '']?.nickname || '相手を待っています…'}</p>
+      {!session ? <p>ホームで学校アカウントかゲストでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>所持しているカードから4枚を選び、友達と対戦します。最大ライフ {maxLife}</p>{account.needsNickname && <p role="alert">ホームでゲストのニックネームを決めてください。</p>}{!canBuildDeck && <p role="alert">オンライン対戦には自分のカードが4枚必要です。SSRは1枚まで使えます。カード購入でそろえてください。</p>}<div className="button-row"><button className="button button--primary" disabled={busy || !canBuildDeck} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || !canBuildDeck || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <>{error ? <button type="button" className="button button--ghost" onClick={leave}>対戦から戻る</button> : <LoadingState text="部屋を読み込み中" />}</> : room.meta.deckMode !== 'owned' ? <><p role="alert">サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。</p><div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></> : <><p>自分のカード{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{playerName(room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1')} VS {room.meta.guestUid ? playerName(room.players?.[room.meta.guestUid]?.nickname || '相手') : '相手を待っています…'}</p>
         {!room.meta.guestUid ? <LoadingState text="相手を待っています。コードを友達に伝えてください" /> : !joined ? <LoadingState text="対戦相手の参加を確認中" /> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻らなかったため、勝敗を確定しています…</p></div> : view?.phase === 'deck' ? <>
           <h2>カードを4枚選ぶ</h2>
           <p>制限時間90秒。相手には種類とSSRかどうかが見え、カード名はラウンドまで隠れます。SSRは1枚までです。</p>
@@ -502,7 +508,7 @@ export function OnlinePage() {
               return <button key={item.id} disabled={selectedValid.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1} onClick={() => toggleSelectedCard(item.id)}><Card card={card} width={110} /><strong>{card.name}</strong><small>{card.rarity} · {typeLabels[card.type]}</small></button>;
             })}</div>
           </>}
-        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : '相手の結果を確認中です。照合が終わるまで勝利数と報酬は記録されません。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={opponent?.nickname || '相手'} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
+        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || guestBattle || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{guestBattle ? 'ゲスト対戦が終了しました。ランキングとG報酬は対象外です。' : room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : '相手の結果を確認中です。照合が終わるまで勝利数と報酬は記録されません。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={playerName(opponent?.nickname || '相手')} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
           {view.phase === 'reveal' ? <p role="status">お互いのカードを公開中…</p>
             : view.phase === 'target' && view.targetOwner === mySide && room.meta.protocolVersion === 2 ? <TargetPicker view={view} side={mySide} selected={targetSelections} onSelect={setTargetSelections} type={targetType} onType={setTargetType} onSubmit={() => { void chooseTarget(); }} busy={busy} />
             : view.phase === 'target' && view.targetOwner === mySide ? <><p>相手の残りカードを1枚選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((_, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget([index]); }}>{typeLabels[view.types[mySide === 0 ? 1 : 0][index]]} · {index + 1}番</button>)}<button onClick={() => { void chooseTarget([-1]); }}>変更しない</button></div></>

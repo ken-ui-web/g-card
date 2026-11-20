@@ -2,8 +2,8 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 // Add student-facing changes to this day's list; admin-only changes do not affect it.
 const studentRelease = {
   version: '2.0',
-  date: '11/16',
-  changes: ['カードパックの開封演出が新しくなりました。走り込みも連続で行い、最後にまとめて保存できます。'],
+  date: '11/20',
+  changes: ['ゲスト同士も自分のカードと育成した強さでオンライン対戦できるようになりました。部屋の作成も安定させました。'],
 } as const;
 
 function BrandContent() {

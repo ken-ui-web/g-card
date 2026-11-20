@@ -15,7 +15,7 @@ export interface OnlineRound {
   stateHash?: Record<string, string>;
 }
 export interface OnlineRoom {
-  meta: { battleId: string; deckMode: DeckMode; hostUid: string; guestUid?: string; seed: number; code?: string; teacherTest?: boolean; protocolVersion?: number; createdAt: number; expiresAt: number };
+  meta: { battleId: string; deckMode: DeckMode; hostUid: string; guestUid?: string; seed: number; code?: string; teacherTest?: boolean; guestBattle?: boolean; protocolVersion?: number; createdAt: number; expiresAt: number };
   players?: Record<string, { nickname: string; maxLife: number; connected: boolean; lastSeen: number }>;
   decks?: Record<string, PublicDeck>;
   rounds?: Record<string, OnlineRound>;
