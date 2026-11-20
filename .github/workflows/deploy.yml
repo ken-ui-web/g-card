@@ -46,5 +46,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      - name: 公開ファイルの同期を待つ
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v4
