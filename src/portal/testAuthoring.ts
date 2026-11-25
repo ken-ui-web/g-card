@@ -42,7 +42,7 @@ export function questionIssue(q: Question, forPublication = true): string {
   return '';
 }
 
-export type ImportRow = { text: string; choices: string; key: string; points: string; extra?: boolean };
+export type ImportRow = { text: string; choices: string; key: string; points: string; extra?: boolean; sourceRow?: number };
 
 // Excel とスプレッドシートが複数行セルを引用符で囲む形式にも対応する。
 export function readQuestionTable(input: string): ImportRow[] {

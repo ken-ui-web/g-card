@@ -84,6 +84,19 @@
 .test-publication-summary div { background: #101c3b; padding: 11px; border-radius: 9px; }
 .test-publication-summary dt { color: #bed0ed; font-size: .83rem; }
 .test-publication-summary dd { margin: 4px 0 0; font-weight: 800; overflow-wrap: anywhere; }
+.test-import-method { display: flex; gap: 6px; padding: 5px; margin: 12px 0 18px; border: 1px solid #819bc655; border-radius: 12px; background: #0d1937; }
+.test-import-method button { flex: 1; padding: 11px 8px; border: 0; border-radius: 8px; background: transparent; color: #d9e6fc; font: inherit; font-weight: 800; cursor: pointer; }
+.test-import-method button[aria-pressed=true] { background: #ffdb68; color: #17233c; }
+.test-import-excel { display: grid; gap: 14px; }
+.test-import-excel-step { display: grid; gap: 10px; padding: 17px; border: 1px solid #819bc64a; border-radius: 12px; background: #101c3b; }
+.test-import-excel-step h3, .test-import-excel-step p { margin: 0; }
+.test-import-excel-step p, .test-import-excel-step small { color: #c3d4ed; line-height: 1.65; }
+.test-import-excel-step .button { justify-self: start; text-decoration: none; min-height: 44px; padding: 10px 14px; font-size: .9rem; }
+.test-import-excel-step input[type=file] { width: 100%; margin-top: 8px; padding: 12px; border: 1px dashed #9db9df; border-radius: 10px; font: inherit; background: #17294b; color: #f4f7ff; }
+.test-import-excel-step input::file-selector-button { margin-right: 10px; border: 1px solid #8ca6d2; border-radius: 7px; padding: 8px 12px; background: #2c456d; color: #fff; cursor: pointer; }
+.test-import-reading { display: flex; align-items: center; gap: 9px; color: #ffdd86!important; }
+.test-import-filename { overflow-wrap: anywhere; font-weight: 800; }
+.test-import-rows strong small { color: #bccfea; font-weight: 400; }
 @media (max-width: 720px) {
   .test-editor-layout, .test-author-info { grid-template-columns: minmax(0, 1fr); }
   .test-editor-nav { position: static; }

@@ -29,7 +29,7 @@ export function AdminTests({ session }: { session: string }) {
   const [dirty, setDirty] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState('');
-  const [dialog, setDialog] = useState<'import' | 'preview' | 'publish' | null>(null);
+  const [dialog, setDialog] = useState<'import' | 'excel' | 'preview' | 'publish' | null>(null);
   const [previewPaper, setPreviewPaper] = useState<import('./TestPaper').Paper | null>(null);
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
@@ -253,6 +253,7 @@ export function AdminTests({ session }: { session: string }) {
           <div className="test-editor-main">
             <div className="test-editor-toolbar">
               <strong>{activeSection.title || 'セクション'}</strong>
+              <button type="button" className="test-author-link" disabled={locked || questions.length >= 100} onClick={() => setDialog('excel')}>Excelで一括作成</button>
               <button type="button" className="test-author-link" disabled={locked || questions.length >= 100} onClick={() => setDialog('import')}>一括貼り付け</button>
               <button type="button" className="button button--primary" disabled={locked || questions.length >= 100} onClick={() => addQuestion()}>＋ 問題を追加</button>
             </div>
@@ -305,7 +306,7 @@ export function AdminTests({ session }: { session: string }) {
         <button type="button" className="test-author-link" disabled={busy || saving || locked} onClick={() => { void remove(); }}>テストを削除</button>
       </footer>
       {test.published && !dirty && <label>生徒向けのテストリンク<input readOnly value={`${window.location.origin}${window.location.pathname}#/tests?testId=${encodeURIComponent(test.testId)}`} onFocus={(event) => event.currentTarget.select()} /></label>}
-      {dialog === 'import' && activeSection && <TestImportDialog sectionId={activeSection.sectionId} capacity={100 - questions.length} onClose={() => setDialog(null)} onImport={(entries) => {
+      {(dialog === 'import' || dialog === 'excel') && activeSection && <TestImportDialog initialMode={dialog === 'excel' ? 'excel' : 'paste'} sectionId={activeSection.sectionId} capacity={100 - questions.length} onClose={() => setDialog(null)} onImport={(entries) => {
         setQuestions([...questions, ...entries]); markDirty(); setDialog(null); selectQuestion(entries[0], true); setMessage(`${entries.length}問を追加しました。`);
       }} />}
       {dialog === 'preview' && previewPaper && <TestPreviewDialog session={session} paper={previewPaper} questions={orderedQuestions} onClose={() => setDialog(null)} />}
