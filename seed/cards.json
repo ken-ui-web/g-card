@@ -682,5 +682,25 @@
         "type": "forceOpponentNext"
       }
     ]
+  },
+  {
+    "cardId": "G023",
+    "name": "サンタパンチ",
+    "type": "rock",
+    "rarity": "SSR",
+    "trainingMultiplier": 1,
+    "trainingBonus": 0,
+    "shopPrice": null,
+    "inPack": false,
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 30
+      },
+      {
+        "type": "heal",
+        "amount": 10
+      }
+    ]
   }
 ]

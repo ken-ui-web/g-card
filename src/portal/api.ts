@@ -21,10 +21,14 @@ export interface Profile {
   pityCounter: number;
 }
 
-export interface OwnedCard { ownedId: string; cardId: string; trainLevel: number; trainingSpent?: number | null; source?: string }
+export interface OwnedCard { frameId?: string; ownedId: string; cardId: string; trainLevel: number; trainingSpent?: number | null; source?: string }
 export interface CardMaster { cardId: string; name: string; type: string; rarity: string; image: string; text: string; effects: { type: string; amount?: number }[]; trainingMultiplier: number; trainingBonus: number; shopPrice: number | null; inPack: boolean; active: boolean }
-export interface PackMaster { packId: string; name: string; price: number; cardsPerPack: number; rarityRates: Record<string, number>; cardPool: string[]; pityCount: number; imageKey?: string }
+export interface PackMaster { eventId?: string; packId: string; name: string; price: number; cardsPerPack: number; rarityRates: Record<string, number>; cardPool: string[]; pityCount: number; imageKey?: string }
+export interface PlayerFrame { frameId: string; acquiredAt: string; equippedOwnedId: string; noticeSeen: boolean }
+export interface ChristmasConfig { eventId: string; title: string; startAt: string; endAt: string; published: boolean; knowledgeTestId: string; reflectionTestId: string; cpuWins: number; onlineWins: number; cpuLife: number; cpuTraining: number; cpuCards: string[]; packPrice: number; packSize: number; rarityRates: Record<string, number>; cardPool: string[] }
+export interface ChristmasEvent extends ChristmasConfig { active: boolean; preview: boolean; progress: { knowledgeDone: boolean; reflectionDone: boolean; cpuWins: number; onlineWins: number; frameAwarded: boolean } }
 export interface PublicShopConfig {
+  christmas?: ChristmasEvent | null;
   cards: { cardId: string; shopPrice: number | null; active: boolean; inPack: boolean }[];
   packs: PackMaster[];
   packDailyLimit: number;
@@ -34,6 +38,8 @@ export interface BattleDeckConfig { deckId: string; name: string; cardIds: strin
 export interface MissionState { missionId: string; period: string; condition: string; targetCount: number; reward: number; label: string; progress: number; completed: boolean }
 export interface TrainingPolicyNotice { version: string; bonus: number; refund: number; changes: { cardId: string; name: string; from: number; to: number; refund: number }[] }
 export interface EconomyState {
+  frames?: PlayerFrame[];
+  christmas?: ChristmasEvent | null;
   gPoint: number;
   runCount: number;
   pityCounter: number;
@@ -50,6 +56,8 @@ export interface EconomyState {
 }
 
 export interface BootstrapData {
+  frames?: PlayerFrame[];
+  christmas?: ChristmasEvent | null;
   profile: Profile;
   needsNickname: boolean;
   playLimit?: PlayLimit | null;
@@ -140,6 +148,8 @@ export async function callApi<T>(action: string, session: string | null, payload
         const limit = action === 'bootstrap' ? (result.data as BootstrapData).playLimit ?? null : result.data as PlayLimit | null;
         updatePlayLimit(session, limit);
       }
+      const frames = (result.data as { frames?: PlayerFrame[] }).frames;
+      if (frames?.some((frame) => !frame.noticeSeen) && session) window.dispatchEvent(new CustomEvent('g-card-frame-reward', { detail: { frames, session } }));
       return result.data;
     } catch (failure) {
       const busy = (failure as Error & { code?: string })?.code === 'BUSY';

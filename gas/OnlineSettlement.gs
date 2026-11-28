@@ -129,7 +129,7 @@ function gcOnlineSettle_(token, payload) {
         return player && Number(player.maxLife) === proofs[uid].maxLife && GC_ONLINE_ENGINE.deckCommit(proofs[uid].entries, proofs[uid].salt) === deck.commit &&
           Array.isArray(deck.types) && Array.isArray(deck.ssr) && deck.types.length === 4 && deck.ssr.length === 4 && proofs[uid].entries.every(function (entry, index) {
             const card = master.find(function (item) { return item.cardId === entry.cardId; });
-            return card && card.type === deck.types[index] && (card.rarity === 'SSR') === deck.ssr[index];
+            return card && card.type === deck.types[index] && (card.rarity === 'SSR') === deck.ssr[index] && String(entry.frameId || '') === String(deck.frames && deck.frames[index] || '');
           });
       });
       const view = validDecks ? gcOnlineReplay_(room, proofs) : { phase: 'invalid' };

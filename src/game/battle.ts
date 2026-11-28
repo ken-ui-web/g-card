@@ -1,8 +1,9 @@
 import { getCard, initialCards, ssrCount, type CardEffect, type CardType, type Rarity } from '../data/cards';
+import { frameHeal, isFrameId } from '../data/frames';
 
 export type PlayerIndex = 0 | 1;
 export type BattleMode = 'cpu' | 'local';
-export type DeckEntry = string | { cardId: string; ownedId: string; trainLevel: number };
+export type DeckEntry = string | { cardId: string; ownedId: string; trainLevel: number; frameId?: string };
 export interface BattleCard {
   instanceId: string;
   cardId: string;
@@ -13,6 +14,7 @@ export interface BattleCard {
   nullified: boolean;
   revealedTo?: PlayerIndex[];
   publicType?: boolean;
+  frameId?: string;
 }
 export interface Shield { mode: 'half' | 'reduce' | 'reflect'; amount?: number }
 export interface PlayerState {
@@ -107,6 +109,8 @@ export function shownDamage(state: BattleState, side: PlayerIndex, card: BattleC
   return drain?.type === 'drain' ? drain.amount : null;
 }
 function createDeck(player: PlayerIndex, training: number, seed: number, entries: DeckEntry[]): BattleCard[] {
+  const framed = entries.filter((entry) => typeof entry !== 'string' && entry.frameId);
+  if (framed.length > 1 || framed.some((entry) => typeof entry !== 'string' && !isFrameId(entry.frameId))) throw new Error('フレームはデッキの1枚に装着してください');
   if (entries.length !== 4 || new Set(entries.map((entry) => typeof entry === 'string' ? entry : entry.ownedId)).size !== 4) throw new Error('異なる所持カードを4枚選んでください');
   if (ssrCount(entries.map((entry) => typeof entry === 'string' ? entry : entry.cardId)) > 1) throw new Error('SSRはデッキに1枚までです');
   const deck = entries.map((entry) => {
@@ -116,6 +120,7 @@ function createDeck(player: PlayerIndex, training: number, seed: number, entries
       cardId: card.cardId, rarity: card.rarity, originalType: card.type, currentType: card.type,
       trainLevel: card.type === 'rock' ? typeof entry === 'string' ? training : entry.trainLevel : 0,
       nullified: false,
+      ...(typeof entry !== 'string' && entry.frameId ? { frameId: entry.frameId } : {}),
     };
   });
   let current = seed >>> 0;
@@ -245,11 +250,11 @@ export function finishRound(state: BattleState, selection?: string | RoundChoice
       } else if (effect.type === 'drain') {
         const dealt = applyDamage(actor, enemy, effect.amount);
         const before = players[actor].life;
-        players[actor].life = Math.min(players[actor].maxLife, before + dealt);
+        players[actor].life = Math.max(before, Math.min(players[actor].maxLife, before + dealt));
         events.push({ kind: 'heal', actor, amount: players[actor].life - before });
       } else if (effect.type === 'heal') {
         const before = players[actor].life;
-        players[actor].life = Math.min(players[actor].maxLife, before + Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount));
+        players[actor].life = Math.max(before, Math.min(players[actor].maxLife, before + Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount)));
         events.push({ kind: 'heal', actor, amount: players[actor].life - before });
       } else if (effect.type === 'selfDamage') {
         players[actor].life = Math.max(0, players[actor].life - effect.amount);
@@ -316,6 +321,12 @@ export function finishRound(state: BattleState, selection?: string | RoundChoice
         if (effect.type === 'changeOpponentType' || effect.type === 'changeOwnType') events.push({ kind: 'change', actor, target: side, targetId: target, to: effect.type === 'changeOwnType' ? choice!.to! : effect.to });
         else events.push({ kind: 'status', actor, text: effect.type === 'nullifyOpponentCard' ? '相手のカード1枚を効果なしにした' : effect.type === 'revealOpponent' ? '相手のカード1枚の中身を見た' : '相手の次のカードを指定した' });
       }
+    }
+    const amount = frameHeal(played.frameId);
+    if (amount > 0) {
+      players[actor].life += amount;
+      events.push({ kind: 'heal', actor, amount });
+      events.push({ kind: 'status', actor, text: 'クリスマスフレームで追加回復！' });
     }
   }
   for (const side of [0, 1] as PlayerIndex[]) {

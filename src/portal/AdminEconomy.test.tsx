@@ -5,8 +5,8 @@ import { DeckEditor } from './AdminEconomy';
 import type { CardMaster } from './api';
 
 describe('サンプル・CPUデッキ候補', () => {
-  it('販売停止中を含む40枚とレア度・効果を表示する', () => {
-    const cards = availableCards.map((card) => ({ ...card, image: card.frontImage, active: card.cardId === 'G001' })) as CardMaster[];
+  it('販売停止中を含む通常40枚とレア度・効果を表示する', () => {
+    const cards = availableCards.filter((card) => card.cardId !== 'G023').map((card) => ({ ...card, image: card.frontImage, active: card.cardId === 'G001' })) as CardMaster[];
     const html = renderToStaticMarkup(<DeckEditor deck={{ deckId: 'sample', name: 'サンプルカードセット', cardIds: ['G001', 'G002', 'C008', 'P001'], maxLife: 100, rockTrainLevel: 0 }} cards={cards} onChange={() => {}} />);
     expect((html.match(/class="admin-deck-card"/g) ?? []).length).toBe(40);
     expect(html).toContain('プログラミング');

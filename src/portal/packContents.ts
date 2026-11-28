@@ -2,7 +2,7 @@ import type { CardMaster, PackMaster } from './api';
 import { compareCards } from '../data/cardOrder';
 
 export function packContents(pack: PackMaster, cards: CardMaster[]) {
-  const included = cards.filter((card) => card.inPack && pack.cardPool.includes(card.cardId));
+  const included = cards.filter((card) => (card.inPack || pack.eventId === 'christmas-2026') && pack.cardPool.includes(card.cardId));
   const counts = new Map<string, number>();
   for (const card of included) counts.set(card.rarity, (counts.get(card.rarity) ?? 0) + 1);
   return included.sort(compareCards).map((card) => ({

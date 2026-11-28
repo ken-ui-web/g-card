@@ -8,8 +8,8 @@ const round = (battle: BattleState, left: string, right: string, choices: RoundC
 
 describe('40枚のカード', () => {
   it('全カードに画像、説明、効果がある', () => {
-    expect(availableCards).toHaveLength(40);
-    expect(new Set(availableCards.map((card) => card.cardId)).size).toBe(40);
+    expect(availableCards).toHaveLength(41);
+    expect(new Set(availableCards.map((card) => card.cardId)).size).toBe(41);
     expect(availableCards.every((card) => card.text && card.effects.length && card.frontImage === `${card.cardId}-front.webp`)).toBe(true);
   });
   it('連続攻撃は筋トレを毎ヒット加算し、シールドは最初のヒットだけ防ぐ', () => {

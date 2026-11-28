@@ -1,3 +1,4 @@
+import { FrameReward } from './portal/FrameCollection';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -11,6 +12,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <App />
       <ApiActivityIndicator />
       <RewardCelebration />
+      <FrameReward />
     </PlayTimeBoundary>
   </React.StrictMode>,
 );

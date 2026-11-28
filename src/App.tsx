@@ -1,4 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { ChristmasPage, christmasActive } from './portal/ChristmasPage';
+import { trainingCap } from './data/trainingCaps';
+import { santaPublicState, santaDeck, santaTargets } from './game/santa';
 import { Card } from './components/Card';
 import { BattleDeckDock } from './components/BattleDeckDock';
 import { useScrolledPast } from './components/useScrolledPast';
@@ -62,7 +65,7 @@ function BackRow({ cards, title, viewer, encrypted = false }: { cards: BattleCar
       <div className="back-row">
         {cards.map((instance) => (
           <div className="back-card" key={instance.instanceId}>
-            <Card card={getCard(instance.cardId)} side={viewer !== undefined && instance.revealedTo?.includes(viewer) ? 'front' : 'back'} backType={encrypted && !instance.publicType && !instance.revealedTo?.includes(viewer!) ? 'unknown' : instance.currentType} />
+            <Card frameId={instance.frameId} card={getCard(instance.cardId)} side={viewer !== undefined && instance.revealedTo?.includes(viewer) ? 'front' : 'back'} backType={encrypted && !instance.publicType && !instance.revealedTo?.includes(viewer!) ? 'unknown' : instance.currentType} />
             <span>{encrypted && !instance.publicType && !instance.revealedTo?.includes(viewer!) ? '種類不明' : typeLabels[instance.currentType]}{!encrypted && instance.currentType !== instance.originalType ? '・変化' : ''}{viewer !== undefined && instance.revealedTo?.includes(viewer) ? `・${getCard(instance.cardId).name}` : ''}</span>
           </div>
         ))}
@@ -124,6 +127,8 @@ function TuningPage({ settings, onChange }: { settings: TuningSettings; onChange
 
 function App() {
   const [hash, setHash] = useState(window.location.hash);
+  const santa = hash.startsWith('#/battle?') && new URLSearchParams(hash.split('?')[1]).get('santa') === '1';
+  const santaPreview = santa && new URLSearchParams(hash.split('?')[1]).get('preview') === '1';
   const [settings, setSettings] = useState<TuningSettings>(loadSettings);
   const [screen, setScreen] = useState<Screen>('menu');
   const [mode, setMode] = useState<BattleMode>('cpu');
@@ -169,9 +174,10 @@ function App() {
     return () => window.removeEventListener('hashchange', update);
   }, []);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => { setScreen('menu'); setBattle(null); if (santa) { setMode('cpu');setDeckMode('owned'); } },[santa,santaPreview]);
   useEffect(() => {
     const session = savedSession();
-    if (hash !== '#/battle') return;
+    if (hash !== '#/battle' && !hash.startsWith('#/battle?')) return;
     if (!session || (!portalConfigured && !isGuest(session))) {
       setAccount(null);
       setCpuRecent(emptyCpuRecent());
@@ -183,6 +189,10 @@ function App() {
     let cancelled = false;
     const applyAccount = (data: BootstrapData) => {
       setAccount(data);
+      if (santa) {
+        setMode('cpu'); setDeckMode('owned');
+        if (santaPreview || isGuest(session)) callApi<{ event: BootstrapData['christmas'] }>(santaPreview ? 'previewChristmas' : 'getPublicChristmas', isGuest(session) ? null : session).then((result) => { if (!cancelled) setAccount({ ...data,christmas:result.event }); }).catch((failure:Error) => setDeckError(failure.message));
+      }
       const playable = data.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId));
       if (!data.economy?.enabled || playable.length < 4) setDeckMode('sample');
       const valid = data.lastDeck.filter((id) => playable.some((card) => card.ownedId === id));
@@ -240,23 +250,34 @@ function App() {
     if (ui !== 'thinking' || !battle || !firstPick) return;
     const draw = nextRandom(seed.current);
     seed.current = draw.seed;
-    const timer = window.setTimeout(() => {
-      const decision = chooseCpuCard(toCpuView(battle), level, seed.current);
+    let cancelled = false;
+    let worker: Worker | null = null;
+    const apply = (decision: {id:string;seed:number}) => {
+      if (cancelled) return;
       seed.current = decision.seed;
       setBattle(beginRound(battle, [firstPick, requiredPick(battle, 1) ?? decision.id]));
-      setFirstPick(null);
-      setIntroStage('title');
-      setRevealStage('backs');
-      setCanFlip(false);
-      setUi('round-intro');
+      setFirstPick(null); setIntroStage('title'); setRevealStage('backs'); setCanFlip(false); setUi('round-intro');
+    };
+    const timer = window.setTimeout(() => {
+      if (!santa) { apply(chooseCpuCard(toCpuView(battle), level, seed.current)); return; }
+      worker = new Worker(new URL('./game/santa.worker.ts', import.meta.url), {type:'module'});
+      worker.onmessage = (event) => {
+        if (event.data.decision) apply(event.data.decision);
+        else { setRewardError(event.data.error); setUi('select'); setFirstPick(null); }
+        worker?.terminate();
+      };
+      worker.onerror = () => { if (!cancelled) { setRewardError('サンタの思考を再開してください'); setUi('select'); setFirstPick(null); } worker?.terminate(); };
+      worker.postMessage({ state:santaPublicState(battle),seed:seed.current });
     }, (800 + draw.value * 700) / settings.animationSpeed);
-    return () => window.clearTimeout(timer);
-  }, [ui, battle, firstPick, level, settings.animationSpeed]);
+    return () => { cancelled=true; window.clearTimeout(timer); worker?.terminate(); };
+  }, [ui, battle, firstPick, level, santa, settings.animationSpeed]);
 
   const startGame = async () => {
     const battleConfig = liveBattleConfig;
     if (!account || !battleConfig) { setDeckError('対戦設定を確認中です。読み込みが終わってから始めてください。'); return; }
-    const usingOwned = mode === 'cpu' && deckMode === 'owned';
+    const usingOwned = mode === 'cpu' && (santa || deckMode === 'owned');
+    const event = account.christmas;
+    if (santa && (!christmasActive(event) || mode !== 'cpu')) { setDeckError('サンタ対戦は開催期間中のみ利用できます。'); return; }
     if (usingOwned ? ownedSelection.length !== 4 : selectedDeckIds.length !== 4) return;
     const selectedIds = usingOwned ? ownedSelection.map((id) => account?.ownedCards.find((card) => card.ownedId === id)?.cardId || '') : selectedDeckIds;
     const samplePool = battleConfig.find((deck) => deck.deckId === 'sample')!.cardIds;
@@ -274,24 +295,24 @@ function App() {
       catch (error) { setDeckError((error as Error).message); setStarting(false); return; }
       setStarting(false);
     }
-    setNames(mode === 'cpu' ? [account?.profile.nickname || 'あなた', `CPU Lv${level}`] : [localNames[0].trim() || 'プレイヤー1', localNames[1].trim() || 'プレイヤー2']);
+    setNames(mode === 'cpu' ? [account?.profile.nickname || 'あなた', santa ? 'サンタクロース' : `CPU Lv${level}`] : [localNames[0].trim() || 'プレイヤー1', localNames[1].trim() || 'プレイヤー2']);
     seed.current = Date.now() >>> 0;
     const ownEntries: DeckEntry[] = usingOwned ? ownedSelection.map((id) => {
       const owned = account!.ownedCards.find((card) => card.ownedId === id)!;
-      return { cardId: owned.cardId, ownedId: id, trainLevel: owned.trainLevel };
+      return { cardId: owned.cardId, ownedId: id, trainLevel: owned.trainLevel, ...(owned.frameId ? { frameId: owned.frameId } : {}) };
     }) : selectedDeckIds;
     const cpuConfig = battleConfig.find((deck) => deck.deckId === `cpu-${level}`);
     const sampleConfig = battleConfig.find((deck) => deck.deckId === 'sample');
     const cpuPool = cpuConfig?.cardIds.filter((id) => availableCards.some((card) => card.cardId === id));
-    const cpuDeck = mode === 'cpu' ? chooseCpuDeck(ownEntries.map((entry) => typeof entry === 'string' ? entry : entry.cardId), level, seed.current, cpuPool && cpuPool.length >= 4 ? cpuPool : undefined) : null;
+    const cpuDeck = santa ? santaDeck(event!.cpuCards, seed.current) : mode === 'cpu' ? chooseCpuDeck(ownEntries.map((entry) => typeof entry === 'string' ? entry : entry.cardId), level, seed.current, cpuPool && cpuPool.length >= 4 ? cpuPool : undefined) : null;
     if (cpuDeck) seed.current = cpuDeck.seed;
     setBattle(createBattle(mode, {
       initialLife: usingOwned ? account!.profile.maxLife : sampleConfig?.maxLife ?? settings.initialLife,
-      cpuMaxLife: cpuConfig?.maxLife ?? settings.cpuMaxLife,
-      cpuTraining: cpuConfig?.rockTrainLevel ?? settings.cpuTraining,
+      cpuMaxLife: santa ? event!.cpuLife : cpuConfig?.maxLife ?? settings.cpuMaxLife,
+      cpuTraining: santa ? 0 : cpuConfig?.rockTrainLevel ?? settings.cpuTraining,
       damages: { ...settings.damages },
       heals: { ...settings.heals },
-    }, seed.current, [ownEntries, cpuDeck?.ids ?? selectedDeckIds]));
+    }, seed.current, [ownEntries, santa ? cpuDeck!.ids.map((cardId) => ({ cardId, ownedId: `santa-${cardId}`, trainLevel: getCard(cardId).type === 'rock' ? Math.min(event!.cpuTraining, trainingCap(cardId)) : 0 })) : cpuDeck?.ids ?? selectedDeckIds]));
     battleId.current = crypto.randomUUID();
     reportingId.current = '';
     setReward(null);
@@ -314,7 +335,7 @@ function App() {
 
   const reportResult = async () => {
     const session = savedSession();
-    if (!session || !battle || mode !== 'cpu' || !battleId.current || reportingId.current === battleId.current) return;
+    if (santaPreview || santa && isGuest(session) || !session || !battle || mode !== 'cpu' || !battleId.current || reportingId.current === battleId.current) return;
     const completedBattleId = battleId.current;
     const completedLevel = level;
     const completedResult: CpuResult = battle.outcome === 0 ? 'win' : battle.outcome === 'draw' ? 'draw' : 'loss';
@@ -322,11 +343,11 @@ function App() {
     setRewardError('');
     try {
       const result = await callApi<EconomyState>('reportBattle', session, {
-        battleId: completedBattleId, mode: 'cpu', deckMode, cpuLevel: completedLevel,
+        battleId: completedBattleId, mode: 'cpu', deckMode: santa ? 'owned' : deckMode, cpuLevel: santa ? 4 : completedLevel, ...(santa ? { eventId: 'christmas-2026' } : {}),
         result: completedResult,
       });
       setReward(result);
-      setCpuRecent((recent) => addCpuMatch(recent, completedLevel, { battleId: completedBattleId, result: completedResult }));
+      if (!santa) setCpuRecent((recent) => addCpuMatch(recent, completedLevel, { battleId: completedBattleId, result: completedResult }));
       setCpuRecentError(false);
       setAccount((current) => current ? mergeEconomy(current, result) : current);
       if (!isGuest(session)) patchBootstrapCache(session, (current) => mergeEconomy(current, result));
@@ -384,6 +405,7 @@ function App() {
     let index = startingAt;
     while (index < requests.length && mode === 'cpu' && requests[index].actor === 1) {
       const request = requests[index];
+      if (santa) { nextChoices.push(santaTargets(battle,seed.current)[index] ?? {}); index++; continue; }
       let id = request.options[0]?.instanceId;
       if (request.kind === 'opponent' && request.effect.type === 'changeOpponentType') {
         const decision = chooseCpuTarget(toCpuView(battle), level, seed.current, request.effect.to);
@@ -414,11 +436,12 @@ function App() {
     setUi(mode === 'local' ? 'handoff' : 'select');
   };
 
+  if (hash === '#/christmas' || hash.startsWith('#/christmas?')) return <ChristmasPage />;
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
   if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><LoadingState text="オンライン対戦を読み込み中" cardTips /></main>}><OnlinePage /></Suspense>;
   if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><LoadingState text="ランキングを読み込み中" /></main>}><RankingPage /></Suspense>;
-  if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
-    const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
+  if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash.startsWith('#/shop?') || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
+    const page = hash === '#/admin' ? 'admin' : hash === '#/shop' || hash.startsWith('#/shop?') ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
     return <Portal page={page} />;
   }
 
@@ -429,12 +452,12 @@ function App() {
   const battleConfig = liveBattleConfig;
   const samplePool = battleConfig?.find((deck) => deck.deckId === 'sample')?.cardIds ?? [];
   const sampleCards = availableCards.filter((card) => samplePool.includes(card.cardId));
-  const usingOwnedDeck = mode === 'cpu' && deckMode === 'owned';
+  const usingOwnedDeck = mode === 'cpu' && (santa || deckMode === 'owned');
   const activeSlots = usingOwnedDeck ? ownedSlots : sampleSlots;
   const activeSelection = usingOwnedDeck ? ownedSelection : selectedDeckIds;
   const deckOptions = (usingOwnedDeck && account
-    ? account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => ({ id: owned.ownedId, card: getCard(owned.cardId), trainLevel: owned.trainLevel }))
-    : sampleCards.map((card) => ({ id: card.cardId, card, trainLevel: 0 })))
+    ? account.ownedCards.filter((owned) => availableCards.some((card) => card.cardId === owned.cardId)).map((owned) => ({ id: owned.ownedId, card: getCard(owned.cardId), trainLevel: owned.trainLevel, frameId: owned.frameId }))
+    : sampleCards.map((card) => ({ id: card.cardId, card, trainLevel: 0, frameId: undefined as string | undefined })))
     .sort((a, b) => compareCards(a.card, b.card));
   const deckOptionById = new Map(deckOptions.map((item) => [item.id, item]));
   const dockCards = activeSlots.map((id) => id ? deckOptionById.get(id)?.card ?? null : null);
@@ -452,22 +475,22 @@ function App() {
       </header>
 
       {screen === 'menu' && <>
-        <SsrGuide />
+        <SsrGuide />{santa && <section className="christmas-santa panel"><img src={`${import.meta.env.BASE_URL}images/cpu/santa.webp`} alt="サンタクロース" /><div><h2>サンタクロースに挑戦</h2><p>自分のデッキで、最上位のサンタCPUに挑戦します。</p><a href="#/christmas">イベントに戻る</a></div></section>}
         <section className="hero">
           <div className="hero__copy"><p className="eyebrow">対戦のルール</p><h1>4枚で対戦。<br /><em>ライフで決着。</em></h1><p>1枚ずつカードを出し、グーはチョキ、チョキはパー、パーはグーに勝ちます。勝ったカードの効果が発動。相手のライフを0にするか、4ラウンド後にライフが多い方の勝ちです。</p></div>
           <div className="hero__cards">{availableCards.filter((card) => samplePool.includes(card.cardId) && selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
         </section>
         <section className="panel mode-panel"><div className="section-heading"><span>01</span><div><h2>対戦モードを選ぶ</h2><p>CPU対戦はログイン中、勝利報酬を受け取れます。ゲストの記録はこの端末に保存されます。</p></div></div>
-          <div className="mode-grid">
+          <div className="mode-grid" hidden={santa}>
             <button type="button" className={`mode-option ${mode === 'cpu' ? 'is-active' : ''}`} onClick={() => setMode('cpu')} aria-pressed={mode === 'cpu'}><span className="mode-option__icon">⚙</span><strong>CPUと対戦</strong><small>レベルを選んで1人でプレイ</small></button>
             <button type="button" className={`mode-option ${mode === 'local' ? 'is-active' : ''}`} onClick={() => setMode('local')} aria-pressed={mode === 'local'}><span className="mode-option__icon">↔</span><strong>この端末で対戦</strong><small>交代で端末を渡して2人でプレイ</small></button>
           </div>
-          {mode === 'cpu' ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => {
+          {mode === 'cpu' && !santa ? <div className="level-picker"><strong>CPUのレベル</strong><div>{([1, 2, 3] as CpuLevel[]).map((value) => {
             const matches = cpuRecent[value];
             const stats = cpuStats(matches);
             return <button type="button" key={value} aria-pressed={level === value} onClick={() => { playSfx('select'); setLevel(value); }}><img src={cpuArtUrl(value)} alt="" /><span className="level-picker__details"><strong>Lv{value}</strong><small>{value === 1 ? 'ランダム' : value === 2 ? '種類を読む' : '先を読む'}</small><span className="level-picker__record"><span>直近10試合</span>{cpuRecentLoading ? <span>読み込み中…</span> : cpuRecentError ? <span>記録を確認できません</span> : <><b>{stats.wins}勝 {stats.losses}敗 {stats.draws}分</b><b>勝率 {stats.rate === null ? '—' : `${stats.rate}%`}</b></>}</span></span></button>;
-          })}</div></div> : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
-          {mode === 'cpu' && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログイン後に選べます。</small>}</div>}
+          })}</div></div> : santa ? null : <div className="name-grid"><label>プレイヤー1の名前<input value={localNames[0]} maxLength={16} placeholder="プレイヤー1" onChange={(event) => setLocalNames([event.target.value, localNames[1]])} /></label><label>プレイヤー2の名前<input value={localNames[1]} maxLength={16} placeholder="プレイヤー2" onChange={(event) => setLocalNames([localNames[0], event.target.value])} /></label></div>}
+          {mode === 'cpu' && !santa && <div className="deck-mode-picker"><strong>使うカードセット</strong><button type="button" aria-pressed={deckMode === 'sample'} onClick={() => setDeckMode('sample')}>サンプルカード</button><button type="button" aria-pressed={deckMode === 'owned'} disabled={!account?.economy?.enabled || account.ownedCards.length < 4} onClick={() => setDeckMode('owned')}>自分のカード</button>{!account?.economy?.enabled && <small>自分のカードはログイン後に選べます。</small>}</div>}
           {battleConfigError && <p className="portal-error" role="alert">{battleConfigError} <button type="button" className="button button--ghost" onClick={() => { setLiveBattleConfig(null); setConfigReload((current) => current + 1); }}>再読み込み</button></p>}
           {!activeSession && <p>対戦するには、ホームで学校アカウントまたはゲストとしてログインしてください。</p>}
           <div className="button-row">{!activeSession ? <a className="button button--primary" href="#/home">ホームでログイン</a> : <button type="button" className="button button--primary" disabled={!account || !battleConfig} onClick={() => setScreen('deck')}>{!account || !battleConfig ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />対戦設定を読み込み中…</> : <>カードセットを見る <span aria-hidden="true">→</span></>}</button>}</div>
@@ -491,12 +514,12 @@ function App() {
             const damage = item ? configuredDamage(item.card, settings) : null;
             return <div className={`battle-deck-slot${item?.card.rarity === 'SSR' ? ' deck-card--ssr' : ''}${!item ? ' battle-deck-slot--empty' : ''}`} key={index}>
               <small>{index + 1}枚目</small>
-              {item ? <><Card card={item.card} damage={damage === null ? null : damage + item.trainLevel * item.card.trainingMultiplier} width={100} /><strong>{item.card.name}</strong><span>{item.card.rarity} · {typeLabels[item.card.type]}</span><button type="button" aria-label={`${item.card.name}を外す`} onClick={() => usingOwnedDeck ? toggleOwnedCard(item.id) : toggleDeckCard(item.id)}>外す</button></> : <span className="battle-deck-slot__empty">空き</span>}
+              {item ? <><Card frameId={item.frameId} card={item.card} damage={damage === null ? null : damage + item.trainLevel * item.card.trainingMultiplier} width={100} /><strong>{item.card.name}</strong><span>{item.card.rarity} · {typeLabels[item.card.type]}</span><button type="button" aria-label={`${item.card.name}を外す`} onClick={() => usingOwnedDeck ? toggleOwnedCard(item.id) : toggleDeckCard(item.id)}>外す</button></> : <span className="battle-deck-slot__empty">空き</span>}
             </div>;
           })}
         </div>
         <div ref={deckDockMarker} className="battle-deck-dock-marker" aria-hidden="true" />
-        <BattleDeckDock visible={deckDockVisible} cards={dockCards} busy={starting} busyText="デッキを保存中…" disabled={starting || activeSelection.length !== 4} onStart={() => { void startGame(); }} onRemove={(index) => { const id = activeSlots[index]; if (id) usingOwnedDeck ? toggleOwnedCard(id) : toggleDeckCard(id); }} />
+        <BattleDeckDock visible={deckDockVisible} cards={dockCards} frameIds={activeSlots.map((id) => id ? deckOptionById.get(id)?.frameId : undefined)} busy={starting} busyText="デッキを保存中…" disabled={starting || activeSelection.length !== 4} onStart={() => { void startGame(); }} onRemove={(index) => { const id = activeSlots[index]; if (id) usingOwnedDeck ? toggleOwnedCard(id) : toggleDeckCard(id); }} />
         <h2 className="battle-deck-subtitle">カードを探す</h2>
         <div className="deck-type-tabs" role="group" aria-label="カードの種類">
           {(['all', 'rock', 'scissors', 'paper'] as const).map((type) => <button type="button" key={type} aria-pressed={deckType === type} onClick={() => setDeckType(type)}>{type === 'all' ? 'すべて' : typeLabels[type]}</button>)}
@@ -506,7 +529,7 @@ function App() {
           const damage = configuredDamage(card, settings);
           const disabled = activeSelection.length === 4 || card.rarity === 'SSR' && ssrCount(activeSelection.map((id) => deckOptionById.get(id)?.card.cardId || '')) >= 1;
           return <button type="button" className={`deck-card ${card.rarity === 'SSR' ? 'deck-card--ssr' : ''}`} key={item.id} disabled={disabled} onClick={() => usingOwnedDeck ? toggleOwnedCard(item.id) : toggleDeckCard(item.id)}>
-            <Card card={card} damage={damage === null ? null : damage + item.trainLevel * card.trainingMultiplier} />
+            <Card frameId={item.frameId} card={card} damage={damage === null ? null : damage + item.trainLevel * card.trainingMultiplier} />
             <strong>{card.name}{usingOwnedDeck && card.type === 'rock' ? ` · 筋トレ +${item.trainLevel}` : ''}</strong>
             <span>{card.rarity} · {typeLabels[card.type]} · {usingOwnedDeck ? card.text : cardText(card, settings)}</span>
             <small>{disabled ? '入れるには選択中のカードを外す' : 'このカードを入れる'}</small>
@@ -526,7 +549,7 @@ function App() {
           <BackRow cards={opponent.hand} title={`${names[turn === 0 ? 1 : 0]}のカード`} viewer={turn} encrypted={opponent.encrypted} />
           <div className="board-divider"><span>VS</span></div>
           <div className="hand-block"><div className="hand-block__heading"><h3>{names[turn]}のカード</h3><span>残り {current.hand.length} 枚</span></div>
-            {ui === 'thinking' ? <div className="thinking"><img className="thinking__cpu" src={cpuArtUrl(level)} alt="" /><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 && !current.blind ? <div className="final-open"><Card card={getCard(current.hand[0].cardId)} damage={shownDamage(battle, turn, current.hand[0])} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = shownDamage(battle, turn, instance); const forced = requiredPick(battle, turn); return <button type="button" className="select-card" key={instance.instanceId} disabled={!!forced && forced !== instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card card={card} side={current.blind ? 'back' : 'front'} backType={current.blind ? 'unknown' : undefined} damage={current.blind ? null : damage} /><strong>{current.blind ? 'ランダムで選択' : card.name}</strong><span>{current.blind ? 'カードの中身は見えません' : `${typeLabels[instance.currentType]}${instance.currentType !== instance.originalType ? '（効果で変化）' : ''} · ${damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}`}</span><small>{forced === instance.instanceId ? 'このカードを出します' : 'このカードを出す'}</small></button>; })}</div>}
+            {ui === 'thinking' ? <div className="thinking"><img className="thinking__cpu" src={santa ? `${import.meta.env.BASE_URL}images/cpu/santa.webp` : cpuArtUrl(level)} alt="" /><h2>CPUが考え中…</h2><p>相手が選んだカードの中身は見ていません。</p></div> : current.hand.length === 1 && !current.blind ? <div className="final-open"><Card frameId={current.hand[0].frameId} card={getCard(current.hand[0].cardId)} damage={shownDamage(battle, turn, current.hand[0])} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{cardText(getCard(current.hand[0].cardId), settings)}。このカードを自動で選びます。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" onClick={() => selectCard(current.hand[0].instanceId)}>オープン！</button></div></div> : <div className="select-grid">{current.hand.map((instance) => { const card = getCard(instance.cardId); const damage = shownDamage(battle, turn, instance); const forced = requiredPick(battle, turn); return <button type="button" className="select-card" key={instance.instanceId} disabled={!!forced && forced !== instance.instanceId} onClick={() => selectCard(instance.instanceId)}><Card frameId={instance.frameId} card={card} side={current.blind ? 'back' : 'front'} backType={current.blind ? 'unknown' : undefined} damage={current.blind ? null : damage} /><strong>{current.blind ? 'ランダムで選択' : card.name}</strong><span>{current.blind ? 'カードの中身は見えません' : `${typeLabels[instance.currentType]}${instance.currentType !== instance.originalType ? '（効果で変化）' : ''} · ${damage === null ? cardText(card, settings) : `最終ダメージ ${damage}`}`}</span><small>{forced === instance.instanceId ? 'このカードを出します' : 'このカードを出す'}</small></button>; })}</div>}
           </div>
         </div>}
 
@@ -540,8 +563,8 @@ function App() {
           <div className="reveal-grid">{reveal.cards.map((instance, index) => <div className={`reveal-entry ${revealStage === 'backs' ? 'is-dealt' : ''} ${revealStage === 'backs' && reveal.winner === index ? 'is-winner' : ''}`} key={instance.instanceId}>
             <span>{names[index]}</span>
             <div className={`flip-card ${revealStage !== 'backs' ? 'is-flipped' : ''}`}><div className="flip-card__inner" style={{ transitionDuration: `${950 / settings.animationSpeed}ms` }} onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === 'transform' && revealStage === 'flipping') setRevealStage('fronts'); }}>
-              <div className="flip-card__face flip-card__face--back"><Card card={getCard(instance.cardId)} side="back" backType={instance.currentType} /></div>
-              <div className="flip-card__face flip-card__face--front" aria-hidden={revealStage !== 'fronts'}><Card card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} /></div>
+              <div className="flip-card__face flip-card__face--back"><Card frameId={instance.frameId} card={getCard(instance.cardId)} side="back" backType={instance.currentType} /></div>
+              <div className="flip-card__face flip-card__face--front" aria-hidden={revealStage !== 'fronts'}><Card frameId={instance.frameId} card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} /></div>
             </div></div>
             {revealStage === 'backs' ? <strong className="reveal-entry__type">{typeLabels[instance.currentType]}{reveal.winner === index ? ' · 勝ち' : reveal.winner === null ? ' · あいこ' : ' · 負け'}</strong> : revealStage === 'fronts' ? <strong className="reveal-entry__type">{getCard(instance.cardId).name}</strong> : null}
           </div>)}</div>
@@ -552,7 +575,7 @@ function App() {
           <p className="eyebrow">CARD EFFECT</p>
           <h2>{currentRequest.kind === 'allOpponent' ? 'カードの種類を変更しますか？' : `${names[currentRequest.actor]}が対象を選ぶ`}</h2>
           <p>{getCard(reveal.cards[currentRequest.actor].cardId).name}の効果：{getCard(reveal.cards[currentRequest.actor].cardId).text}</p>
-          {currentRequest.kind !== 'allOpponent' && <div className="target-grid">{currentRequest.options.map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card card={getCard(instance.cardId)} side={currentRequest.kind === 'own' || currentRequest.kind === 'encrypt' || instance.revealedTo?.includes(currentRequest.actor) ? 'front' : 'back'} backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>効果で変化</small>}</button>)}</div>}
+          {currentRequest.kind !== 'allOpponent' && <div className="target-grid">{currentRequest.options.map((instance) => <button type="button" className={`target-card ${selectedTarget === instance.instanceId ? 'is-selected' : ''}`} key={instance.instanceId} aria-pressed={selectedTarget === instance.instanceId} onClick={() => setSelectedTarget(instance.instanceId)}><Card frameId={instance.frameId} card={getCard(instance.cardId)} side={currentRequest.kind === 'own' || currentRequest.kind === 'encrypt' || instance.revealedTo?.includes(currentRequest.actor) ? 'front' : 'back'} backType={instance.currentType} /><strong>{typeLabels[instance.currentType]}</strong>{instance.currentType !== instance.originalType && <small>効果で変化</small>}</button>)}</div>}
           {(currentRequest.kind === 'own' || currentRequest.kind === 'encrypt') && <label>変更後の種類<select value={selectedType} onChange={(event) => setSelectedType(event.target.value as typeof selectedType)}><option value="rock">グー</option><option value="scissors">チョキ</option><option value="paper">パー</option></select></label>}
           <div className="button-row">
             {currentRequest.optional && <button type="button" className="button button--ghost" onClick={() => advanceChoice([...roundChoices, {}], choiceStep + 1)}>変更しない</button>}
@@ -560,7 +583,7 @@ function App() {
           </div>
         </div>}
 
-        {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div className={`summary-cards__entry${log.winner === index ? ' is-winner' : log.winner === null ? ' is-draw' : ''}`} key={instance.instanceId}><span>{names[index]}</span><Card card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
+        {ui === 'summary' && log && <div className="summary-panel panel"><p className="eyebrow">ROUND {log.round} RESULT</p><h2>{winnerName(log.winner)}</h2><div className="summary-cards">{log.cards.map((instance, index) => <div className={`summary-cards__entry${log.winner === index ? ' is-winner' : log.winner === null ? ' is-draw' : ''}`} key={instance.instanceId}><span>{names[index]}</span><Card frameId={instance.frameId} card={getCard(instance.cardId)} damage={shownDamage(battle, index as PlayerIndex, instance)} /></div>)}</div><div className="event-box">{log.events.map((event, index) => <RoundEvent key={index} event={event} names={names} />)}</div><button type="button" className="button button--primary" onClick={nextRound}>{battle.outcome !== null ? '結果を見る' : '次のラウンドへ'}</button></div>}
         <div className="battle-footnote">CPU対戦はログイン中、結果画面でGポイントとミッションの進み具合を保存します。この端末での2人対戦に報酬はありません。</div>
       </section>}
 

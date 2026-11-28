@@ -22,6 +22,8 @@ const GC_HEADERS = {
   AdminAdjustments: ['requestId', 'adminEmail', 'targetEmail', 'delta', 'reason', 'balanceAfter', 'createdAt'],
   AdminActions: ['requestId', 'adminEmail', 'targetEmail', 'action', 'before', 'after', 'createdAt'],
   Settings: ['key', 'value', 'description'],
+  EventProgress: ['eventId', 'email', 'knowledgeDone', 'reflectionDone', 'cpuWins', 'onlineWins', 'frameAwarded', 'updatedAt', 'cpuBattleIds', 'onlineBattleIds'],
+  PlayerFrames: ['email', 'frameId', 'acquiredAt', 'equippedOwnedId', 'noticeSeen'],
 };
 
 const GC_CARDS = [
@@ -65,6 +67,7 @@ const GC_CARDS = [
   ["P018", "暗号化", "paper", "SR", "残りカードの種類を隠し、1枚をこっそり変えられる", "[{\"type\":\"encrypt\",\"secretTypeChange\":1}]", 0, "P018-front.webp", "", true, true, 38, "", 0],
   ["P015", "ハッキング", "paper", "SSR", "相手の残りカードをすべてパーに変える", "[{\"type\":\"changeAllOpponentType\",\"to\":\"paper\"}]", 0, "P015-front.webp", "", true, true, 39, "", 0],
   ["P014", "プログラミング", "paper", "SSR", "相手の次のカードを指定する", "[{\"type\":\"forceOpponentNext\"}]", 0, "P014-front.webp", "", true, true, 40, "", 0],
+  ["G023","サンタパンチ","rock","SSR","30ダメージ＋10回復","[{\"type\":\"damage\",\"amount\":30},{\"type\":\"heal\",\"amount\":10}]",1,"G023-front.webp","",false,false,41,"",0],
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 const GC_TRAINING_POLICY_VERSION = '2026-11-10-v1';
@@ -91,9 +94,9 @@ const GC_ECONOMY_SETTINGS = [
 ];
 const GC_STARTER_PACK = ['starter', 'スタートパック', 200, 3, '{"N":70,"R":30}', '["G001","G002","C008","P001","P003"]', 0, '', '', true, 'starter'];
 const GC_FIRST_WAVE_PACK = ['first-wave', '第1弾パック', 200, 3, '{"N":68.5,"R":30,"SSR":1.5}', '["G001","G002","C008","P001","P003","G006","C002","P002","P017","C014"]', 0, '', '', true, 'first-wave'];
-const GC_ALL_CARD_IDS = GC_CARDS.map(function (card) { return card[0]; });
+const GC_ALL_CARD_IDS = GC_CARDS.filter(function (card) { return card[0] !== "G023"; }).map(function (card) { return card[0]; });
 const GC_ALL_CARDS_PACK = ['all-cards', '全カードパック', 200, 3, '{"N":60,"R":30,"SR":8.5,"SSR":1.5}', JSON.stringify(GC_ALL_CARD_IDS), 10, '', '', true, 'all-cards'];
-const GC_PACK_IMAGE_KEYS = ['starter', 'first-wave', 'all-cards', 'limited', 'rare', 'ssr-guaranteed'];
+const GC_PACK_IMAGE_KEYS = ['starter', 'first-wave', 'all-cards', 'limited', 'rare', 'ssr-guaranteed', 'christmas'];
 const GC_STARTER_DECKS = [
   ['sample', 'サンプルカードセット', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
   ['cpu-1', 'CPU Lv1の候補', JSON.stringify(GC_ALL_CARD_IDS), 100, 0],
@@ -234,11 +237,13 @@ function doGet() {
 
 // HTML Service 内の google.script.run から呼ぶ。認証と権限検査は gcDispatch_ が行う。
 function bridgeRequest(request) {
+  GC_CHRISTMAS_REQUEST_CACHE = undefined;
   try { return { ok: true, data: gcDispatch_(request) }; }
   catch (error) { return { ok: false, error: { code: error.code || 'SERVER_ERROR', message: error.publicMessage || '処理できませんでした。先生に伝えてください' } }; }
 }
 
 function doPost(event) {
+  GC_CHRISTMAS_REQUEST_CACHE = undefined;
   let response;
   try {
     if (!event || !event.postData || !event.postData.contents) gcError_('BAD_REQUEST', 'リクエストがありません');
@@ -266,6 +271,13 @@ function gcDispatch_(request) {
     case 'reportBattle': return gcReportBattle_(request.session, request.payload || {});
     case 'getCpuRecent': return gcGetCpuRecent_(request.session);
     case 'onlineJoin': return gcOnlineJoin_(request.session, request.payload || {});
+    case 'adminGetChristmas': return gcAdminChristmas_(request.session);
+    case 'adminSaveChristmas': return gcAdminSaveChristmas_(request.session, request.payload || {});
+    case 'getChristmas': return gcGetChristmas_(request.session, false);
+    case 'previewChristmas': return gcGetChristmas_(request.session, true);
+    case 'getPublicChristmas': return { event: gcChristmasView_('', false) };
+    case 'equipFrame': return gcEquipFrame_(request.session, request.payload || {});
+    case 'ackFrame': return gcAckFrame_(request.session, request.payload || {});
     case 'onlineDeck': return gcOnlineDeck_(request.session, request.payload || {});
     case 'onlineSettle': return gcOnlineSettle_(request.session, request.payload || {});
     case 'onlineReport': return gcOnlineReport_(request.session, request.payload || {});
@@ -503,9 +515,10 @@ function gcRarityRates_(json) {
 }
 
 function gcOwned_(email) {
-  return gcSheet_('OwnedCards').getDataRange().getValues().slice(1).filter(function (row) { return String(row[1]).toLowerCase() === email && !row[6]; }).map(function (row) {
+  const cards = gcSheet_('OwnedCards').getDataRange().getValues().slice(1).filter(function (row) { return String(row[1]).toLowerCase() === email && !row[6]; }).map(function (row) {
     return { ownedId: row[0], cardId: row[2], trainLevel: Number(row[3] || 0), source: row[4], trainingSpent: row[7] === '' ? null : Number(row[7] || 0) };
   });
+  return gcFramedOwned_(email, cards);
 }
 
 function gcPackImageKey_(value, packId) {
@@ -581,8 +594,9 @@ function gcPublicShopConfig_() {
   const settings = gcSettings_();
   const today = gcToday_();
   return {
-    cards: gcCardMaster_().map(function (card) { return { cardId: card.cardId, shopPrice: card.shopPrice, active: card.active, inPack: card.inPack }; }),
-    packs: gcPackMaster_().filter(function (pack) { return (!pack.startAt || pack.startAt <= today) && (!pack.endAt || pack.endAt >= today); }),
+    cards: gcChristmasCards_(null).map(function (card) { return { cardId: card.cardId, shopPrice: card.shopPrice, active: card.active, inPack: card.inPack }; }),
+    packs: gcChristmasPacks_(gcPackMaster_()).filter(function (pack) { return pack.eventId || (!pack.startAt || pack.startAt <= today) && (!pack.endAt || pack.endAt >= today); }),
+    christmas: gcChristmasView_('', false),
     packDailyLimit: gcNumber_(settings, 'packDailyLimit', 10, 0, 1000),
     sellPrices: { N: gcNumber_(settings, 'sellN', 10, 0, 100000), R: gcNumber_(settings, 'sellR', 30, 0, 100000), SR: gcNumber_(settings, 'sellSR', 100, 0, 100000), SSR: gcNumber_(settings, 'sellSSR', 300, 0, 100000) },
   };
@@ -658,9 +672,10 @@ function gcBootstrap_(token) {
         changes: policy.changes.map(function (change) { return { cardId: change.cardId, name: change.name, from: change.from, to: change.to, refund: change.refund }; }),
       } : null,
       ownedCards: gcOwned_(identity.email),
-      cardMaster: gcCardMaster_(),
+      cardMaster: gcChristmasCards_(identity),
       lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
-      packs: gcPackMaster_(),
+      packs: gcChristmasPacks_(gcPackMaster_()),
+      frames: gcFrames_(identity.email), christmas: gcChristmasView_(identity.email, false),
       battleConfig: gcBattleConfigRows_(),
       missions: gcMissionState_(identity.email, today),
       daily: (function () { const counter = gcCounter_(identity.email, today, false).values; return { cpuRewards: Number(counter[2] || 0), onlineRewards: Number(counter[3] || 0), packsBought: Number(counter[5] || 0) }; })(),
@@ -812,6 +827,7 @@ function gcState_(identity, extra) {
     gPoint: Number(user.gPoint || 0), runCount: Number(user.runCount || 0), pityCounter: Number(user.pityCounter || 0),
     maxLife: gcNumber_(identity.settings, 'initialLife', 100, 1, 9999) + Number(user.runCount || 0) * gcNumber_(identity.settings, 'lifePerRun', 5, 1, 100),
     ownedCards: gcOwned_(identity.email), lastDeck: user.lastDeckJson ? JSON.parse(user.lastDeckJson) : [],
+    frames: gcFrames_(identity.email), christmas: gcChristmasView_(identity.email, false),
     missions: gcMissionState_(identity.email, gcToday_()),
     daily: { cpuRewards: Number(counter[2] || 0), onlineRewards: Number(counter[3] || 0), packsBought: Number(counter[5] || 0) },
   }, extra || {});
@@ -901,6 +917,7 @@ function gcSellCard_(token, payload, requestId) {
     const index = rows.findIndex(function (row, i) { return i > 0 && row[0] === target.ownedId && String(row[1]).toLowerCase() === identity.email && !row[6]; });
     if (index < 1) gcError_('NOT_OWNED', 'このカードは所持していません');
     sheet.getRange(index + 1, 7).setValue(new Date().toISOString());
+    gcFrameRows_(identity.email).filter(function (item) { return item.row[3] === target.ownedId; }).forEach(function (item) { gcEventSheet_('PlayerFrames').getRange(item.rowNumber, 4).setValue(''); });
     const record = gcFindUser_(identity.email);
     const user = gcUserObject_(record);
     user.gPoint = Number(user.gPoint || 0) + price;
@@ -1011,7 +1028,7 @@ function gcOpenPack_(token, payload, requestId) {
       const acquired = gcOwned_(identity.email).filter(function (card) { return card.source === 'pack:' + requestId; });
       return gcState_(identity, { acquired: acquired });
     }
-    const pack = gcPackMaster_().find(function (item) { return item.packId === payload.packId; });
+    const pack = gcChristmasPacks_(gcPackMaster_()).find(function (item) { return item.packId === payload.packId; });
     const today = gcToday_();
     if (!pack || pack.startAt && pack.startAt.slice(0, 10) > today || pack && pack.endAt && pack.endAt.slice(0, 10) < today) gcError_('NOT_FOR_SALE', 'このパックは購入できません');
     const counter = gcCounter_(identity.email, today);
@@ -1020,8 +1037,8 @@ function gcOpenPack_(token, payload, requestId) {
     const user = gcUserObject_(record);
     if (Number(user.gPoint || 0) < pack.price) gcError_('NOT_ENOUGH_POINTS', 'Gポイントが足りません');
     const master = gcCardMaster_();
-    const pool = master.filter(function (card) { return card.inPack && pack.cardPool.indexOf(card.cardId) >= 0; });
-    const rates = Object.keys(pack.rarityRates).map(function (rarity) { return { rarity: rarity, rate: Number(pack.rarityRates[rarity]), cards: pool.filter(function (card) { return card.rarity === rarity; }) }; });
+    const pool = master.filter(function (card) { return (pack.eventId === GC_CHRISTMAS_ID || card.cardId !== 'G023' && card.inPack) && pack.cardPool.indexOf(card.cardId) >= 0; });
+    const rates = Object.keys(pack.rarityRates).filter(function (rarity) { return Number(pack.rarityRates[rarity]) > 0; }).map(function (rarity) { return { rarity: rarity, rate: Number(pack.rarityRates[rarity]), cards: pool.filter(function (card) { return card.rarity === rarity; }) }; });
     if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 ||
         !rates.length || rates.some(function (item) { return !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0; }) ||
         Math.abs(rates.reduce(function (sum, item) { return sum + item.rate; }, 0) - 100) > .001 ||
@@ -1075,12 +1092,16 @@ function gcReportBattle_(token, payload) {
   const identity = gcSession_(token, false);
   gcEconomyAccess_(identity);
   if (typeof payload.battleId !== 'string' || !/^[a-f0-9-]{20,64}$/i.test(payload.battleId) || payload.mode !== 'cpu' ||
-      ![1, 2, 3].includes(Number(payload.cpuLevel)) || ['win', 'draw', 'loss'].indexOf(payload.result) < 0 ||
+      ![1, 2, 3, 4].includes(Number(payload.cpuLevel)) || ['win', 'draw', 'loss'].indexOf(payload.result) < 0 ||
       ['sample', 'owned'].indexOf(payload.deckMode) < 0) gcError_('BAD_REQUEST', '対戦結果を確認できません');
   return gcWithLock_(function () {
     const log = gcSheet_('BattleLog');
     const old = log.getDataRange().getValues().slice(1).find(function (row) { return row[0] === payload.battleId && String(row[1]).toLowerCase() === identity.email; });
-    if (old) return gcCachedResult_(identity.email, 'battle', payload.battleId) || gcState_(identity, { awarded: Number(old[7] || 0), duplicate: true });
+    if (old) {
+      if (Number(old[4]) === 4 && old[5] === 'win') { gcChristmasRecord_(identity.email, { kind: 'santa', battleId: String(old[0]), startedAt: String(old[8]) }); return gcState_(identity, { awarded: Number(old[7] || 0), duplicate: true }); }
+      return gcCachedResult_(identity.email, 'battle', payload.battleId) || gcState_(identity, { awarded: Number(old[7] || 0), duplicate: true });
+    }
+    if (Number(payload.cpuLevel) === 4 && (!gcChristmasActive_(gcChristmasConfig_().live) || payload.eventId !== GC_CHRISTMAS_ID || payload.deckMode !== 'owned')) gcError_('NOT_AVAILABLE', 'サンタCPUの開催期間を確認してください');
     const today = gcToday_();
     const counter = gcCounter_(identity.email, today);
     const record = gcFindUser_(identity.email);
@@ -1088,7 +1109,7 @@ function gcReportBattle_(token, payload) {
     const remaining = gcNumber_(identity.settings, 'cpuRewardDailyCap', 3, 0, 100) - Number(counter.values[2] || 0);
     let award = 0;
     if (remaining > 0 && payload.result === 'win') {
-      award += gcNumber_(identity.settings, 'cpuRewardLv' + Number(payload.cpuLevel), [0, 5, 10, 20][Number(payload.cpuLevel)], 0, 10000);
+      award += gcNumber_(identity.settings, 'cpuRewardLv' + Math.min(3, Number(payload.cpuLevel)), [0, 5, 10, 20][Math.min(3, Number(payload.cpuLevel))], 0, 10000);
       counter.values[2] = Number(counter.values[2] || 0) + 1;
     }
     if (payload.result === 'win' && counter.values[4] !== true) {
@@ -1104,6 +1125,7 @@ function gcReportBattle_(token, payload) {
     const completedMissions = gcAwardMissions_(identity, user, { play_cpu: 1, win_cpu: payload.result === 'win' ? 1 : 0, win_battle: payload.result === 'win' ? 1 : 0 });
     gcWriteUser_(record, user);
     log.appendRow([payload.battleId, identity.email, 'cpu', payload.deckMode, Number(payload.cpuLevel), payload.result, '', award, new Date().toISOString()]);
+    if (Number(payload.cpuLevel) === 4 && payload.result === 'win') gcChristmasRecord_(identity.email, { kind: 'santa', battleId: payload.battleId });
     return gcRememberResult_(identity.email, 'battle', payload.battleId, gcState_(identity, { awarded: award, completedMissions: completedMissions }));
   });
 }
@@ -1113,7 +1135,7 @@ function gcAdminGetEconomy_(token) {
   const settings = gcSettings_();
   return {
     settings: GC_ECONOMY_SETTINGS.map(function (row) { return { key: row[0], value: settings[row[0]] === undefined ? row[1] : settings[row[0]], description: row[2] }; }),
-    cards: gcCardMaster_(),
+    cards: gcCardMaster_().filter(function (card) { return card.cardId !== 'G023'; }),
     packs: gcMasterRows_('Packs').filter(function (row) { return row[0]; }).map(function (row) { return { packId: row[0], name: row[1], price: Number(row[2]), cardsPerPack: Number(row[3]), rarityRates: gcRarityRates_(row[4]), cardPool: JSON.parse(row[5] || '[]'), pityCount: Number(row[6] || 0), active: row[9] === true, imageKey: gcPackImageKey_(row[10], row[0]) }; }),
     missions: gcMasterRows_('Missions').filter(function (row) { return row[0]; }).map(function (row) { return { missionId: row[0], period: row[1], condition: row[2], targetCount: Number(row[3]), reward: Number(row[4]), label: row[5], active: row[6] === true }; }),
     decks: gcBattleConfigRows_(),
@@ -1174,6 +1196,7 @@ function gcAdminSaveCard_(token, payload) {
 
 function gcAdminSavePack_(token, payload) {
   gcSession_(token, true);
+  if (payload.packId === GC_CHRISTMAS_ID) gcError_('BAD_PACK', 'クリスマス限定パックはイベントの設定から変更してください');
   const rawRates = payload.rarityRates;
   const rates = rawRates && typeof rawRates === 'object' ? Object.fromEntries(Object.entries(rawRates).filter(function (entry) { return Number(entry[1]) > 0; })) : null;
   const pool = payload.cardPool;
@@ -1539,7 +1562,10 @@ function gcOnlineAwardOne_(row, side, noReward) {
   const battleId = String(row[0]);
   const log = gcSheet_('BattleLog');
   const existing = log.getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === email; });
-  if (existing) return;
+  if (existing) {
+    if (!noReward && existing[5] === 'win') gcChristmasRecord_(email, { kind: 'online', battleId: battleId, startedAt: String(row[10]) });
+    return;
+  }
   if (noReward) {
     const other = gcFindUser_(opponent);
     log.appendRow([battleId, email, 'online', row[1], '', result, other ? String(other.values[4] || other.values[5] || '') : '', 0, new Date().toISOString()]);
@@ -1570,6 +1596,7 @@ function gcOnlineAwardOne_(row, side, noReward) {
   const opponentRecord = gcFindUser_(opponent);
   const opponentName = opponentRecord ? String(opponentRecord.values[5] || '') : '';
   log.appendRow([battleId, email, 'online', row[1], '', result, opponentName, award, new Date().toISOString()]);
+  if (result === 'win') gcChristmasRecord_(email, { kind: 'online', battleId: battleId, startedAt: String(row[10]) });
 }
 
 function gcOnlineValidateDeck_(identity, mode, deck) {
@@ -1580,13 +1607,14 @@ function gcOnlineValidateDeck_(identity, mode, deck) {
     const sample = gcBattleConfigRows_().find(function (item) { return item.deckId === 'sample'; });
     const ids = deck.map(function (entry) { return String(entry.cardId || ''); });
     if (!sample || new Set(ids).size !== 4 || !ids.every(function (id) { return sample.cardIds.indexOf(id) >= 0; }) ||
-        !deck.every(function (entry) { return Number(entry.trainLevel) === 0 && !entry.ownedId; })) gcError_('BAD_DECK', 'サンプルカードを確認できません');
+        !deck.every(function (entry) { return Number(entry.trainLevel) === 0 && !entry.ownedId && !entry.frameId; })) gcError_('BAD_DECK', 'サンプルカードを確認できません');
     return;
   }
   const owned = gcOwned_(identity.email);
+  if (deck.filter(function (entry) { return entry.frameId; }).length > 1) gcError_('BAD_DECK', 'フレームはデッキに1枚までです');
   const ids = deck.map(function (entry) { return String(entry.ownedId || ''); });
   if (new Set(ids).size !== 4 || !deck.every(function (entry) {
-    return owned.some(function (card) { return card.ownedId === entry.ownedId && card.cardId === entry.cardId && Number(card.trainLevel) === Number(entry.trainLevel); });
+    return owned.some(function (card) { return card.ownedId === entry.ownedId && card.cardId === entry.cardId && Number(card.trainLevel) === Number(entry.trainLevel) && String(card.frameId || '') === String(entry.frameId || ''); });
   })) gcError_('BAD_DECK', '所持カードと筋トレ値を確認できません');
 }
 
@@ -1641,7 +1669,7 @@ function gcOnlineResult_(token, payload) {
   if (side < 0) gcError_('FORBIDDEN', 'この対戦には参加していません');
   const ownResult = row[side === 0 ? 6 : 8];
   const log = gcSheet_('BattleLog').getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === identity.email; });
-  return { status: String(row[11]), reason: String(row[15] || ''), result: ownResult || '', awarded: log ? Number(log[7] || 0) : 0, gPoint: Number(gcFindUser_(identity.email).values[6] || 0), onlineRewards: Number(gcCounter_(identity.email, gcToday_(), false).values[3] || 0) };
+  return { status: String(row[11]), reason: String(row[15] || ''), result: ownResult || '', awarded: log ? Number(log[7] || 0) : 0, gPoint: Number(gcFindUser_(identity.email).values[6] || 0), onlineRewards: Number(gcCounter_(identity.email, gcToday_(), false).values[3] || 0), frames: gcFrames_(identity.email), christmas: gcChristmasView_(identity.email, false) };
 }
 
 function gcGetRanking_(token) {

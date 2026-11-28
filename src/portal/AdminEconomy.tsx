@@ -22,7 +22,7 @@ function NewMissionForm({ period, mission, busy, onChange, onSave }: { period: '
 export function DeckEditor({ deck, cards, onChange }: { deck: Deck; cards: CardMaster[]; onChange: (value: Deck) => void }) {
   const groups = (['rock', 'scissors', 'paper'] as const).map((type) => ({ type, cards: cards.filter((card) => card.type === type).sort(compareCards) }));
   return <details className="admin-deck-editor"><summary>{deck.name}<span>{deck.cardIds.length} / {cards.length}枚を候補に設定</span></summary>
-    <p>4〜40枚を選べます。販売を停止しているカードも、サンプル・CPU対戦には使用できます。</p>
+    <p>4枚以上を選べます。販売を停止しているカードも、サンプル・CPU対戦には使用できます。</p>
     <div className="admin-deck-settings"><label>最大ライフ<input type="number" min="1" max="9999" value={deck.maxLife} onChange={(event) => onChange({ ...deck, maxLife: Number(event.target.value) })} /></label><label>CPUの筋トレ値<input type="number" min="0" max="99" value={deck.rockTrainLevel} onChange={(event) => onChange({ ...deck, rockTrainLevel: Number(event.target.value) })} /></label></div>
     {groups.map(({ type, cards: typeCards }) => <section className="admin-deck-group" key={type}><h4>{typeLabels[type]} <small>{typeCards.length}枚</small></h4><div className="admin-deck-cards">{typeCards.map((card) => <label className="admin-deck-card" key={card.cardId}><input type="checkbox" checked={deck.cardIds.includes(card.cardId)} onChange={(event) => onChange({ ...deck, cardIds: event.target.checked ? [...deck.cardIds, card.cardId] : deck.cardIds.filter((id) => id !== card.cardId) })} /><span className="admin-deck-card__text"><strong>{card.name}</strong><b className={`admin-deck-card__rarity admin-deck-card__rarity--${card.rarity.toLowerCase()}`}>{card.rarity}</b><span>{card.text}</span></span></label>)}</div></section>)}
   </details>;

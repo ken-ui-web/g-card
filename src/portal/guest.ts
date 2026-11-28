@@ -17,7 +17,7 @@ let activeShopConfig: PublicShopConfig | null = null;
 export function clearGuestShopConfig() { activeShopConfig = null; }
 export function installGuestShopConfig(config: PublicShopConfig) {
   if (!config || !Array.isArray(config.cards) || !Array.isArray(config.packs) ||
-      availableCards.some((card) => !config.cards.some((item) => item.cardId === card.cardId)) ||
+      availableCards.filter((card) => card.cardId !== 'G023').some((card) => !config.cards.some((item) => item.cardId === card.cardId)) ||
       !Number.isInteger(config.packDailyLimit) || !config.sellPrices) throw new Error('ショップ設定を確認できません。もう一度読み込んでください。');
   activeShopConfig = config;
 }
@@ -25,7 +25,8 @@ export function applyGuestShopConfig(data: BootstrapData, config: PublicShopConf
   const byId = new Map(config.cards.map((card) => [card.cardId, card]));
   return {
     ...data,
-    cardMaster: data.cardMaster.map((card) => ({ ...card, ...byId.get(card.cardId) })),
+    christmas: config.christmas,
+    cardMaster: data.cardMaster.filter((card) => byId.has(card.cardId) || data.ownedCards.some((owned) => owned.cardId === card.cardId)).map((card) => ({ ...card, ...byId.get(card.cardId) })),
     packs: config.packs,
     economy: { ...data.economy, packDailyLimit: config.packDailyLimit, sellPrices: config.sellPrices },
   };
@@ -212,9 +213,10 @@ export function guestAction(action: string, payload: Record<string, unknown>, re
     state.lastDeck = ids;
   } else if (action === 'openPack') {
     const pack = activeShopConfig?.packs.find((item) => item.packId === payload.packId);
+    if (pack?.eventId === 'christmas-2026' && (!activeShopConfig?.christmas?.published || Date.now() < Date.parse(activeShopConfig.christmas.startAt) || Date.now() > Date.parse(activeShopConfig.christmas.endAt))) throw new Error('このパックの開催期間外です');
     if (!pack || !activeShopConfig || state.gPoint < pack.price || state.daily.packsBought >= activeShopConfig.packDailyLimit) throw new Error('パックを購入できません');
-    const pool = availableCards.filter((item) => pack.cardPool.includes(item.cardId) && activeShopConfig!.cards.some((setting) => setting.cardId === item.cardId && setting.inPack));
-    const rates = Object.entries(pack.rarityRates).map(([rarity, rate]) => ({ rarity, rate, cards: pool.filter((item) => item.rarity === rarity) }));
+    const pool = availableCards.filter((item) => pack.cardPool.includes(item.cardId) && activeShopConfig!.cards.some((setting) => setting.cardId === item.cardId && (setting.inPack || pack.eventId === 'christmas-2026')));
+    const rates = Object.entries(pack.rarityRates).filter(([,rate]) => rate > 0).map(([rarity, rate]) => ({ rarity, rate, cards: pool.filter((item) => item.rarity === rarity) }));
     if (!Number.isInteger(pack.cardsPerPack) || pack.cardsPerPack < 1 || pack.cardsPerPack > 10 || !rates.length || rates.some((item) => !item.cards.length || !Number.isFinite(item.rate) || item.rate <= 0) || Math.abs(rates.reduce((sum, item) => sum + item.rate, 0) - 100) > .001 || pack.pityCount > 0 && !pool.some((item) => item.rarity === 'SR' || item.rarity === 'SSR')) throw new Error('パックの設定を先生に確認してください');
     const acquired: OwnedCard[] = [];
     for (let index = 0; index < pack.cardsPerPack; index++) {

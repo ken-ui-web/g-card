@@ -1,0 +1,14 @@
+.framed-art{position:relative;display:block;width:100%;aspect-ratio:3/4;isolation:isolate;--snow-scale:1;pointer-events:none}
+.framed-art__inner{position:absolute;inset:6%;width:88%;height:88%;overflow:hidden;border-radius:7%;display:block}
+.framed-art__inner>img{width:100%!important;height:100%!important;max-height:none!important;object-fit:fill!important;display:block;margin:0!important}
+.framed-art__border{position:absolute!important;inset:0;width:100%!important;height:100%!important;object-fit:fill!important;margin:0!important;max-height:none!important;z-index:2}
+.framed-art__snow{position:absolute;inset:26% 15% 28%;overflow:hidden;z-index:3;pointer-events:none;mask-image:linear-gradient(transparent,#000 12%,#000 82%,transparent)}
+.frame-flake{position:absolute;top:-18px;left:var(--flake-x);width:calc(4px * var(--snow-scale));height:calc(4px * var(--snow-scale));border-radius:50%;background:#fff;box-shadow:0 0 5px #bcf1ff;animation:frame-fall var(--flake-duration) var(--flake-delay) linear infinite;will-change:transform,opacity}
+.frame-flake:nth-child(4n){width:calc(2.5px * var(--snow-scale));height:calc(2.5px * var(--snow-scale))}
+.frame-flake--crystal{width:auto!important;height:auto!important;background:none;box-shadow:none;color:white;font-size:calc(13px * var(--snow-scale));line-height:1;text-shadow:0 0 5px #7edfff}
+.framed-art__glints{position:absolute;inset:0;z-index:4}.framed-art__glints i{position:absolute;color:#fff;font-size:calc(22px * var(--snow-scale));font-style:normal;text-shadow:0 0 6px #fff,0 0 13px #9feaff;animation:frame-glint 2.8s ease-in-out infinite;will-change:transform,opacity}
+@keyframes frame-fall{0%{transform:translate(0,0);opacity:0}12%{opacity:.95}85%{opacity:.9}100%{transform:translate(var(--flake-drift),var(--snow-distance,180px));opacity:0}}
+@keyframes frame-glint{0%,100%{transform:translate(-50%,-50%) scale(.3) rotate(0);opacity:.2}48%{transform:translate(-50%,-50%) scale(1.2) rotate(40deg);opacity:1}75%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.framed-art__snow,.framed-art__glints{display:none}}
+.economy-card>.framed-art{max-width:200px;margin-inline:auto}.economy-page--compact .economy-card>.framed-art{max-width:145px}.deck-slot>.framed-art{max-width:105px}.card:has(>.framed-art) .card__damage{top:8%;right:9%;transform:scale(.88)}
+@media(max-width:560px){.deck-slot>.framed-art{max-width:62px}}

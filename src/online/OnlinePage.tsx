@@ -34,7 +34,7 @@ const battleBackgroundStyle = { '--battle-bg': `url("${import.meta.env.BASE_URL}
 
 function onlinePool(account: BootstrapData): OnlinePoolItem[] {
   return account.ownedCards.filter((item) => availableCards.some((card) => card.cardId === item.cardId))
-    .map((item) => ({ id: item.ownedId, cardId: item.cardId, trainLevel: item.trainLevel }));
+    .map((item) => ({ id: item.ownedId, cardId: item.cardId, trainLevel: item.trainLevel, ...(item.frameId ? { frameId: item.frameId } : {}) }));
 }
 
 function onlineCardDamage(pick: RoundPick): number | null {
@@ -96,8 +96,8 @@ function RoundPresentation({ view, side, names, onClose }: { view: OnlineView; s
       {stage === 'backs' && <p className="online-reveal-types" role="status">{typeLabels[cards[0].currentType ?? view.types[0][cards[0].index]]} <span>VS</span> {typeLabels[cards[1].currentType ?? view.types[1][cards[1].index]]}</p>}
       <div className="online-reveal-grid">{cards.map((pick, index) => <div key={index}><span>{names[index]}</span>
         <div className={`flip-card online-flip-card${stage === 'flipping' || stage === 'fronts' ? ' is-flipped' : ''}`}><div className="flip-card__inner">
-          <div className="flip-card__face flip-card__face--back" aria-hidden={stage === 'fronts'}><Card card={getCard(pick.card.cardId)} side="back" backType={pick.currentType ?? view.types[index as 0 | 1][pick.index]} /></div>
-          <div className="flip-card__face flip-card__face--front" aria-hidden={stage !== 'fronts'}><Card card={getCard(pick.card.cardId)} damage={view.revealDamage?.[index] ?? onlineCardDamage(pick)} /></div>
+          <div className="flip-card__face flip-card__face--back" aria-hidden={stage === 'fronts'}><Card frameId={pick.card.frameId} card={getCard(pick.card.cardId)} side="back" backType={pick.currentType ?? view.types[index as 0 | 1][pick.index]} /></div>
+          <div className="flip-card__face flip-card__face--front" aria-hidden={stage !== 'fronts'}><Card frameId={pick.card.frameId} card={getCard(pick.card.cardId)} damage={view.revealDamage?.[index] ?? onlineCardDamage(pick)} /></div>
         </div></div>
         {stage === 'backs' && <strong className="reveal-entry__type">{typeLabels[pick.currentType ?? view.types[index as 0 | 1][pick.index]]}{view.winner === index ? ' · 勝ち' : view.winner === null ? ' · あいこ' : ' · 負け'}</strong>}
       </div>)}</div>
@@ -292,17 +292,17 @@ export function OnlinePage() {
         const card = view.known?.[mySide]?.[pick.index] ?? entries![pick.index];
         const secret = encryptProofs(roomId).find((item) => item.index === pick.index && item.round < view.round);
         const currentType = view.hidden?.[mySide]?.[pick.index] && secret ? secret.to : view.types[mySide][pick.index];
-        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: card.cardId, trainLevel: card.trainLevel }, ...(room.meta.protocolVersion === 2 ? { currentType, combo: entries!.some((item) => item.cardId === 'C003') } : {}) });
+        await set(ref(db, `${path}/rounds/${view.round}/reveal/${uid}`), { ...pick, card: { cardId: card.cardId, trainLevel: card.trainLevel, ...(card.frameId ? { frameId: card.frameId } : {}) }, ...(room.meta.protocolVersion === 2 ? { currentType, combo: entries!.some((item) => item.cardId === 'C003') } : {}) });
       });
     }
     if (view.phase === 'swapReveal' && view.swapTargets && !record?.swapReveal?.[uid]) takeAction(`swap-${view.round}`, async () => {
       const index = view.swapTargets![mySide];
       const card = view.known?.[mySide]?.[index] ?? entries![index];
-      await set(ref(db, `${path}/rounds/${view.round}/swapReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
+      await set(ref(db, `${path}/rounds/${view.round}/swapReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel, ...(card.frameId ? { frameId: card.frameId } : {}) });
     });
     if (view.phase === 'intelReveal' && view.targetOwner === mySide && view.intelTarget !== undefined && !record?.intelReveal?.[uid]) takeAction(`intel-${view.round}`, async () => {
       const card = view.known?.[mySide]?.[view.intelTarget!] ?? entries![view.intelTarget!];
-      await set(ref(db, `${path}/rounds/${view.round}/intelReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel });
+      await set(ref(db, `${path}/rounds/${view.round}/intelReveal/${uid}`), { cardId: card.cardId, trainLevel: card.trainLevel, ...(card.frameId ? { frameId: card.frameId } : {}) });
     });
     if (view.phase === 'verify' && !record?.stateHash?.[uid]) takeAction(`hash-${view.round}`, async () => {
       await set(ref(db, `${path}/rounds/${view.round}/stateHash/${uid}`), await stateDigest(view));
@@ -415,7 +415,7 @@ export function OnlinePage() {
     if (!db || !uid || !room || selectedValid.length !== 4 || selectedSsr > 1 || !joined || !localConnected || busy) return;
     setBusy(true); setError('');
     try {
-      const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ownedId: id, trainLevel: item.trainLevel }; });
+      const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ownedId: id, trainLevel: item.trainLevel, ...(item.frameId ? { frameId: item.frameId } : {}) }; });
       let nextSalt = randomSalt();
       try {
         const pending = JSON.parse(sessionStorage.getItem(`g-card-online:${roomId}`) || 'null');
@@ -423,7 +423,7 @@ export function OnlinePage() {
       } catch { /* A new attempt can still be registered. */ }
       sessionStorage.setItem(`g-card-online:${roomId}`, JSON.stringify({ entries: deck, salt: nextSalt, mode: 'owned' }));
       if (session && !guestBattle && !room.meta.teacherTest) await callApi('onlineDeck', session, { battleId: roomId, deck, salt: nextSalt, firebaseToken: await firebaseToken() });
-      await set(ref(db, `${roomPath(roomId)}/decks/${uid}`), { types: deck.map((item) => getCard(item.cardId).type), ssr: deck.map((item) => getCard(item.cardId).rarity === 'SSR'), commit: await deckCommit(deck, nextSalt) });
+      await set(ref(db, `${roomPath(roomId)}/decks/${uid}`), { ...(deck.some((item) => item.frameId) ? { frames: deck.map((item) => item.frameId || '') } : {}), types: deck.map((item) => getCard(item.cardId).type), ssr: deck.map((item) => getCard(item.cardId).rarity === 'SSR'), commit: await deckCommit(deck, nextSalt) });
       setEntries(deck); setSalt(nextSalt);
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
@@ -535,19 +535,19 @@ export function OnlinePage() {
                 const card = item ? getCard(item.cardId) : null;
                 return <div className={`battle-deck-slot${card?.rarity === 'SSR' ? ' deck-card--ssr' : ''}${!card ? ' battle-deck-slot--empty' : ''}`} key={index}>
                   <small>{index + 1}枚目</small>
-                  {card && item ? <><Card card={card} width={100} /><strong>{card.name}</strong><span>{card.rarity} · {typeLabels[card.type]}</span><button type="button" aria-label={`${card.name}を外す`} onClick={() => toggleSelectedCard(item.id)}>外す</button></> : <span className="battle-deck-slot__empty">空き</span>}
+                  {card && item ? <><Card frameId={item.frameId} card={card} width={100} /><strong>{card.name}</strong><span>{card.rarity} · {typeLabels[card.type]}</span><button type="button" aria-label={`${card.name}を外す`} onClick={() => toggleSelectedCard(item.id)}>外す</button></> : <span className="battle-deck-slot__empty">空き</span>}
                 </div>;
               })}
             </div>
             <div ref={deckDockMarker} className="battle-deck-dock-marker" aria-hidden="true" />
-            <BattleDeckDock visible={deckDockVisible} cards={dockCards} busy={busy} busyText="デッキを送信中…" disabled={busy || selectedValid.length !== 4 || selectedSsr > 1} onStart={() => { void submitDeck(); }} onRemove={(index) => { const id = selectedValidSlots[index]; if (id) toggleSelectedCard(id); }} />
+            <BattleDeckDock visible={deckDockVisible} cards={dockCards} frameIds={selectedValidSlots.map((id) => pool.find((item) => item.id === id)?.frameId)} busy={busy} busyText="デッキを送信中…" disabled={busy || selectedValid.length !== 4 || selectedSsr > 1} onStart={() => { void submitDeck(); }} onRemove={(index) => { const id = selectedValidSlots[index]; if (id) toggleSelectedCard(id); }} />
             <h3 className="battle-deck-subtitle">カードを探す</h3>
             <div className="deck-type-tabs" role="group" aria-label="カードの種類">
               {(['all', 'rock', 'scissors', 'paper'] as const).map((type) => <button type="button" key={type} aria-pressed={deckType === type} onClick={() => setDeckType(type)}>{type === 'all' ? 'すべて' : typeLabels[type]}</button>)}
             </div>
             <div className="online-deck-grid">{pool.filter((item) => !selectedValid.includes(item.id) && (deckType === 'all' || getCard(item.cardId).type === deckType)).map((item) => {
               const card = getCard(item.cardId);
-              return <button key={item.id} disabled={selectedValid.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1} onClick={() => toggleSelectedCard(item.id)}><Card card={card} width={110} /><strong>{card.name}</strong><small>{card.rarity} · {typeLabels[card.type]}</small></button>;
+              return <button key={item.id} disabled={selectedValid.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1} onClick={() => toggleSelectedCard(item.id)}><Card frameId={item.frameId} card={card} width={110} /><strong>{card.name}</strong><small>{card.rarity} · {typeLabels[card.type]}</small></button>;
             })}</div>
           </>}
         </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || guestBattle || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{guestBattle ? 'ゲスト対戦が終了しました。ランキングとG報酬は対象外です。' : room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : 'サーバーで勝敗を確認し、勝利数と報酬を記録しています。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={playerName(opponent?.nickname || '相手')} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>

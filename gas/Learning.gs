@@ -82,6 +82,7 @@ function gcLearnAutoScore_(q, answer) {
   return 0;
 }
 function gcLearnAnswered_(q, answer) {
+  if (typeof answer === 'string') return answer.trim().length > 0;
   if (answer === null || answer === undefined || answer === '') return false;
   if (Array.isArray(answer)) return answer.length > 0;
   if (q.type === 'gridSingle' || q.type === 'gridMulti') return (q.options.rows || []).every(function (row) { return gcLearnAnswered_({ type: q.type === 'gridSingle' ? 'single' : 'multi' }, answer[row]); });
@@ -139,7 +140,7 @@ function gcSubmitTest_(token, payload, requestId) {
   });
   return gcWithLock_(function () {
     const test = gcLearnTestById_(testId); const own = gcLearnResponses_(identity.email, testId);
-    const old = own.find(function (row) { return row[0] === id; }); if (old) return gcLearnResult_(identity, test, old);
+    const old = own.find(function (row) { return row[0] === id; }); if (old) { gcChristmasRecord_(identity.email, { kind: 'test', testId: testId, score: Number(old[7]), maxScore: Number(old[8]), startedAt: String(old[11]) }); return Object.assign(gcLearnResult_(identity, test, old), { frames: gcFrames_(identity.email), christmas: gcChristmasView_(identity.email, false) }); }
     if (test.updatedAt !== paper.updatedAt) gcError_('TEST_CHANGED', 'テストが更新されました。開き直して回答してください');
     const record = gcFindUser_(identity.email); const user = gcUserObject_(record);
     if (!gcLearnAvailable_(test, user)) gcError_('NOT_AVAILABLE', 'このテストは受けられません');
@@ -148,6 +149,7 @@ function gcSubmitTest_(token, payload, requestId) {
     const award = gcLearnAward_(identity, user, test, best, auto, maxScore, id);
     const response = [id, testId, identity.email, own.length + 1, '', auto, 0, auto, maxScore, award.awarded, 'complete', new Date().toISOString()];
     gcSheet_('TestResponses').appendRow(response);
+    gcChristmasRecord_(identity.email, { kind: 'test', testId: testId, score: auto, maxScore: maxScore });
     gcLearnUpdateBest_(identity, test, best, auto, award.candidate, award.firstPerfect, own.length + 1);
     const missions = gcAwardMissions_(identity, user, { submit_test: 1, perfect_test: award.firstPerfect ? 1 : 0 });
     user.updatedAt = new Date().toISOString(); gcWriteUser_(record, user);
@@ -158,7 +160,7 @@ function gcSubmitTest_(token, payload, requestId) {
       if (test.settings.resultDetail === 'full') { detail.answer = q.answer; detail.feedback = earned === q.points ? q.feedbackCorrect : q.feedbackWrong; }
       return detail;
     });
-    result.completedMissions = missions; return result;
+    result.completedMissions = missions; result.frames = gcFrames_(identity.email); result.christmas = gcChristmasView_(identity.email, false); return result;
   });
 }
 function gcGetTestResult_(token, payload) {

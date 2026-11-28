@@ -1,6 +1,7 @@
 import type { PackMaster } from './api';
 
 export const packArtOptions = [
+  { key: 'christmas', label: 'クリスマス限定パック' },
   { key: 'starter', label: 'スタートパック' },
   { key: 'first-wave', label: '第１弾パック' },
   { key: 'all-cards', label: '全カードパック' },

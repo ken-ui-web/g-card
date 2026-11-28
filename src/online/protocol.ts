@@ -1,17 +1,18 @@
 import { beginRound, choiceRequests, compareTypes, effectOrder, finishRound, requiredPick, shownDamage, type BattleCard, type BattleConfig, type BattleState, type ChoiceRequest, type PlayerIndex, type RoundChoice, type Shield } from '../game/battle';
+import { isFrameId } from '../data/frames';
 import { cardById, getCard, ssrCount, type CardType } from '../data/cards';
 
 export type DeckMode = 'sample' | 'owned';
 export type OnlineResult = 'win' | 'draw' | 'loss';
-export interface OnlineEntry { cardId: string; ownedId?: string; trainLevel: number }
-export interface PublicDeck { types: CardType[]; ssr: boolean[]; commit: string }
-export interface RoundPick { index: number; salt: string; card: { cardId: string; trainLevel: number }; currentType?: CardType; combo?: boolean }
+export interface OnlineEntry { cardId: string; ownedId?: string; trainLevel: number; frameId?: string }
+export interface PublicDeck { types: CardType[]; ssr: boolean[]; frames?: string[]; commit: string }
+export interface RoundPick { index: number; salt: string; card: { cardId: string; trainLevel: number; frameId?: string }; currentType?: CardType; combo?: boolean }
 export interface OnlineRound {
   commit?: Record<string, string>;
   reveal?: Record<string, RoundPick>;
   choices?: Record<string, number | string>;
-  swapReveal?: Record<string, { cardId: string; trainLevel: number }>;
-  intelReveal?: Record<string, { cardId: string; trainLevel: number }>;
+  swapReveal?: Record<string, { cardId: string; trainLevel: number; frameId?: string }>;
+  intelReveal?: Record<string, { cardId: string; trainLevel: number; frameId?: string }>;
   stateHash?: Record<string, string>;
 }
 export interface OnlineRoom {
@@ -30,6 +31,7 @@ export interface OnlineView {
   maxLife: [number, number];
   types: [CardType[], CardType[]];
   ssr: [boolean[], boolean[]];
+  frames?: [string[], string[]];
   used: [number[], number[]];
   reveal?: [RoundPick, RoundPick];
   revealDamage?: [number | null, number | null];
@@ -50,7 +52,7 @@ export interface OnlineView {
 }
 
 export function stableDeck(entries: OnlineEntry[]): string {
-  return JSON.stringify(entries.map((entry) => [entry.cardId, entry.ownedId || '', entry.trainLevel]));
+  return JSON.stringify(entries.map((entry) => entry.frameId ? [entry.cardId, entry.ownedId || '', entry.trainLevel, entry.frameId] : [entry.cardId, entry.ownedId || '', entry.trainLevel]));
 }
 
 export async function sha256(value: string): Promise<string> {
@@ -68,7 +70,7 @@ export const pickCommit = (battleId: string, round: number, index: number, salt:
 
 function invalid(view: OnlineView, error: string): OnlineView { return { ...view, phase: 'invalid', error }; }
 export function stateKey(view: OnlineView): string {
-  return JSON.stringify({ round: view.round, life: view.life, types: view.types, used: view.used, outcome: view.outcome, hidden: view.hidden, blind: view.blind, required: view.required, known: view.known, knownTo: view.knownTo, status: view.status, ssr: view.ssr });
+  return JSON.stringify({ round: view.round, life: view.life, types: view.types, used: view.used, outcome: view.outcome, hidden: view.hidden, blind: view.blind, required: view.required, known: view.known, knownTo: view.knownTo, status: view.status, ssr: view.ssr, ...(view.frames ? { frames: view.frames } : {}) });
 }
 export const stateDigest = (view: OnlineView) => sha256(stateKey(view));
 
@@ -182,7 +184,7 @@ function publicBattle(room: OnlineRoom, uids: string[]): BattleState {
       life: max[side], maxLife: max[side],
       hand: deck.types.map((type, index): BattleCard => ({
         instanceId: `${side}-${index}`, cardId: placeholder(type), originalType: type,
-        currentType: type, trainLevel: 0, nullified: false, rarity: deck.ssr[index] ? 'SSR' : 'N',
+        currentType: type, trainLevel: 0, ...(deck.frames?.[index] ? { frameId: deck.frames[index] } : {}), nullified: false, rarity: deck.ssr[index] ? 'SSR' : 'N',
       })),
       used: [] as BattleCard[], shields: [] as Shield[], poison: 0,
       delayed: [] as { dueRound: number; amount: number }[], nextDamage: 0,
@@ -195,6 +197,7 @@ function publicBattle(room: OnlineRoom, uids: string[]): BattleState {
 function advancedSnapshot(state: BattleState, old: OnlineView, known: [Record<number, OnlineEntry>, Record<number, OnlineEntry>], knownTo: [number[], number[]]): OnlineView {
   const types: [CardType[], CardType[]] = [[...old.types[0]], [...old.types[1]]];
   const ssr: [boolean[], boolean[]] = [[...old.ssr[0]], [...old.ssr[1]]];
+  const frames: [string[], string[]] = old.frames ? [[...old.frames[0]], [...old.frames[1]]] : [Array(4).fill(''),Array(4).fill('')];
   const hidden: [boolean[], boolean[]] = [Array(4).fill(false), Array(4).fill(false)];
   const used: [number[], number[]] = [[], []];
   const required: [number | null, number | null] = [null, null];
@@ -203,6 +206,7 @@ function advancedSnapshot(state: BattleState, old: OnlineView, known: [Record<nu
       const index = slotIndex(card);
       types[side][index] = card.currentType;
       ssr[side][index] = card.rarity === 'SSR';
+      frames[side][index] = card.frameId || '';
       hidden[side][index] = state.players[side].encrypted && !card.publicType;
     }
     used[side] = state.players[side].used.map(slotIndex);
@@ -211,7 +215,7 @@ function advancedSnapshot(state: BattleState, old: OnlineView, known: [Record<nu
   }
   return {
     ...old, round: state.round, life: [state.players[0].life, state.players[1].life],
-    types, ssr, hidden, used, required,
+    types, ssr, hidden, used, required, ...(old.frames || frames.some((list) => list.some(Boolean)) ? { frames } : {}),
     blind: [state.players[0].blind, state.players[1].blind],
     known: [{ ...known[0] }, { ...known[1] }],
     knownTo: [[...knownTo[0]], [...knownTo[1]]],
@@ -251,7 +255,8 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
   const decks = uids.map((uid) => room.decks?.[uid]);
   const types: [CardType[], CardType[]] = [decks[0]?.types ? [...decks[0].types] : [], decks[1]?.types ? [...decks[1].types] : []];
   const ssr: [boolean[], boolean[]] = [decks[0]?.ssr ? [...decks[0].ssr] : [], decks[1]?.ssr ? [...decks[1].ssr] : []];
-  let view: OnlineView = { phase: 'deck', round: 1, life: [...maxLife], maxLife, types, ssr, used: [[], []], events: [], outcome: null };
+  const frames = decks.some((deck) => deck?.frames) ? [decks[0]?.frames ?? Array(4).fill(''),decks[1]?.frames ?? Array(4).fill('')] as [string[],string[]] : undefined;
+  let view: OnlineView = { ...(frames ? { frames } : {}), phase: 'deck', round: 1, life: [...maxLife], maxLife, types, ssr, used: [[], []], events: [], outcome: null };
   if (room.forfeit) {
     const winner = uids.indexOf(room.forfeit.winnerUid);
     const loser = uids.indexOf(room.forfeit.loserUid);
@@ -260,6 +265,7 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
   if (!uids[1] || !decks[0] || !decks[1]) return view;
   if (types.some((list) => list.length !== 4 || list.some((type) => !['rock', 'scissors', 'paper'].includes(type)))) return invalid(view, 'カードの種類が正しくありません');
   if (ssr.some((list) => list.length !== 4 || list.filter(Boolean).length > 1)) return invalid(view, 'SSRはデッキに1枚までです');
+  if (frames?.some((list) => list.length !== 4 || list.filter(Boolean).length > 1 || list.some((id) => !!id && !isFrameId(id)))) return invalid(view,'フレームの公開情報が正しくありません');
   let state = publicBattle(room, uids);
   const known: [Record<number, OnlineEntry>, Record<number, OnlineEntry>] = [{}, {}];
   const knownTo: [number[], number[]] = [[], []];
@@ -282,7 +288,7 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
       const pick = reveal[side];
       const current = state.players[side].hand.find((card) => slotIndex(card) === pick.index);
       if (!current || !Number.isInteger(pick.index) || pick.index < 0 || pick.index > 3 ||
-          !cardById[pick.card.cardId] || cardById[pick.card.cardId].type !== current.originalType ||
+          !cardById[pick.card.cardId] || cardById[pick.card.cardId].type !== current.originalType || String(pick.card.frameId || '') !== String(current.frameId || '') ||
           (cardById[pick.card.cardId].rarity === 'SSR') !== (current.rarity === 'SSR') ||
           !Number.isInteger(pick.card.trainLevel) || pick.card.trainLevel < 0 || pick.card.trainLevel > 99 ||
           await pickCommit(room.meta.battleId, round, pick.index, pick.salt) !== record.commit[uids[side]] ||
@@ -336,7 +342,7 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
           const card = state.players[side].hand.find((item) => slotIndex(item) === targets[side]);
           if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType ||
               (getCard(entry.cardId).rarity === 'SSR') !== (card.rarity === 'SSR') ||
-              !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99)
+              !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99 || String(entry.frameId || '') !== String(card.frameId || ''))
             return invalid(view, '交換するカードの公開情報が一致しません');
           swaps.push({ side, source: { ...origins[side][targets[side]] }, entry });
         }
@@ -352,7 +358,7 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
         const entry = record.intelReveal[uids[opposite(intelActor)]];
         const card = state.players[opposite(intelActor)].hand.find((item) => slotIndex(item) === intelIndex);
         if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType ||
-            (getCard(entry.cardId).rarity === 'SSR') !== (card.rarity === 'SSR')) return invalid(view, '公開するカードが正しくありません');
+            (getCard(entry.cardId).rarity === 'SSR') !== (card.rarity === 'SSR') || String(entry.frameId || '') !== String(card.frameId || '')) return invalid(view, '公開するカードが正しくありません');
       }
     }
     try { state = finishRound(state, choices); }
@@ -385,12 +391,12 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
         const final = room.final[uids[side]];
         if (!Array.isArray(final.entries) || final.entries.length !== 4 || await deckCommit(final.entries, final.salt) !== decks[side]!.commit ||
             final.entries.some((entry, index) => !cardById[entry.cardId] || getCard(entry.cardId).type !== decks[side]!.types[index] ||
-              (getCard(entry.cardId).rarity === 'SSR') !== decks[side]!.ssr[index] || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99) ||
+              (getCard(entry.cardId).rarity === 'SSR') !== decks[side]!.ssr[index] || String(entry.frameId || '') !== String(decks[side]!.frames?.[index] || '') || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99) ||
             ssrCount(final.entries.map((entry) => entry.cardId)) > 1) return invalid(view, 'デッキの公開情報が一致しません');
       }
       for (const observation of observations) {
         const original = room.final[uids[observation.source.side]].entries[observation.source.index];
-        if (original.cardId !== observation.pick.card.cardId || original.trainLevel !== observation.pick.card.trainLevel)
+        if (original.cardId !== observation.pick.card.cardId || original.trainLevel !== observation.pick.card.trainLevel || String(original.frameId || '') !== String(observation.pick.card.frameId || ''))
           return invalid(view, '使用カードとデッキが一致しません');
         if (observation.pick.card.cardId === 'C016' && Boolean(observation.pick.combo) !== room.final[uids[observation.side]].entries.some((entry) => entry.cardId === 'C003'))
           return invalid(view, 'くぎの組み合わせ情報が一致しません');
@@ -415,7 +421,7 @@ async function deriveAdvancedView(room: OnlineRoom): Promise<OnlineView> {
       }
       for (const swap of swaps) {
         const original = room.final[uids[swap.source.side]].entries[swap.source.index];
-        if (original.cardId !== swap.entry.cardId || original.trainLevel !== swap.entry.trainLevel)
+        if (original.cardId !== swap.entry.cardId || original.trainLevel !== swap.entry.trainLevel || String(original.frameId || '') !== String(swap.entry.frameId || ''))
           return invalid(view, '交換カードとデッキが一致しません');
       }
       return { ...view, phase: 'finished' };

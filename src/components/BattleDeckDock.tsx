@@ -1,8 +1,9 @@
 import { Card } from './Card';
 import type { CardDefinition } from '../data/cards';
 
-export function BattleDeckDock({ visible, cards, busy, disabled, busyText = '準備中…', onStart, onRemove }: {
+export function BattleDeckDock({ visible, cards, frameIds, busy, disabled, busyText = '準備中…', onStart, onRemove }: {
   visible: boolean;
+  frameIds?: (string | undefined)[];
   cards: (CardDefinition | null)[];
   busy: boolean;
   disabled: boolean;
@@ -18,7 +19,7 @@ export function BattleDeckDock({ visible, cards, busy, disabled, busyText = '準
     </button>
     <div className="battle-deck-dock__slots" aria-label="選択中の4枚">
       {cards.map((card, index) => card ? <button type="button" className="battle-deck-dock__slot" key={index} title={`${index + 1}枚目：${card.name}（押すと外す）`} aria-label={`${index + 1}枚目の${card.name}を外す`} onClick={() => onRemove(index)}>
-        <Card card={card} width={50} /><span aria-hidden="true">×</span>
+        <Card frameId={frameIds?.[index]} card={card} width={50} /><span aria-hidden="true">×</span>
       </button> : <span className="battle-deck-dock__slot battle-deck-dock__slot--empty" key={index} aria-label={`${index + 1}枚目は空き`}>空き</span>)}
     </div>
   </div>;

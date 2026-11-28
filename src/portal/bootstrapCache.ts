@@ -89,6 +89,8 @@ export function clearBootstrapCache(): void {
 export function mergeEconomy(data: BootstrapData, state: EconomyState): BootstrapData {
   return {
     ...data,
+    frames: state.frames ?? data.frames,
+    christmas: state.christmas === undefined ? data.christmas : state.christmas,
     profile: { ...data.profile, gPoint: state.gPoint, maxLife: state.maxLife, runCount: state.runCount, pityCounter: state.pityCounter },
     ownedCards: state.ownedCards, lastDeck: state.lastDeck, missions: state.missions, daily: state.daily,
   };

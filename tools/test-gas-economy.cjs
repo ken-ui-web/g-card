@@ -53,11 +53,12 @@ const context = vm.createContext({
 });
 vm.runInContext(fs.readFileSync('gas/Code.gs', 'utf8'), context);
 vm.runInContext(fs.readFileSync('gas/Learning.gs', 'utf8'), context);
+vm.runInContext(fs.readFileSync('gas/Christmas.gs', 'utf8'), context);
 vm.runInContext(fs.readFileSync('gas/OnlineEngine.gs', 'utf8'), context);
 vm.runInContext(fs.readFileSync('gas/OnlineSettlement.gs', 'utf8'), context);
 const call = (name, ...args) => vm.runInContext(name, context)(...args);
 call('setup');
-assert.equal(sheets.get('Cards').getLastRow(), 41);
+assert.equal(sheets.get('Cards').getLastRow(), 42);
 assert.equal(call('gcCardMaster_').filter((card) => !card.text || !card.image || !card.effects.length).length, 0, '40枚すべてに画像と効果を設定する');
 assert.equal(call('gcCardMaster_').find((card) => card.cardId === 'C014').rarity, 'SSR');
 for (const cardId of ['G007', 'G020', 'G021', 'G001']) assert.equal(call('gcTrainingCap_', cardId), trainingCaps.exceptions[cardId] ?? trainingCaps.default, '画面とGASの筋トレ上限を一致させる');
@@ -69,7 +70,7 @@ sheets.get('OwnedCards').rows[0] = sheets.get('OwnedCards').rows[0].slice(0, 7);
 sheets.get('Packs').rows = sheets.get('Packs').rows.map((row) => row.slice(0, 10));
 sheets.get('Packs').rows = sheets.get('Packs').rows.filter((row) => row[0] !== 'first-wave');
 call('setup');
-assert.equal(sheets.get('Cards').getLastRow(), 41);
+assert.equal(sheets.get('Cards').getLastRow(), 42);
 assert.equal(sheets.get('Cards').rows[0][13], 'trainingBonus');
 assert.equal(sheets.get('OwnedCards').rows[0][7], 'trainingSpent', '既存の学校シートに筋トレ累計列を追加する');
 assert.equal(sheets.get('Packs').rows[0][10], 'imageKey', '既存の学校シートにパック画像列を追加する');
@@ -77,7 +78,7 @@ assert.equal(call('gcPackMaster_').filter((pack) => pack.packId === 'first-wave'
 assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'starter').imageKey, 'starter');
 assert.equal(call('gcPackMaster_').find((pack) => pack.packId === 'first-wave').imageKey, 'first-wave');
 call('setup');
-assert.equal(sheets.get('Cards').getLastRow(), 41);
+assert.equal(sheets.get('Cards').getLastRow(), 42);
 const defaultWinMissionRow = sheets.get('Missions').rows.findIndex((row) => row[0] === 'daily-win') + 1;
 sheets.get('Missions').getRange(defaultWinMissionRow, 3).setValue('win_battle');
 sheets.get('Missions').appendRow(['online-win', 'daily', 'play_online', 1, 50, 'オンライン対戦で勝つ', true, 6]);
@@ -513,3 +514,4 @@ assert.equal(sheets.get('PointLog').rows.find((row) => row[4] === runRequestId)[
 assert.equal(call('gcTrain_', runnerToken, { items: [{ kind: 'run', count: 3 }] }, runRequestId).runCount, 3, '再送しても走り込みを二重に記録しない');
 require('./test-online-settlement.cjs')({ call, context, sheets, token, studentToken, email, student, id });
 console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export, authoritative online settlement OK');
+require('./test-christmas.cjs')({ call, context, sheets, token, studentToken, email, student, id });

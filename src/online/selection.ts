@@ -1,6 +1,6 @@
 import { getCard, ssrCount } from '../data/cards';
 
-export type OnlinePoolItem = { id: string; cardId: string; trainLevel: number };
+export type OnlinePoolItem = { id: string; cardId: string; trainLevel: number; frameId?: string };
 
 export function validOnlineSelection(selected: string[], pool: OnlinePoolItem[]): string[] {
   return selected.filter((id) => pool.some((item) => item.id === id));

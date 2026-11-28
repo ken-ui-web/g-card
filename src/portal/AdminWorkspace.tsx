@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { callApi } from './api';
 import { AdminEconomy } from './AdminEconomy';
+import { AdminChristmas } from './AdminChristmas';
 import { AdminTests } from './AdminTests';
 import { LoadingState } from '../components/LoadingState';
 
-type Tab = 'dashboard' | 'students' | 'tests' | 'economy' | 'exports';
+type Tab = 'dashboard' | 'students' | 'tests' | 'economy' | 'exports' | 'events';
 type LoginUser = { email: string; role: string; className: string; number: string; name: string };
 type DashboardDay = { date: string; students: number; logins: number; loginUsers: LoginUser[]; testAttempts: number; reflectionSubmissions: number; pointsIssued: number; pointsSpent: number };
 type Dashboard = Omit<DashboardDay, 'loginUsers'> & { todayLoginUsers: LoginUser[]; yesterday: DashboardDay };
@@ -147,11 +148,12 @@ function ExportPanel({ session }: { session: string }) {
 export function AdminWorkspace({ session }: { session: string }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [pendingEconomy, setPendingEconomy] = useState(false);
+  const [pendingEvents, setPendingEvents] = useState(false);
   const tabs: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'ダッシュボード' }, { key: 'students', label: '生徒管理' },
-    { key: 'tests', label: 'テスト' }, { key: 'economy', label: 'カード・ミッション' }, { key: 'exports', label: 'CSV書き出し' },
+    { key: 'tests', label: 'テスト' }, { key: 'economy', label: 'カード・ミッション' }, { key: 'events', label: 'イベント' }, { key: 'exports', label: 'CSV書き出し' },
   ];
-  return <><section className="panel admin-stage-nav"><p className="eyebrow">ADMIN</p><h1>管理者メニュー</h1><div className="admin-stage-tabs">{tabs.map((item) => <button key={item.key} type="button" className={tab === item.key ? 'is-active' : ''} aria-pressed={tab === item.key} onClick={() => { if (tab === 'economy' && item.key !== 'economy' && pendingEconomy && !window.confirm('保存していない設定変更があります。移動すると変更は消えます。続けますか？')) return; setTab(item.key); }}>{item.label}</button>)}</div></section>
-    {tab === 'dashboard' ? <DashboardPanel session={session} /> : tab === 'students' ? <StudentPanel session={session} /> : tab === 'tests' ? <AdminTests session={session} /> : tab === 'economy' ? <AdminEconomy session={session} onDirtyChange={setPendingEconomy} /> : <ExportPanel session={session} />}
+  return <><section className="panel admin-stage-nav"><p className="eyebrow">ADMIN</p><h1>管理者メニュー</h1><div className="admin-stage-tabs">{tabs.map((item) => <button key={item.key} type="button" className={tab === item.key ? 'is-active' : ''} aria-pressed={tab === item.key} onClick={() => { if (item.key !== tab && (tab === 'economy' && pendingEconomy || tab === 'events' && pendingEvents) && !window.confirm('保存していない設定変更があります。移動すると変更は消えます。続けますか？')) return; setTab(item.key); }}>{item.label}</button>)}</div></section>
+    {tab === 'dashboard' ? <DashboardPanel session={session} /> : tab === 'students' ? <StudentPanel session={session} /> : tab === 'tests' ? <AdminTests session={session} /> : tab === 'economy' ? <AdminEconomy session={session} onDirtyChange={setPendingEconomy} /> : tab === 'events' ? <AdminChristmas session={session} onDirtyChange={setPendingEvents} /> : <ExportPanel session={session} />}
   </>;
 }

@@ -21,7 +21,7 @@ function OpponentCard({ view, side, index }: { view: OnlineView; side: Side; ind
   const hidden = view.hidden?.[enemy]?.[index];
   const type = hidden ? 'unknown' : view.types[enemy][index];
   return <div className="back-card">
-    <Card card={getCard(known?.cardId ?? (view.ssr[enemy][index] ? 'C014' : 'G001'))} side={known ? 'front' : 'back'} backType={known ? undefined : type} />
+    <Card frameId={view.frames?.[enemy][index]} card={getCard(known?.cardId ?? (view.ssr[enemy][index] ? 'C014' : 'G001'))} side={known ? 'front' : 'back'} backType={known ? undefined : type} />
     <span>{known ? getCard(known.cardId).name : hidden ? '種類不明' : typeLabels[view.types[enemy][index]]}</span>
   </div>;
 }
@@ -55,12 +55,12 @@ export function OnlineBattleBoard({ view, side, entries, opponentName, busy, wai
           const index = ownIndices[0];
           const entry = view.known?.[side]?.[index] ?? entries[index];
           const card = getCard(entry.cardId);
-          return <div className="final-open"><Card card={card} damage={cardDamage(entry)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{card.name}を出します。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" disabled={busy || forced !== null && forced !== undefined && forced !== index} onClick={() => onPick(index)}>オープン！</button></div></div>;
+          return <div className="final-open"><Card frameId={entry.frameId} card={card} damage={cardDamage(entry)} width={190} /><div><p className="eyebrow">FINAL ROUND</p><h2>最後の1枚</h2><p>{card.name}を出します。公開の準備ができたら押してください。</p><button type="button" className="button button--primary" disabled={busy || forced !== null && forced !== undefined && forced !== index} onClick={() => onPick(index)}>オープン！</button></div></div>;
         })() : choosing && entries ? <><p>30秒以内にカードを選んでください。</p><div className="select-grid">{ownIndices.map((index) => {
           const entry = view.known?.[side]?.[index] ?? entries[index];
           const card = getCard(entry.cardId);
           return <button type="button" className="select-card" key={index} disabled={busy || forced !== null && forced !== undefined && forced !== index} onClick={() => onPick(index)}>
-            <Card card={card} side={blind ? 'back' : 'front'} backType={blind ? 'unknown' : undefined} damage={blind ? null : cardDamage(entry)} />
+            <Card frameId={entry.frameId} card={card} side={blind ? 'back' : 'front'} backType={blind ? 'unknown' : undefined} damage={blind ? null : cardDamage(entry)} />
             <strong>{blind ? 'ランダムで選択' : card.name}</strong><span>{blind ? 'カードの中身は見えません' : `${typeLabels[view.types[side][index]]} · ${card.text}`}</span><small>{forced === index ? 'このカードを出します' : 'このカードを出す'}</small>
           </button>;
         })}</div></> : waiting ? <p role="status">相手のカード決定を待っています…</p> : children}

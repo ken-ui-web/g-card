@@ -711,6 +711,26 @@ var GC_ONLINE_ENGINE = (() => {
           type: "forceOpponentNext"
         }
       ]
+    },
+    {
+      cardId: "G023",
+      name: "\u30B5\u30F3\u30BF\u30D1\u30F3\u30C1",
+      type: "rock",
+      rarity: "SSR",
+      trainingMultiplier: 1,
+      trainingBonus: 0,
+      shopPrice: null,
+      inPack: false,
+      effects: [
+        {
+          type: "damage",
+          amount: 30
+        },
+        {
+          type: "heal",
+          amount: 10
+        }
+      ]
     }
   ];
 
@@ -730,6 +750,7 @@ var GC_ONLINE_ENGINE = (() => {
     G012: "25\u30C0\u30E1\u30FC\u30B8\uFF0B\u76F8\u624B\u306E\u6B8B\u308A\u30AB\u30FC\u30C91\u679A\u3092\u52B9\u679C\u306A\u3057\u306B\u3059\u308B",
     G022: "30\u30C0\u30E1\u30FC\u30B8\u3002\u7B4B\u30C8\u30EC\u5024\u3092\uFF0B20\u3057\u3066\u8A08\u7B97",
     G015: "30\u30C0\u30E1\u30FC\u30B8\uFF0B\u76F8\u624B\u306F\u6B8B\u308A\u30AB\u30FC\u30C9\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u51FA\u3059",
+    G023: "30\u30C0\u30E1\u30FC\u30B8\uFF0B10\u56DE\u5FA9",
     C002: "30\u30C0\u30E1\u30FC\u30B8",
     C003: "25\u30C0\u30E1\u30FC\u30B8",
     C016: "15\u30C0\u30E1\u30FC\u30B8\u3002\u30C7\u30C3\u30AD\u306B\u3052\u3093\u306E\u3046\u304C\u3042\u308C\u3070\uFF0B15",
@@ -774,6 +795,14 @@ var GC_ONLINE_ENGINE = (() => {
     if (!card) throw new Error(`\u4E0D\u660E\u306A\u30AB\u30FC\u30C9: ${cardId}`);
     return card;
   }
+
+  // src/data/frames.ts
+  var CHRISTMAS_FRAME_ID = "christmas-2026";
+  var frames = {
+    [CHRISTMAS_FRAME_ID]: { id: CHRISTMAS_FRAME_ID, name: "\u767D\u9280\u306E\u30AF\u30EA\u30B9\u30DE\u30B9\u30D5\u30EC\u30FC\u30E0", image: "snow-silver.webp", heal: 10 }
+  };
+  var isFrameId = (id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(frames, id);
+  var frameHeal = (id) => isFrameId(id) ? frames[id].heal : 0;
 
   // src/game/battle.ts
   var beats = { rock: "scissors", scissors: "paper", paper: "rock" };
@@ -915,21 +944,21 @@ var GC_ONLINE_ENGINE = (() => {
       const played = cards[actor];
       for (const effect of getCard(played.cardId).effects) {
         if (effect.type === "damage") {
-          let amount = finalDamage(played, state.config) ?? 0;
-          if (effect.condition === "selfLifeLower" && players[actor].life < players[enemy].life) amount *= effect.multiplierIfCondition ?? 1;
-          if (effect.comboBonus && players[actor].startingCardIds.includes(effect.comboBonus.requiresCardInDeck)) amount += effect.comboBonus.add;
-          amount += activeModifier[actor];
-          for (let hit = 0; hit < (effect.hits ?? 1); hit++) applyDamage(actor, enemy, amount, effect.pierce);
+          let amount2 = finalDamage(played, state.config) ?? 0;
+          if (effect.condition === "selfLifeLower" && players[actor].life < players[enemy].life) amount2 *= effect.multiplierIfCondition ?? 1;
+          if (effect.comboBonus && players[actor].startingCardIds.includes(effect.comboBonus.requiresCardInDeck)) amount2 += effect.comboBonus.add;
+          amount2 += activeModifier[actor];
+          for (let hit = 0; hit < (effect.hits ?? 1); hit++) applyDamage(actor, enemy, amount2, effect.pierce);
         } else if (effect.type === "damagePerOpponentRemaining") {
           applyDamage(actor, enemy, effect.per * players[enemy].hand.length);
         } else if (effect.type === "drain") {
           const dealt = applyDamage(actor, enemy, effect.amount);
           const before = players[actor].life;
-          players[actor].life = Math.min(players[actor].maxLife, before + dealt);
+          players[actor].life = Math.max(before, Math.min(players[actor].maxLife, before + dealt));
           events.push({ kind: "heal", actor, amount: players[actor].life - before });
         } else if (effect.type === "heal") {
           const before = players[actor].life;
-          players[actor].life = Math.min(players[actor].maxLife, before + Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount));
+          players[actor].life = Math.max(before, Math.min(players[actor].maxLife, before + Math.max(0, state.config.heals?.[played.cardId] ?? effect.amount)));
           events.push({ kind: "heal", actor, amount: players[actor].life - before });
         } else if (effect.type === "selfDamage") {
           players[actor].life = Math.max(0, players[actor].life - effect.amount);
@@ -995,6 +1024,12 @@ var GC_ONLINE_ENGINE = (() => {
           else events.push({ kind: "status", actor, text: effect.type === "nullifyOpponentCard" ? "\u76F8\u624B\u306E\u30AB\u30FC\u30C91\u679A\u3092\u52B9\u679C\u306A\u3057\u306B\u3057\u305F" : effect.type === "revealOpponent" ? "\u76F8\u624B\u306E\u30AB\u30FC\u30C91\u679A\u306E\u4E2D\u8EAB\u3092\u898B\u305F" : "\u76F8\u624B\u306E\u6B21\u306E\u30AB\u30FC\u30C9\u3092\u6307\u5B9A\u3057\u305F" });
         }
       }
+      const amount = frameHeal(played.frameId);
+      if (amount > 0) {
+        players[actor].life += amount;
+        events.push({ kind: "heal", actor, amount });
+        events.push({ kind: "status", actor, text: "\u30AF\u30EA\u30B9\u30DE\u30B9\u30D5\u30EC\u30FC\u30E0\u3067\u8FFD\u52A0\u56DE\u5FA9\uFF01" });
+      }
     }
     for (const side of [0, 1]) {
       if (players[side].poison > 0) applyDamage(other(side), side, players[side].poison);
@@ -1013,7 +1048,7 @@ var GC_ONLINE_ENGINE = (() => {
 
   // src/online/protocol.ts
   function stableDeck(entries) {
-    return JSON.stringify(entries.map((entry) => [entry.cardId, entry.ownedId || "", entry.trainLevel]));
+    return JSON.stringify(entries.map((entry) => entry.frameId ? [entry.cardId, entry.ownedId || "", entry.trainLevel, entry.frameId] : [entry.cardId, entry.ownedId || "", entry.trainLevel]));
   }
   function sha256(value) {
     return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value, Utilities.Charset.UTF_8).map((b) => ((b + 256) % 256).toString(16).padStart(2, "0")).join("");
@@ -1024,7 +1059,7 @@ var GC_ONLINE_ENGINE = (() => {
     return { ...view, phase: "invalid", error };
   }
   function stateKey(view) {
-    return JSON.stringify({ round: view.round, life: view.life, types: view.types, used: view.used, outcome: view.outcome, hidden: view.hidden, blind: view.blind, required: view.required, known: view.known, knownTo: view.knownTo, status: view.status, ssr: view.ssr });
+    return JSON.stringify({ round: view.round, life: view.life, types: view.types, used: view.used, outcome: view.outcome, hidden: view.hidden, blind: view.blind, required: view.required, known: view.known, knownTo: view.knownTo, status: view.status, ssr: view.ssr, ...view.frames ? { frames: view.frames } : {} });
   }
   var stateDigest = (view) => sha256(stateKey(view));
   function deriveLegacyView(room) {
@@ -1146,6 +1181,7 @@ var GC_ONLINE_ENGINE = (() => {
           originalType: type,
           currentType: type,
           trainLevel: 0,
+          ...deck.frames?.[index] ? { frameId: deck.frames[index] } : {},
           nullified: false,
           rarity: deck.ssr[index] ? "SSR" : "N"
         })),
@@ -1165,6 +1201,7 @@ var GC_ONLINE_ENGINE = (() => {
   function advancedSnapshot(state, old, known, knownTo) {
     const types = [[...old.types[0]], [...old.types[1]]];
     const ssr = [[...old.ssr[0]], [...old.ssr[1]]];
+    const frames2 = old.frames ? [[...old.frames[0]], [...old.frames[1]]] : [Array(4).fill(""), Array(4).fill("")];
     const hidden = [Array(4).fill(false), Array(4).fill(false)];
     const used = [[], []];
     const required = [null, null];
@@ -1173,6 +1210,7 @@ var GC_ONLINE_ENGINE = (() => {
         const index = slotIndex(card);
         types[side][index] = card.currentType;
         ssr[side][index] = card.rarity === "SSR";
+        frames2[side][index] = card.frameId || "";
         hidden[side][index] = state.players[side].encrypted && !card.publicType;
       }
       used[side] = state.players[side].used.map(slotIndex);
@@ -1188,6 +1226,7 @@ var GC_ONLINE_ENGINE = (() => {
       hidden,
       used,
       required,
+      ...old.frames || frames2.some((list) => list.some(Boolean)) ? { frames: frames2 } : {},
       blind: [state.players[0].blind, state.players[1].blind],
       known: [{ ...known[0] }, { ...known[1] }],
       knownTo: [[...knownTo[0]], [...knownTo[1]]],
@@ -1234,7 +1273,8 @@ var GC_ONLINE_ENGINE = (() => {
     const decks = uids.map((uid) => room.decks?.[uid]);
     const types = [decks[0]?.types ? [...decks[0].types] : [], decks[1]?.types ? [...decks[1].types] : []];
     const ssr = [decks[0]?.ssr ? [...decks[0].ssr] : [], decks[1]?.ssr ? [...decks[1].ssr] : []];
-    let view = { phase: "deck", round: 1, life: [...maxLife], maxLife, types, ssr, used: [[], []], events: [], outcome: null };
+    const frames2 = decks.some((deck) => deck?.frames) ? [decks[0]?.frames ?? Array(4).fill(""), decks[1]?.frames ?? Array(4).fill("")] : void 0;
+    let view = { ...frames2 ? { frames: frames2 } : {}, phase: "deck", round: 1, life: [...maxLife], maxLife, types, ssr, used: [[], []], events: [], outcome: null };
     if (room.forfeit) {
       const winner = uids.indexOf(room.forfeit.winnerUid);
       const loser = uids.indexOf(room.forfeit.loserUid);
@@ -1246,6 +1286,8 @@ var GC_ONLINE_ENGINE = (() => {
       return invalid(view, "\u30AB\u30FC\u30C9\u306E\u7A2E\u985E\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
     if (ssr.some((list) => list.length !== 4 || list.filter(Boolean).length > 1))
       return invalid(view, "SSR\u306F\u30C7\u30C3\u30AD\u306B1\u679A\u307E\u3067\u3067\u3059");
+    if (frames2?.some((list) => list.length !== 4 || list.filter(Boolean).length > 1 || list.some((id) => !!id && !isFrameId(id))))
+      return invalid(view, "\u30D5\u30EC\u30FC\u30E0\u306E\u516C\u958B\u60C5\u5831\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
     let state = publicBattle(room, uids);
     const known = [{}, {}];
     const knownTo = [[], []];
@@ -1269,7 +1311,7 @@ var GC_ONLINE_ENGINE = (() => {
       for (const side of [0, 1]) {
         const pick = reveal[side];
         const current = state.players[side].hand.find((card) => slotIndex(card) === pick.index);
-        if (!current || !Number.isInteger(pick.index) || pick.index < 0 || pick.index > 3 || !cardById[pick.card.cardId] || cardById[pick.card.cardId].type !== current.originalType || cardById[pick.card.cardId].rarity === "SSR" !== (current.rarity === "SSR") || !Number.isInteger(pick.card.trainLevel) || pick.card.trainLevel < 0 || pick.card.trainLevel > 99 || pickCommit(room.meta.battleId, round, pick.index, pick.salt) !== record.commit[uids[side]] || known[side][pick.index] && (known[side][pick.index].cardId !== pick.card.cardId || known[side][pick.index].trainLevel !== pick.card.trainLevel) || view.required?.[side] !== null && view.required?.[side] !== pick.index)
+        if (!current || !Number.isInteger(pick.index) || pick.index < 0 || pick.index > 3 || !cardById[pick.card.cardId] || cardById[pick.card.cardId].type !== current.originalType || String(pick.card.frameId || "") !== String(current.frameId || "") || cardById[pick.card.cardId].rarity === "SSR" !== (current.rarity === "SSR") || !Number.isInteger(pick.card.trainLevel) || pick.card.trainLevel < 0 || pick.card.trainLevel > 99 || pickCommit(room.meta.battleId, round, pick.index, pick.salt) !== record.commit[uids[side]] || known[side][pick.index] && (known[side][pick.index].cardId !== pick.card.cardId || known[side][pick.index].trainLevel !== pick.card.trainLevel) || view.required?.[side] !== null && view.required?.[side] !== pick.index)
           return invalid(view, "\u30AB\u30FC\u30C9\u306E\u516C\u958B\u60C5\u5831\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
         const playedType = pick.currentType ?? current.currentType;
         if (!["rock", "scissors", "paper"].includes(playedType) || !view.hidden?.[side][pick.index] && playedType !== current.currentType)
@@ -1329,7 +1371,7 @@ var GC_ONLINE_ENGINE = (() => {
           for (const side of [0, 1]) {
             const entry = record.swapReveal[uids[side]];
             const card = state.players[side].hand.find((item) => slotIndex(item) === targets[side]);
-            if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType || getCard(entry.cardId).rarity === "SSR" !== (card.rarity === "SSR") || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99)
+            if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType || getCard(entry.cardId).rarity === "SSR" !== (card.rarity === "SSR") || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99 || String(entry.frameId || "") !== String(card.frameId || ""))
               return invalid(view, "\u4EA4\u63DB\u3059\u308B\u30AB\u30FC\u30C9\u306E\u516C\u958B\u60C5\u5831\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
             swaps.push({ side, source: { ...origins[side][targets[side]] }, entry });
           }
@@ -1345,7 +1387,7 @@ var GC_ONLINE_ENGINE = (() => {
             return { ...view, phase: "intelReveal", targetOwner: opposite(intelActor), intelTarget: intelIndex };
           const entry = record.intelReveal[uids[opposite(intelActor)]];
           const card = state.players[opposite(intelActor)].hand.find((item) => slotIndex(item) === intelIndex);
-          if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType || getCard(entry.cardId).rarity === "SSR" !== (card.rarity === "SSR"))
+          if (!card || !cardById[entry.cardId] || getCard(entry.cardId).type !== card.originalType || getCard(entry.cardId).rarity === "SSR" !== (card.rarity === "SSR") || String(entry.frameId || "") !== String(card.frameId || ""))
             return invalid(view, "\u516C\u958B\u3059\u308B\u30AB\u30FC\u30C9\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
         }
       }
@@ -1383,12 +1425,12 @@ var GC_ONLINE_ENGINE = (() => {
           return { ...view, phase: "final" };
         for (const side of [0, 1]) {
           const final = room.final[uids[side]];
-          if (!Array.isArray(final.entries) || final.entries.length !== 4 || deckCommit(final.entries, final.salt) !== decks[side].commit || final.entries.some((entry, index) => !cardById[entry.cardId] || getCard(entry.cardId).type !== decks[side].types[index] || getCard(entry.cardId).rarity === "SSR" !== decks[side].ssr[index] || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99) || ssrCount(final.entries.map((entry) => entry.cardId)) > 1)
+          if (!Array.isArray(final.entries) || final.entries.length !== 4 || deckCommit(final.entries, final.salt) !== decks[side].commit || final.entries.some((entry, index) => !cardById[entry.cardId] || getCard(entry.cardId).type !== decks[side].types[index] || getCard(entry.cardId).rarity === "SSR" !== decks[side].ssr[index] || String(entry.frameId || "") !== String(decks[side].frames?.[index] || "") || !Number.isInteger(entry.trainLevel) || entry.trainLevel < 0 || entry.trainLevel > 99) || ssrCount(final.entries.map((entry) => entry.cardId)) > 1)
             return invalid(view, "\u30C7\u30C3\u30AD\u306E\u516C\u958B\u60C5\u5831\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
         }
         for (const observation of observations) {
           const original = room.final[uids[observation.source.side]].entries[observation.source.index];
-          if (original.cardId !== observation.pick.card.cardId || original.trainLevel !== observation.pick.card.trainLevel)
+          if (original.cardId !== observation.pick.card.cardId || original.trainLevel !== observation.pick.card.trainLevel || String(original.frameId || "") !== String(observation.pick.card.frameId || ""))
             return invalid(view, "\u4F7F\u7528\u30AB\u30FC\u30C9\u3068\u30C7\u30C3\u30AD\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
           if (observation.pick.card.cardId === "C016" && Boolean(observation.pick.combo) !== room.final[uids[observation.side]].entries.some((entry) => entry.cardId === "C003"))
             return invalid(view, "\u304F\u304E\u306E\u7D44\u307F\u5408\u308F\u305B\u60C5\u5831\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
@@ -1410,7 +1452,7 @@ var GC_ONLINE_ENGINE = (() => {
         }
         for (const swap of swaps) {
           const original = room.final[uids[swap.source.side]].entries[swap.source.index];
-          if (original.cardId !== swap.entry.cardId || original.trainLevel !== swap.entry.trainLevel)
+          if (original.cardId !== swap.entry.cardId || original.trainLevel !== swap.entry.trainLevel || String(original.frameId || "") !== String(swap.entry.frameId || ""))
             return invalid(view, "\u4EA4\u63DB\u30AB\u30FC\u30C9\u3068\u30C7\u30C3\u30AD\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
         }
         return { ...view, phase: "finished" };
