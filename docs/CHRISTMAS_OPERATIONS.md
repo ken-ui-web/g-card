@@ -41,7 +41,7 @@
 
 ## 画像
 
-白銀フレームは了承済み見本から `public/images/frames/snow-silver.webp` に採用。サンタアッパーはCPUサンタの顔・衣装を参照して再生成した `G023-front.webp` を使用。限定パックの絵は既存の期間限定パックを利用。新しく生成したCPUサンタは内蔵image_genを使い、原本 `design-source/christmas/cpu-santa.png`、表示用 `public/images/cpu/santa.webp` に保存した。
+白銀フレームは了承済み見本から `public/images/frames/snow-silver.webp` に採用。サンタアッパーはCPUサンタの顔・衣装を参照して再生成し、拳の形を修正した `G023-front.webp` を使用。限定パックは赤・緑・白のクリスマス専用画像を新規生成した。最新の画像・ページデザイン・生成プロンプトは [デザイン改訂記録](CHRISTMAS_FESTIVAL_DESIGN.md) を参照。CPUサンタの原本は `design-source/christmas/cpu-santa.png`、表示用は `public/images/cpu/santa.webp` に保存した。
 
 CPU画像の生成プロンプト：
 

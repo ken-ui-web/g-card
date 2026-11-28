@@ -8,7 +8,7 @@
 - 筋トレ上限＋20。筋トレ最大時は50ダメージ。SSRはデッキに1枚までで、あいこでも発動する。
 - カードID：G023。カードマスターに登録し、開催期間中の限定パックだけに排出する。通常40枚のパックには混ぜない。
 - 採用画像は、サンタCPUと同じ顔・衣装のサンタクロースが全力でアッパーするカード。
-- [カード画像](../public/images/cards/G023-front.webp) / [生成原本](../design-source/christmas/santa-upper.png)
+- [カード画像](../public/images/cards/G023-front.webp) / [拳を修正した原本](../design-source/christmas/santa-upper-hand-fixed.png) / [最新のデザイン・生成記録](CHRISTMAS_FESTIVAL_DESIGN.md)
 
 ## 全ミッション達成報酬：クリスマスフレーム
 
