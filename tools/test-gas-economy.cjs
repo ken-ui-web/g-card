@@ -39,7 +39,7 @@ const Utilities = {
   getUuid: () => crypto.randomUUID(),
   base64EncodeWebSafe: base64,
   base64DecodeWebSafe: (value) => Buffer.from(value, 'base64url'),
-  computeDigest: (_algorithm, value) => crypto.createHash('sha256').update(value).digest(),
+  computeDigest: (_algorithm, value) => [...crypto.createHash('sha256').update(value).digest()],
   computeHmacSha256Signature: (body, secret) => crypto.createHmac('sha256', secret).update(body).digest(),
   newBlob: (value) => ({ getDataAsString: () => Buffer.from(value).toString('utf8') }),
   formatDate: (date) => new Date(date.getTime() + 9 * 3600000).toISOString().slice(0, 10),
@@ -53,6 +53,8 @@ const context = vm.createContext({
 });
 vm.runInContext(fs.readFileSync('gas/Code.gs', 'utf8'), context);
 vm.runInContext(fs.readFileSync('gas/Learning.gs', 'utf8'), context);
+vm.runInContext(fs.readFileSync('gas/OnlineEngine.gs', 'utf8'), context);
+vm.runInContext(fs.readFileSync('gas/OnlineSettlement.gs', 'utf8'), context);
 const call = (name, ...args) => vm.runInContext(name, context)(...args);
 call('setup');
 assert.equal(sheets.get('Cards').getLastRow(), 41);
@@ -509,4 +511,5 @@ assert.equal(runResult.runCount, 3);
 assert.equal(runResult.maxLife, beforeRuns.profile.maxLife + 3 * beforeRuns.economy.lifePerRun);
 assert.equal(sheets.get('PointLog').rows.find((row) => row[4] === runRequestId)[2], -(60 + 66 + 72), '走り込みの費用上昇をまとめて計算する');
 assert.equal(call('gcTrain_', runnerToken, { items: [{ kind: 'run', count: 3 }] }, runRequestId).runCount, 3, '再送しても走り込みを二重に記録しない');
-console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export OK');
+require('./test-online-settlement.cjs')({ call, context, sheets, token, studentToken, email, student, id });
+console.log('GAS economy and admin: rewards, duplicate requests, access, audit, export, authoritative online settlement OK');

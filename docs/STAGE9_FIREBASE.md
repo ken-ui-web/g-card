@@ -38,7 +38,7 @@ Firebaseには対戦時の表示名（学校アカウントは名簿の氏名、
 
 ## 6. 学校側Apps Scriptを更新する
 
-学校側の既存Apps Scriptの `Code.gs` を [最新版](https://github.com/ken-ui-web/g-card/blob/main/gas/Code.gs)に貼り替えて保存する。`Learning.gs` と `Bridge.html` はそのまま。`setup()` を1回実行して `OnlineMatches` シートと設定項目を作り、既存ウェブアプリを「新しいバージョン」で再デプロイする。名簿、所持カード、Gポイントは上書きしない。
+学校側の既存Apps Scriptに、[gasフォルダー](https://github.com/ken-ui-web/g-card/tree/main/gas)の `Code.gs`・`Learning.gs`・`OnlineEngine.gs`・`OnlineSettlement.gs`・`Bridge.html` を配置する。既存マニフェストのウェブアプリ設定を維持して保存し、初期導入時は `setup()` を1回実行する。既存ウェブアプリを「新しいバージョン」で再デプロイする。名簿、所持カード、Gポイントは上書きしない。2026年11月28日以降の勝敗確定処理は [ONLINE_SETTLEMENT.md](./ONLINE_SETTLEMENT.md) を参照。
 
 ## 7. 確認してから生徒に公開する
 

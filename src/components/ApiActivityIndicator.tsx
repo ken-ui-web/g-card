@@ -13,7 +13,7 @@ const actionLabels: Record<string, string> = {
   adminSavePack: 'パック設定を保存中', adminSaveMission: 'ミッションを保存中', adminSaveDeck: '対戦設定を保存中',
   adminListTests: 'テスト設定を読み込み中', adminGetTest: 'テストを読み込み中', adminSaveTest: 'テストを保存中',
   adminDeleteTest: 'テストを削除中', adminTestResponses: '受験結果を集計中',
-  onlineJoin: '対戦の参加を確認中', onlineReport: '対戦結果を照合中', onlineResult: '対戦報酬を確認中', getRanking: 'ランキングを読み込み中',
+  onlineJoin: '対戦の参加を確認中', onlineDeck: '対戦するカードを登録中', onlineSettle: '勝敗を記録中', onlineReport: '対戦結果を照合中', onlineResult: '対戦報酬を確認中', getRanking: 'ランキングを読み込み中',
 };
 
 export function ApiActivityIndicator() {

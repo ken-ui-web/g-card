@@ -26,6 +26,12 @@ export function disconnectFirebase(): void {
   if (database) goOffline(database);
 }
 
+export async function firebaseToken(): Promise<string> {
+  const user = getAuth().currentUser;
+  if (!user) throw new Error('対戦への接続を確認してください。');
+  return user.getIdToken();
+}
+
 export function roomPath(roomId: string): string { return `rooms/${roomId}`; }
 
 const hostedKey = 'g-card-hosted-rooms-v1';

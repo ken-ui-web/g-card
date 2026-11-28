@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getCard } from '../data/cards';
-import { deckCommit, deriveView, myResult, pickCommit, stateDigest, type OnlineEntry, type OnlineRoom } from './protocol';
+import { deckCommit, myResult, pickCommit, stateDigest, type OnlineEntry, type OnlineRoom } from './protocol';
+import { deriveView } from './protocolParity.testutil';
 
 describe('オンライン対戦の公開情報', () => {
   it('4ラウンドを両端末で再計算し、デッキ公開後に結果を確定する', async () => {

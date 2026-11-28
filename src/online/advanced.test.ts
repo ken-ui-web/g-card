@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { availableCards, getCard } from '../data/cards';
-import { deckCommit, deriveView, pickCommit, sha256, stateDigest, type OnlineEntry, type OnlineRoom, type RoundPick } from './protocol';
+import { deckCommit, pickCommit, sha256, stateDigest, type OnlineEntry, type OnlineRoom, type RoundPick } from './protocol';
+import { deriveView } from './protocolParity.testutil';
 
 async function room(left: string[], right: string[], maxLife = 100): Promise<OnlineRoom> {
   const entries = (ids: string[]): OnlineEntry[] => ids.map((cardId) => ({ cardId, trainLevel: 0 }));

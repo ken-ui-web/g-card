@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
+import { get, onValue, ref, remove, serverTimestamp, set, type Database } from 'firebase/database';
 import { Card } from '../components/Card';
 import { BattleDeckDock } from '../components/BattleDeckDock';
 import { useScrolledPast } from '../components/useScrolledPast';
 import { BrandIdentity } from '../components/BrandIdentity';
 import { OnlineBattleBoard } from './OnlineBattleBoard';
 import { LoadingState } from '../components/LoadingState';
+import { SsrGuide } from '../components/SsrGuide';
 import { SoundToggle } from '../components/SoundToggle';
 import { playSfx } from '../audio/sfx';
 import { availableCards, getCard, ssrCount, type CardType, typeLabels } from '../data/cards';
@@ -13,13 +14,13 @@ import { selectedFromSlots, toDeckSlots, toggleDeckSlot, validDeckSlots, type De
 import { callApi, isGuest, savedSession, type BootstrapData } from '../portal/api';
 import { isBootstrapFresh, patchBootstrapCache, readBootstrapCache, requestBootstrap, writeBootstrapCache } from '../portal/bootstrapCache';
 import { compareCards } from '../data/cardOrder';
-import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
+import { connectFirebase, createCodeRoom, disconnectFirebase, firebaseConfigured, firebaseToken, heartbeat, joinCodeRoom, roomPath, setPresence } from './firebase';
 import { HEARTBEAT_INTERVAL_MS, opponentTimedOut, phaseSeconds, type PhaseClock } from './presence';
 import { deckCommit, deriveView, myResult, pickCommit, randomSalt, sha256, stateDigest, type OnlineEntry, type OnlineRoom, type OnlineView, type RoundPick } from './protocol';
 import { initialOnlineSelection, type OnlinePoolItem } from './selection';
 import { requireMatchingOnlineMode } from './accountMode';
 
-type Reward = { status: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
+type Reward = { status: string; reason?: string; result: string; awarded: number; gPoint: number; onlineRewards: number };
 type EncryptProof = { round: number; index: number; to: CardType; salt: string };
 const encryptKey = (roomId: string) => `g-card-encrypt:${roomId}`;
 function encryptProofs(roomId: string): EncryptProof[] {
@@ -141,6 +142,7 @@ export function OnlinePage() {
   const rewardCacheApplied = useRef(false);
   const viewPhase = useRef('');
   const forfeitAttempt = useRef({ pending: false, retryAt: 0 });
+  const settling = useRef(false);
   rewardStatus.current = reward?.status || '';
   viewPhase.current = view?.phase || '';
   const mySide: 0 | 1 = room?.meta.hostUid === uid ? 0 : 1;
@@ -208,8 +210,16 @@ export function OnlinePage() {
         const maxLife = account.profile.maxLife;
         requireMatchingOnlineMode(room.meta.guestBattle, guestBattle);
         if (room.meta.teacherTest && account.profile.role !== 'admin') throw new Error('この部屋は管理者のテスト用です。');
+        if (!guestBattle && !room.meta.teacherTest) {
+          const proof = { battleId: roomId, firebaseToken: await firebaseToken() };
+          // Check the old timestamps before presence can erase a mutual disconnect.
+          if (room.decks?.[room.meta.hostUid] && room.decks?.[room.meta.guestUid!]) {
+            const result = await callApi<Reward>('onlineSettle', session, proof);
+            if (['complete', 'invalid'].includes(result.status)) { setReward(result); setJoined(true); return; }
+          }
+          await callApi('onlineJoin', session, { ...proof, uid, deckMode: room.meta.deckMode });
+        }
         await setPresence(db, roomId, uid, room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname, maxLife);
-        if (!guestBattle && !room.meta.teacherTest) await callApi('onlineJoin', session, { battleId: roomId, uid, deckMode: room.meta.deckMode });
         setSelectedSlots(toDeckSlots(initialOnlineSelection(onlinePool(account), account.lastDeck))); setJoined(true);
       } catch (failure) { entered.current = false; setError((failure as Error).message); }
     })();
@@ -221,12 +231,28 @@ export function OnlinePage() {
     let seenConnection = false;
     const unsubscribe = onValue(ref(db, '.info/connected'), (snapshot) => {
       const connected = snapshot.val() === true;
-      setLocalConnected(connected);
-      if (!seenConnection) { seenConnection = true; return; }
-      if (!connected) return;
+      if (!seenConnection) { seenConnection = true; setLocalConnected(connected); return; }
+      if (!connected) { setLocalConnected(false); return; }
       const maxLife = account.profile.maxLife;
       const nickname = room.meta.teacherTest ? uid === room.meta.hostUid ? '先生A' : '先生B' : account.profile.nickname;
-      void setPresence(db, roomId, uid, nickname, maxLife).catch((failure: Error) => {
+      void (async () => {
+        const fresh = (await get(ref(db, roomPath(roomId)))).val() as OnlineRoom | null;
+        if (!fresh) throw new Error('この対戦は終了しました。');
+        const derived = await deriveView(fresh);
+        const players = [fresh.meta.hostUid, fresh.meta.guestUid || ''].map((id) => fresh.players?.[id]);
+        const timedOut = players.some((player) => opponentTimedOut(player?.lastSeen, Date.now()));
+        if (!guestBattle && !room.meta.teacherTest && (timedOut || derived.outcome !== null || derived.phase === 'invalid')) {
+          const result = await callApi<Reward>('onlineSettle', session, { battleId: roomId, firebaseToken: await firebaseToken() });
+          if (['complete', 'invalid'].includes(result.status)) { if (active) setReward(result); return; }
+        }
+        if ((guestBattle || room.meta.teacherTest) && derived.outcome === null && players.every((player) => opponentTimedOut(player?.lastSeen, Date.now()))) {
+          if (active) setReward({ status: 'invalid', reason: 'cancelled', result: '', awarded: 0, gPoint: account.profile.gPoint, onlineRewards: 0 });
+          return;
+        }
+        if (['complete', 'invalid'].includes(rewardStatus.current)) return;
+        await setPresence(db, roomId, uid, nickname, maxLife);
+        if (active) setLocalConnected(true);
+      })().catch((failure: Error) => {
         if (active) setError(`再接続できません：${failure.message}`);
       });
     });
@@ -234,12 +260,12 @@ export function OnlinePage() {
   }, [db, uid, roomId, joined, room?.meta.battleId, room?.meta.deckMode, room?.meta.hostUid, room?.meta.teacherTest, account]);
 
   useEffect(() => {
-    if (!db || !uid || !roomId || !joined || !localConnected || ['forfeit', 'finished', 'invalid'].includes(view?.phase || '')) return;
+    if (!db || !uid || !roomId || !joined || !localConnected || ['forfeit', 'finished', 'invalid'].includes(view?.phase || '') || reward && ['complete', 'invalid'].includes(reward.status)) return;
     const timer = window.setInterval(() => {
       void heartbeat(db, roomId, uid).catch(() => {});
     }, HEARTBEAT_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [db, uid, roomId, joined, localConnected, view?.phase]);
+  }, [db, uid, roomId, joined, localConnected, view?.phase, reward?.status]);
 
   const takeAction = (key: string, task: () => Promise<unknown>) => {
     if (actionKey.current.has(key)) return;
@@ -248,15 +274,15 @@ export function OnlinePage() {
   };
 
   useEffect(() => {
-    if (!session || !joined || reward || (view?.phase !== 'finished' && view?.phase !== 'invalid')) return;
+    if (!session || !joined || reward && ['complete', 'invalid'].includes(reward.status) || !view || view.outcome === null && !['invalid', 'forfeit'].includes(view.phase) && !opponentOffline) return;
     const timer = window.setInterval(() => setReportRetry((count) => count + 1), 5000);
     return () => window.clearInterval(timer);
-  }, [session, joined, reward, view?.phase]);
+  }, [session, joined, reward?.status, view?.phase, view?.outcome, opponentOffline]);
 
   useEffect(() => {
-    if (!db || !uid || !room || !view || !joined) return;
-    if (view.phase !== 'finished' && view.phase !== 'invalid' && (!entries || !salt)) return;
-    const reportDeck = entries ?? room.final?.[uid]?.entries;
+    if (!db || !uid || !room || !view || !joined || !localConnected) return;
+    if (reward && ['complete', 'invalid'].includes(reward.status)) return;
+    if (!['finished', 'invalid', 'forfeit'].includes(view.phase) && (!entries || !salt)) return;
     const path = roomPath(roomId);
     const record = room.rounds?.[String(view.round)];
     if (view.phase === 'reveal' && record?.commit?.[uid] && !record.reveal?.[uid]) {
@@ -282,21 +308,27 @@ export function OnlinePage() {
       await set(ref(db, `${path}/rounds/${view.round}/stateHash/${uid}`), await stateDigest(view));
     });
     if (view.phase === 'final' && !room.final?.[uid]) takeAction('final', () => set(ref(db, `${path}/final/${uid}`), { entries, salt, ...(room.meta.protocolVersion === 2 ? { encryptProofs: encryptProofs(roomId) } : {}) }));
-    if ((view.phase === 'finished' || view.phase === 'invalid') && session && !reward && (reportDeck || view.phase === 'invalid')) takeAction('report', async () => {
+    if (['finished', 'invalid', 'forfeit'].includes(view.phase) && session && !reward && (guestBattle || room.meta.teacherTest)) takeAction('report', async () => {
       const result = view.phase === 'invalid' ? 'draw' : myResult(view, mySide);
       if (guestBattle || room.meta.teacherTest) {
         setReward({ status: view.phase === 'invalid' ? 'invalid' : 'complete', result, awarded: 0, gPoint: account?.profile.gPoint ?? 0, onlineRewards: 0 });
         return;
       }
-      const stateHash = view.phase === 'invalid' ? await sha256(`invalid:${roomId}:${view.error}`) : await stateDigest(view);
-      const response = await callApi<Reward>('onlineReport', session, { battleId: roomId, result, stateHash, suspicious: view.phase === 'invalid', deck: reportDeck ?? [] });
-      setReward(response);
-      setError('');
     });
-  }, [db, uid, room, view, entries, salt, joined, session, roomId, reward, mySide, account, reportRetry]);
+  }, [db, uid, room, view, entries, salt, joined, session, roomId, reward, mySide, account, reportRetry, localConnected]);
 
   useEffect(() => {
-    if (!db || !uid || !roomId || !room?.meta.guestUid || !joined || !opponentUid || !opponentOffline || room.forfeit || !view || view.outcome !== null || view.phase === 'invalid') return;
+    if (!session || guestBattle || room?.meta.teacherTest || !joined || !localConnected || !view || settling.current || reward && ['complete', 'invalid'].includes(reward.status)) return;
+    if (view.outcome === null && view.phase !== 'invalid' && view.phase !== 'forfeit' && !opponentOffline) return;
+    settling.current = true;
+    void (async () => {
+      const response = await callApi<Reward>('onlineSettle', session, { battleId: roomId, firebaseToken: await firebaseToken() });
+      if (currentRoom.current === roomId) { setReward(response); setError(''); }
+    })().catch((failure: Error) => { if (currentRoom.current === roomId) setError(failure.message); }).finally(() => { settling.current = false; });
+  }, [session, roomId, room?.meta.teacherTest, joined, localConnected, view?.phase, view?.outcome, reward?.status, reportRetry, opponentOffline]);
+
+  useEffect(() => {
+    if (!db || !uid || !roomId || !room?.meta.guestUid || !joined || !opponentUid || !opponentOffline || room.forfeit || !view || view.outcome !== null || view.phase === 'invalid' || reward && ['complete', 'invalid'].includes(reward.status)) return;
     const attempt = forfeitAttempt.current;
     if (attempt.pending || elapsed < attempt.retryAt) return;
     attempt.pending = true;
@@ -325,7 +357,7 @@ export function OnlinePage() {
   }, [session, reward, room?.meta.teacherTest]);
 
   useEffect(() => {
-    if (!db || !room || !uid || (view?.phase !== 'forfeit' && (!reward || !['complete', 'invalid'].includes(reward.status)))) return;
+    if (!db || !room || !uid || !reward || !['complete', 'invalid'].includes(reward.status)) return;
     if (!room.receipts?.[uid]) takeAction('receipt', () => set(ref(db, `${roomPath(roomId)}/receipts/${uid}`), true));
     if (room.meta.hostUid === uid && room.meta.guestUid && room.receipts?.[uid] && room.receipts?.[room.meta.guestUid]) {
       takeAction('cleanup', async () => {
@@ -337,6 +369,7 @@ export function OnlinePage() {
 
   useEffect(() => { const timer = window.setInterval(() => setElapsed(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { if (view?.phase === 'forfeit') setPresentation(null); }, [view?.phase]);
+  useEffect(() => { if (reward?.status === 'invalid' || reward?.reason === 'forfeit') setPresentation(null); }, [reward?.status, reward?.reason]);
   useEffect(() => {
     if (view?.phase === 'verify' && view.reveal && view.round > seenRound && !presentation) setPresentation(view);
   }, [view, seenRound, presentation]);
@@ -383,8 +416,13 @@ export function OnlinePage() {
     setBusy(true); setError('');
     try {
       const deck = selectedValid.map((id) => { const item = pool.find((candidate) => candidate.id === id)!; return { cardId: item.cardId, ownedId: id, trainLevel: item.trainLevel }; });
-      const nextSalt = randomSalt();
+      let nextSalt = randomSalt();
+      try {
+        const pending = JSON.parse(sessionStorage.getItem(`g-card-online:${roomId}`) || 'null');
+        if (pending?.mode === 'owned' && JSON.stringify(pending.entries) === JSON.stringify(deck)) nextSalt = pending.salt;
+      } catch { /* A new attempt can still be registered. */ }
       sessionStorage.setItem(`g-card-online:${roomId}`, JSON.stringify({ entries: deck, salt: nextSalt, mode: 'owned' }));
+      if (session && !guestBattle && !room.meta.teacherTest) await callApi('onlineDeck', session, { battleId: roomId, deck, salt: nextSalt, firebaseToken: await firebaseToken() });
       await set(ref(db, `${roomPath(roomId)}/decks/${uid}`), { types: deck.map((item) => getCard(item.cardId).type), ssr: deck.map((item) => getCard(item.cardId).rarity === 'SSR'), commit: await deckCommit(deck, nextSalt) });
       setEntries(deck); setSalt(nextSalt);
     } catch (failure) { setError((failure as Error).message); }
@@ -419,12 +457,15 @@ export function OnlinePage() {
           const index = selection[i];
           if (index === undefined || index < 0 && !request.optional) throw new Error('対象を選んでください');
           if (request.kind === 'encrypt') {
-            const secretSalt = randomSalt();
             const secretIndex = index < 0 ? -1 : index;
             const secretTo = index < 0 ? 'rock' : to;
+            const previous = encryptProofs(roomId).find((item) => item.round === view.round);
+            if (previous && (previous.index !== secretIndex || previous.to !== secretTo)) throw new Error('登録済みの暗号化は変更できません。同じ対象で再送してください。');
+            const secretSalt = previous?.salt ?? randomSalt();
             const commit = await sha256(`${roomId}:${view.round}:${secretIndex}:${secretTo}:${secretSalt}`);
             const proofs = [...encryptProofs(roomId).filter((item) => item.round !== view.round), { round: view.round, index: secretIndex, to: secretTo, salt: secretSalt }];
             sessionStorage.setItem(encryptKey(roomId), JSON.stringify(proofs));
+            if (session && !guestBattle && !room?.meta.teacherTest) await callApi('onlineDeck', session, { battleId: roomId, encryptProofs: proofs, firebaseToken: await firebaseToken() });
             encoded.push({ commit });
           } else encoded.push({ index, ...(['own'].includes(request.kind) ? { to } : {}) });
         }
@@ -437,7 +478,7 @@ export function OnlinePage() {
   };
 
   useEffect(() => {
-    if (!room || !view || !joined || !entries && view.phase !== 'deck' || presentation) return;
+    if (!room || !view || !joined || !entries && view.phase !== 'deck' || presentation || reward && ['complete', 'invalid'].includes(reward.status)) return;
     const key = `${roomId}:${view.round}:${view.phase}`;
     const seconds = phaseSeconds(phaseClock.current, key, elapsed, !localConnected || opponentAway);
     if (!localConnected || opponentAway) return;
@@ -464,6 +505,7 @@ export function OnlinePage() {
   }, [elapsed, view, room, joined, entries, roomId, uid, selectedValid, pool, mySide, presentation, localConnected, opponentAway]);
 
   const leave = () => {
+    if (db && uid && roomId && room?.players?.[uid]) void set(ref(db, `${roomPath(roomId)}/players/${uid}/connected`), false).catch(() => {});
     currentRoom.current = ''; setRoomId(''); setRoom(null); setView(null); setReward(null); setReportRetry(0); setJoined(false); setPresentation(null); setSeenRound(0); entered.current = false; forfeitAttempt.current = { pending: false, retryAt: 0 };
     window.history.replaceState(null, '', '#/online');
   };
@@ -477,9 +519,9 @@ export function OnlinePage() {
       {room && !room.meta.teacherTest && account?.profile.role === 'admin' && <p role="status">通常対戦の部屋です。同じ学校アカウント同士では参加できません。</p>}
       {room && joined && !localConnected && view?.outcome === null && <p role="status">通信が切れています。再接続を待っています。制限時間は一時停止中です。</p>}
       {room && joined && localConnected && opponentAway && !opponentOffline && view?.outcome === null && <p role="status">相手との通信を確認中です。制限時間は一時停止中です。</p>}
-      {!session ? <p>ホームで学校アカウントかゲストでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>所持しているカードから4枚を選び、友達と対戦します。最大ライフ {maxLife}</p>{account.needsNickname && <p role="alert">ホームでゲストのニックネームを決めてください。</p>}{!canBuildDeck && <p role="alert">オンライン対戦には自分のカードが4枚必要です。SSRは1枚まで使えます。カード購入でそろえてください。</p>}<div className="button-row"><button className="button button--primary" disabled={busy || !canBuildDeck} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || !canBuildDeck || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <>{error ? <button type="button" className="button button--ghost" onClick={leave}>対戦から戻る</button> : <LoadingState text="部屋を読み込み中" />}</> : room.meta.deckMode !== 'owned' ? <><p role="alert">サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。</p><div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></> : <><p>自分のカード{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{playerName(room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1')} VS {room.meta.guestUid ? playerName(room.players?.[room.meta.guestUid]?.nickname || '相手') : '相手を待っています…'}</p>
-        {!room.meta.guestUid ? <LoadingState text="相手を待っています。コードを友達に伝えてください" /> : !joined ? <LoadingState text="対戦相手の参加を確認中" /> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p></div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻らなかったため、勝敗を確定しています…</p></div> : view?.phase === 'deck' ? <>
-          <h2>カードを4枚選ぶ</h2>
+      {!session ? <p>ホームで学校アカウントかゲストでログインしてください。<a href="#/home">ホームへ戻る</a></p> : !firebaseConfigured ? <p>先生によるFirebaseの接続設定を待っています。</p> : !account || !db ? <LoadingState text="対戦に接続中" cardTips /> : !onlineAvailable ? <p>オンライン対戦は先生が公開すると使えます。</p> : !roomId ? <><p>所持しているカードから4枚を選び、友達と対戦します。最大ライフ {maxLife}</p>{account.needsNickname && <p role="alert">ホームでゲストのニックネームを決めてください。</p>}{!canBuildDeck && <p role="alert">オンライン対戦には自分のカードが4枚必要です。SSRは1枚まで使えます。カード購入でそろえてください。</p>}<div className="button-row"><button className="button button--primary" disabled={busy || !canBuildDeck} onClick={() => { void startCode(); }}>部屋を作る</button></div><label>友達の4桁コード<input inputMode="numeric" maxLength={4} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></label><button className="button button--ghost" disabled={busy || !canBuildDeck || code.length !== 4} onClick={() => { void joinCode(); }}>コードで参加</button></> : !room ? <>{error ? <button type="button" className="button button--ghost" onClick={leave}>対戦から戻る</button> : <LoadingState text="部屋を読み込み中" />}</> : room.meta.deckMode !== 'owned' ? <><p role="alert">サンプルカードのオンライン対戦は終了しました。自分のカードで新しい部屋を作ってください。</p><div className="button-row"><button className="button button--ghost" onClick={leave}>対戦から戻る</button></div></> : <><p>自分のカード{room.meta.code ? ` · ルームコード ${room.meta.code}` : ''}</p><p>{playerName(room.players?.[room.meta.hostUid]?.nickname || 'プレイヤー1')} VS {room.meta.guestUid ? playerName(room.players?.[room.meta.guestUid]?.nickname || '相手') : '相手を待っています…'}</p>
+        {!room.meta.guestUid ? <LoadingState text="相手を待っています。コードを友達に伝えてください" /> : !joined ? <LoadingState text="対戦相手の参加を確認中" /> : reward?.status === 'invalid' ? <div role="status"><h2>{reward.reason === 'cancelled' ? '対戦を中断しました' : '無効試合'}</h2><p>{reward.reason === 'cancelled' ? '両者の中断、または対戦の準備中のため、勝利数とGは変わりません。' : '対戦データを確認できなかったため、勝利数とGは変わりません。'}</p></div> : reward?.status === 'complete' && !guestBattle && !room.meta.teacherTest ? <div role="status"><h2>{reward.result === 'draw' ? '引き分け' : reward.reason === 'forfeit' ? reward.result === 'win' ? '不戦勝' : '不戦敗' : reward.result === 'win' ? '勝利！' : '敗北'}</h2><p>{reward.reason === 'forfeit' ? '30秒以上の切断で対戦が終了しました。勝敗を記録しました。G報酬はありません。' : `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G`}</p></div> : view?.phase === 'forfeit' ? <div role="status"><h2>{myResult(view, mySide) === 'win' ? '不戦勝' : '不戦敗'}</h2><p>30秒以上の切断で対戦は終了しました。Gポイントは付与されません。</p>{!guestBattle && !room.meta.teacherTest && <LoadingState text="勝敗を記録中" />}</div> : opponentOffline && view?.outcome === null && view?.phase !== 'invalid' ? <div role="status"><h2>相手の接続が切れました</h2><p>30秒以上戻らなかったため、勝敗を確定しています…</p></div> : view?.phase === 'deck' ? <>
+          <h2>カードを4枚選ぶ</h2><SsrGuide compact />
           <p>制限時間90秒。相手には種類とSSRかどうかが見え、カード名はラウンドまで隠れます。SSRは1枚までです。</p>
           {room.decks?.[uid] ? <LoadingState text="相手の準備を待っています" /> : <>
             <div className="battle-deck-actions">
@@ -508,7 +550,7 @@ export function OnlinePage() {
               return <button key={item.id} disabled={selectedValid.length >= 4 || card.rarity === 'SSR' && selectedSsr >= 1} onClick={() => toggleSelectedCard(item.id)}><Card card={card} width={110} /><strong>{card.name}</strong><small>{card.rarity} · {typeLabels[card.type]}</small></button>;
             })}</div>
           </>}
-        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || guestBattle || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{guestBattle ? 'ゲスト対戦が終了しました。ランキングとG報酬は対象外です。' : room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : '相手の結果を確認中です。照合が終わるまで勝利数と報酬は記録されません。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={playerName(opponent?.nickname || '相手')} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
+        </> : !view ? <LoadingState text="対戦を読み込み中" /> : view.phase === 'invalid' ? <div role="alert"><h2>無効試合</h2><p>{view.error}</p></div> : view.phase === 'finished' ? <><h2>{reward?.status === 'invalid' ? '無効試合' : myResult(view, mySide) === 'win' ? reward?.status === 'complete' || guestBattle || room.meta.teacherTest ? '勝利！' : '勝利・記録確認中' : myResult(view, mySide) === 'draw' ? '引き分け' : '敗北'}</h2><p>ライフ {view.life[mySide]} 対 {view.life[mySide === 0 ? 1 : 0]}</p><p role="status">{guestBattle ? 'ゲスト対戦が終了しました。ランキングとG報酬は対象外です。' : room.meta.teacherTest ? '管理者テスト対戦のためGポイントは増減しません。' : reward?.status === 'complete' ? `結果を記録しました · 報酬 +${reward.awarded}G · 所持 ${reward.gPoint}G` : reward?.status === 'invalid' ? '対戦結果を確認できなかったため、勝利数と報酬は記録されません。' : 'サーバーで勝敗を確認し、勝利数と報酬を記録しています。'}</p></> : <OnlineBattleBoard view={view} side={mySide} entries={entries} opponentName={playerName(opponent?.nickname || '相手')} busy={busy} waiting={view.phase === 'select' && Boolean(room.rounds?.[String(view.round)]?.commit?.[uid])} onPick={(index) => { void selectPick(index); }}>
           {view.phase === 'reveal' ? <p role="status">お互いのカードを公開中…</p>
             : view.phase === 'target' && view.targetOwner === mySide && room.meta.protocolVersion === 2 ? <TargetPicker view={view} side={mySide} selected={targetSelections} onSelect={setTargetSelections} type={targetType} onType={setTargetType} onSubmit={() => { void chooseTarget(); }} busy={busy} />
             : view.phase === 'target' && view.targetOwner === mySide ? <><p>相手の残りカードを1枚選んでください（20秒）。</p><div className="online-targets">{view.types[mySide === 0 ? 1 : 0].map((_, index) => view.used[mySide === 0 ? 1 : 0].includes(index) ? null : <button key={index} onClick={() => { void chooseTarget([index]); }}>{typeLabels[view.types[mySide === 0 ? 1 : 0][index]]} · {index + 1}番</button>)}<button onClick={() => { void chooseTarget([-1]); }}>変更しない</button></div></>

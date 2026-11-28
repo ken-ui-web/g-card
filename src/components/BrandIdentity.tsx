@@ -2,8 +2,8 @@ const logoUrl = `${import.meta.env.BASE_URL}images/brand/logo.png`;
 // Add student-facing changes to this day's list; admin-only changes do not affect it.
 const studentRelease = {
   version: '2.0',
-  date: '11/20',
-  changes: ['ゲスト同士も自分のカードと育成した強さでオンライン対戦できるようになりました。部屋の作成も安定させました。'],
+  date: '11/28',
+  changes: ['オンライン対戦の切断時も勝敗を記録する仕組みを改善しました。ログイン・対戦準備で、カード画像付きのSSR説明を表示します。'],
 } as const;
 
 function BrandContent() {

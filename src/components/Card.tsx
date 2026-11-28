@@ -9,15 +9,16 @@ type CardProps = {
   damage?: number | null;
   width?: number;
   className?: string;
+  thumbnail?: boolean;
 };
 
 const asset = (path: string) => `${import.meta.env.BASE_URL}${path}${path.startsWith('images/cards/') ? `?v=${import.meta.env.VITE_BUILD_VERSION || 'dev'}` : ''}`;
 
-export function Card({ card, side = 'front', backType, damage, width, className = '' }: CardProps) {
+export function Card({ card, side = 'front', backType, damage, width, className = '', thumbnail = false }: CardProps) {
   const type = backType ?? card.type;
   const image = side === 'back'
     ? `images/card-parts/back-${type}.webp`
-    : `images/cards/${card.frontImage}`;
+    : `images/${thumbnail ? 'card-tips' : 'cards'}/${card.frontImage}`;
   const label = side === 'back'
     ? `${type === 'unknown' ? '種類不明' : typeLabels[type]}のカードの裏面。${card.rarity === 'SSR' ? 'SSR。' : ''}カード名と効果は未公開`
     : `${card.name}。${typeLabels[card.type]}。${card.text}${damage !== null && damage !== undefined ? `。最終ダメージ${damage}` : ''}`;

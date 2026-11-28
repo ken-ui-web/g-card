@@ -17,7 +17,7 @@ const GC_HEADERS = {
   Missions: ['missionId', 'period', 'condition', 'targetCount', 'reward', 'label', 'active', 'sortOrder'],
   MissionProgress: ['email', 'missionId', 'periodKey', 'progress', 'completedAt'],
   BattleLog: ['battleId', 'email', 'mode', 'deckMode', 'cpuLevel', 'result', 'opponentNickname', 'gAwarded', 'createdAt'],
-  OnlineMatches: ['battleId', 'deckMode', 'emailA', 'uidA', 'emailB', 'uidB', 'resultA', 'hashA', 'resultB', 'hashB', 'createdAt', 'status', 'finishedAt'],
+  OnlineMatches: ['battleId', 'deckMode', 'emailA', 'uidA', 'emailB', 'uidB', 'resultA', 'hashA', 'resultB', 'hashB', 'createdAt', 'status', 'finishedAt', 'deckAJson', 'deckBJson', 'finishReason'],
   DailyCounters: ['email', 'dateKey', 'cpuRewards', 'onlineRewards', 'firstWinGiven', 'packsBought'],
   AdminAdjustments: ['requestId', 'adminEmail', 'targetEmail', 'delta', 'reason', 'balanceAfter', 'createdAt'],
   AdminActions: ['requestId', 'adminEmail', 'targetEmail', 'action', 'before', 'after', 'createdAt'],
@@ -122,6 +122,10 @@ function setup() {
       sheet.setFrozenRows(1);
     } else {
       const actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+      if (name === 'OnlineMatches' && actual.slice(0, 13).join('|') === headers.slice(0, 13).join('|') && actual.slice(13).every(function (value) { return value === ''; })) {
+        sheet.getRange(1, 14, 1, 3).setValues([headers.slice(13)]);
+        for (let i = 13; i < headers.length; i++) actual[i] = headers[i];
+      }
       if (name === 'Users' && actual.slice(0, -1).join('|') === headers.slice(0, -1).join('|') && actual[headers.length - 1] === '') {
         sheet.getRange(1, headers.length).setValue('trainingPolicyJson');
         actual[headers.length - 1] = 'trainingPolicyJson';
@@ -262,6 +266,8 @@ function gcDispatch_(request) {
     case 'reportBattle': return gcReportBattle_(request.session, request.payload || {});
     case 'getCpuRecent': return gcGetCpuRecent_(request.session);
     case 'onlineJoin': return gcOnlineJoin_(request.session, request.payload || {});
+    case 'onlineDeck': return gcOnlineDeck_(request.session, request.payload || {});
+    case 'onlineSettle': return gcOnlineSettle_(request.session, request.payload || {});
     case 'onlineReport': return gcOnlineReport_(request.session, request.payload || {});
     case 'onlineResult': return gcOnlineResult_(request.session, request.payload || {});
     case 'getRanking': return gcGetRanking_(request.session);
@@ -1491,6 +1497,7 @@ function gcOnlineAccess_(identity) {
 
 function gcOnlineMatch_(battleId) {
   const sheet = gcSheet_('OnlineMatches');
+  if (sheet.getRange(1, 14).getValues()[0][0] === '') sheet.getRange(1, 14, 1, 3).setValues([GC_HEADERS.OnlineMatches.slice(13)]);
   if (sheet.getLastRow() < 2) return null;
   const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
   const index = ids.findIndex(function (row) { return row[0] === battleId; });
@@ -1504,6 +1511,7 @@ function gcOnlineJoin_(token, payload) {
   const uid = String(payload.uid || '');
   const mode = String(payload.deckMode || '');
   if (!/^[a-zA-Z0-9]{10,128}$/.test(uid) || ['sample', 'owned'].indexOf(mode) < 0) gcError_('BAD_REQUEST', '対戦への参加情報を確認してください');
+  if (payload.firebaseToken && gcOnlineEvidence_(payload).uid !== uid) gcError_('FORBIDDEN', '対戦への参加情報が一致しません');
   return gcWithLock_(function () {
     const found = gcOnlineMatch_(battleId);
     if (!found) {
@@ -1524,7 +1532,7 @@ function gcOnlineJoin_(token, payload) {
   });
 }
 
-function gcOnlineAwardOne_(row, side) {
+function gcOnlineAwardOne_(row, side, noReward) {
   const email = String(row[side === 0 ? 2 : 4]);
   const opponent = String(row[side === 0 ? 4 : 2]);
   const result = String(row[side === 0 ? 6 : 8]);
@@ -1532,6 +1540,11 @@ function gcOnlineAwardOne_(row, side) {
   const log = gcSheet_('BattleLog');
   const existing = log.getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === email; });
   if (existing) return;
+  if (noReward) {
+    const other = gcFindUser_(opponent);
+    log.appendRow([battleId, email, 'online', row[1], '', result, other ? String(other.values[4] || other.values[5] || '') : '', 0, new Date().toISOString()]);
+    return;
+  }
   const record = gcFindUser_(email);
   const user = gcUserObject_(record);
   const identity = { email: email, settings: gcSettings_() };
@@ -1578,6 +1591,7 @@ function gcOnlineValidateDeck_(identity, mode, deck) {
 }
 
 function gcOnlineReport_(token, payload) {
+  if (payload.firebaseToken) return gcOnlineSettle_(token, payload);
   const identity = gcSession_(token, false);
   const battleId = gcRequestId_(payload.battleId);
   const result = String(payload.result || '');
@@ -1591,6 +1605,7 @@ function gcOnlineReport_(token, payload) {
     if (side < 0) gcError_('FORBIDDEN', 'この対戦には参加していません');
     if (row[11] === 'complete' || row[11] === 'invalid') return gcOnlineResult_(token, { battleId: battleId });
     if (row[11] !== 'active') gcError_('BAD_REQUEST', '相手の参加を待ってください');
+    if (row[13] || row[14]) gcError_('UPDATE_REQUIRED', '対戦画面を開き直して結果を記録してください');
     if (payload.suspicious === true) {
       row[11] = 'invalid'; row[12] = new Date().toISOString();
       found.sheet.getRange(found.rowNumber, 1, 1, GC_HEADERS.OnlineMatches.length).setValues([row]);
@@ -1626,7 +1641,7 @@ function gcOnlineResult_(token, payload) {
   if (side < 0) gcError_('FORBIDDEN', 'この対戦には参加していません');
   const ownResult = row[side === 0 ? 6 : 8];
   const log = gcSheet_('BattleLog').getDataRange().getValues().slice(1).find(function (item) { return item[0] === battleId && String(item[1]).toLowerCase() === identity.email; });
-  return { status: String(row[11]), result: ownResult || '', awarded: log ? Number(log[7] || 0) : 0, gPoint: Number(gcFindUser_(identity.email).values[6] || 0), onlineRewards: Number(gcCounter_(identity.email, gcToday_(), false).values[3] || 0) };
+  return { status: String(row[11]), reason: String(row[15] || ''), result: ownResult || '', awarded: log ? Number(log[7] || 0) : 0, gPoint: Number(gcFindUser_(identity.email).values[6] || 0), onlineRewards: Number(gcCounter_(identity.email, gcToday_(), false).values[3] || 0) };
 }
 
 function gcGetRanking_(token) {

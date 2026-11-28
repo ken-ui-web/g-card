@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 
 import { Card } from './components/Card';
 import { BattleDeckDock } from './components/BattleDeckDock';
 import { useScrolledPast } from './components/useScrolledPast';
+import { SsrGuide } from './components/SsrGuide';
 import { LoadingState } from './components/LoadingState';
 import { compareCards } from './data/cardOrder';
 import { SoundToggle } from './components/SoundToggle';
@@ -414,7 +415,7 @@ function App() {
   };
 
   if (hash === '#/dev/tuning') return <TuningPage settings={settings} onChange={setSettings} />;
-  if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><LoadingState text="オンライン対戦を読み込み中" /></main>}><OnlinePage /></Suspense>;
+  if (hash === '#/online' || hash.startsWith('#/online?')) return <Suspense fallback={<main className="app-shell"><LoadingState text="オンライン対戦を読み込み中" cardTips /></main>}><OnlinePage /></Suspense>;
   if (hash === '#/ranking') return <Suspense fallback={<main className="app-shell"><LoadingState text="ランキングを読み込み中" /></main>}><RankingPage /></Suspense>;
   if (hash === '#/home' || hash === '#/admin' || hash === '#/shop' || hash === '#/training' || hash === '#/collection' || hash === '#/tests' || hash.startsWith('#/tests?') || hash === '#/reflections' || (!hash && portalConfigured)) {
     const page = hash === '#/admin' ? 'admin' : hash === '#/shop' ? 'shop' : hash === '#/training' ? 'training' : hash === '#/collection' ? 'collection' : hash === '#/tests' || hash.startsWith('#/tests?') ? 'tests' : hash === '#/reflections' ? 'reflections' : 'home';
@@ -451,6 +452,7 @@ function App() {
       </header>
 
       {screen === 'menu' && <>
+        <SsrGuide />
         <section className="hero">
           <div className="hero__copy"><p className="eyebrow">対戦のルール</p><h1>4枚で対戦。<br /><em>ライフで決着。</em></h1><p>1枚ずつカードを出し、グーはチョキ、チョキはパー、パーはグーに勝ちます。勝ったカードの効果が発動。相手のライフを0にするか、4ラウンド後にライフが多い方の勝ちです。</p></div>
           <div className="hero__cards">{availableCards.filter((card) => samplePool.includes(card.cardId) && selectedDeckIds.includes(card.cardId)).sort(compareCards).map((card) => <Card key={card.cardId} card={card} damage={configuredDamage(card, settings)} />)}</div>
@@ -475,7 +477,7 @@ function App() {
       {screen === 'deck' && <section className="panel deck-page">
         <p className="eyebrow">READY YOUR DECK</p>
         <h1>カードを4枚選ぶ</h1>
-        <p>{usingOwnedDeck ? '所持カードの筋トレ値と最大ライフが反映されます。' : `サンプル${sampleCards.length}枚から選べます。`} SSRは1枚まで。選択中のカードを外すと、別のカードを入れられます。</p>
+        <SsrGuide compact /><p>{usingOwnedDeck ? '所持カードの筋トレ値と最大ライフが反映されます。' : `サンプル${sampleCards.length}枚から選べます。`} SSRは1枚まで。選択中のカードを外すと、別のカードを入れられます。</p>
         <div className="battle-deck-actions">
           <button type="button" className="button button--primary" disabled={starting || activeSelection.length !== 4} onClick={() => { void startGame(); }}>{starting ? <><span className="loading-state__spinner loading-state__spinner--small" aria-hidden="true" />デッキを保存中…</> : '対戦を始める'}</button>
           <button type="button" className="button button--ghost" onClick={() => setScreen('menu')}>戻る</button>
