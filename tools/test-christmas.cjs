@@ -2,6 +2,12 @@ const assert = require('node:assert/strict');
 module.exports = ({call,sheets,token,studentToken,email,student,id}) => {
   const read = () => JSON.parse(JSON.stringify(call('gcAdminChristmas_',token).config));
   let config=read();
+  const santaRow = sheets.get('Cards').rows.find((row) => row[0] === 'G023');
+  santaRow[1] = 'サンタパンチ'; santaRow[12] = '先生の設定'; call('gcClearMasterCache_', 'Cards');
+  assert.equal(call('gcChristmasCards_', call('gcSession_',token,false)).find((card) => card.cardId === 'G023').name,'サンタアッパー','既存シートの旧名称を生徒に表示しない');
+  read();
+  assert.equal(santaRow[1],'サンタアッパー','既存行は同じカードIDのまま改名する');
+  assert.equal(santaRow[12],'先生の設定','名称変更で他の設定を上書きしない');
   assert.equal(config.live,null);
   assert.equal(call('gcChristmasView_',student,false),null);
   assert.equal(call('gcPublicShopConfig_').packs.some((pack)=>pack.eventId),false);
@@ -28,7 +34,7 @@ module.exports = ({call,sheets,token,studentToken,email,student,id}) => {
   const pack=call('gcPublicShopConfig_').packs.find((pack)=>pack.eventId);
   assert.equal(pack.price,1); assert.equal(pack.imageKey,'christmas');
   const purchase=id(),acquired=call('gcOpenPack_',studentToken,{packId:pack.packId},purchase);
-  assert.ok(acquired.acquired.every((card)=>card.cardId==='G023'),'限定パックからサンタパンチが出る');
+  assert.ok(acquired.acquired.every((card)=>card.cardId==='G023'),'限定パックからサンタアッパーが出る');
   assert.equal(call('gcOpenPack_',studentToken,{packId:pack.packId},purchase).gPoint,acquired.gPoint,'再送で再購入しない');
   assert.equal(call('gcPackMaster_').find((item)=>item.packId==='all-cards').cardPool.includes('G023'),false);
   call('gcSubmitTest_',studentToken,{testId:knowledge,answers:{[question]:'B'}},id());

@@ -12,7 +12,7 @@ function play(cardId: string, enemy?: string) {
 }
 describe('永続クリスマスフレーム', () => {
   it('勝った効果の後に最大HPを超えて10回復する', () => expect(play('G001').players[0].life).toBe(110));
-  it('サンタパンチは通常回復と追加回復を分け、あいこでも発動する', () => {
+  it('サンタアッパーは通常回復と追加回復を分け、あいこでも発動する', () => {
     const result = play('G023', 'G001');
     expect(result.players[0].life).toBe(110);
     expect(result.players[1].life).toBe(70);

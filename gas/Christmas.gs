@@ -50,7 +50,7 @@ function gcChristmasCards_(identity) {
   const live = gcChristmasConfig_().live;
   const disclosed = Boolean(identity && identity.admin || live && live.published || identity && gcOwned_(identity.email).some(function (card) { return card.cardId === 'G023'; }));
   return gcCardMaster_().filter(function (card) { return card.cardId !== 'G023' || disclosed; }).map(function (card) {
-    return card.cardId === 'G023' ? Object.assign({}, card, { active: gcChristmasActive_(live), inPack: gcChristmasActive_(live), shopPrice: null }) : card;
+    return card.cardId === 'G023' ? Object.assign({}, card, { name: 'サンタアッパー', active: gcChristmasActive_(live), inPack: gcChristmasActive_(live), shopPrice: null }) : card;
   });
 }
 function gcFrameRows_(email) {
@@ -129,8 +129,13 @@ function gcAckFrame_(token, payload) {
 }
 function gcChristmasEnsureCard_() {
   const cards = gcSheet_('Cards');
-  if (!cards.getDataRange().getValues().some(function (row) { return row[0] === 'G023'; })) {
+  const rows = cards.getDataRange().getValues();
+  const index = rows.findIndex(function (row) { return row[0] === 'G023'; });
+  if (index < 0) {
     cards.appendRow(GC_CARDS.find(function (row) { return row[0] === 'G023'; })); gcClearMasterCache_('Cards');
+  } else if (rows[index][1] !== 'サンタアッパー') {
+    // Rename the existing card without replacing ownership, training or teacher settings.
+    cards.getRange(index + 1, 2).setValue('サンタアッパー'); gcClearMasterCache_('Cards');
   }
 }
 function gcAdminChristmas_(token) {
@@ -149,7 +154,7 @@ function gcChristmasValidate_(input, publication) {
   });
   const master = gcCardMaster_();
   if (!Array.isArray(value.cpuCards) || value.cpuCards.length < 4 || value.cpuCards.length > 41 || new Set(value.cpuCards).size !== value.cpuCards.length || !value.cpuCards.every(function (id) { return master.some(function (card) { return card.cardId === id; }); })) gcError_('BAD_EVENT', 'サンタCPUの候補カードを4枚以上選んでください');
-  if (!Array.isArray(value.cardPool) || !value.cardPool.includes('G023') || new Set(value.cardPool).size !== value.cardPool.length || !value.cardPool.every(function (id) { return master.some(function (card) { return card.cardId === id; }); })) gcError_('BAD_EVENT', '限定パックにはサンタパンチを含む収録カードを選んでください');
+  if (!Array.isArray(value.cardPool) || !value.cardPool.includes('G023') || new Set(value.cardPool).size !== value.cardPool.length || !value.cardPool.every(function (id) { return master.some(function (card) { return card.cardId === id; }); })) gcError_('BAD_EVENT', '限定パックにはサンタアッパーを含む収録カードを選んでください');
   let sum = 0;
   ['N','R','SR','SSR'].forEach(function (rarity) { const rate = Number(value.rarityRates && value.rarityRates[rarity]); if (!Number.isFinite(rate) || rate < 0 || rate > 100 || rate > 0 && !value.cardPool.some(function (id) { return master.some(function (card) { return card.cardId === id && card.rarity === rarity; }); })) gcError_('BAD_EVENT', rarity + 'の排出率と収録カードを確認してください'); sum += rate; });
   if (Math.abs(sum - 100) > .001 || Number(value.rarityRates.SSR) <= 0) gcError_('BAD_EVENT', '排出率を合計100%にし、SSRを0%より大きくしてください');

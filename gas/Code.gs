@@ -67,7 +67,7 @@ const GC_CARDS = [
   ["P018", "暗号化", "paper", "SR", "残りカードの種類を隠し、1枚をこっそり変えられる", "[{\"type\":\"encrypt\",\"secretTypeChange\":1}]", 0, "P018-front.webp", "", true, true, 38, "", 0],
   ["P015", "ハッキング", "paper", "SSR", "相手の残りカードをすべてパーに変える", "[{\"type\":\"changeAllOpponentType\",\"to\":\"paper\"}]", 0, "P015-front.webp", "", true, true, 39, "", 0],
   ["P014", "プログラミング", "paper", "SSR", "相手の次のカードを指定する", "[{\"type\":\"forceOpponentNext\"}]", 0, "P014-front.webp", "", true, true, 40, "", 0],
-  ["G023","サンタパンチ","rock","SSR","30ダメージ＋10回復","[{\"type\":\"damage\",\"amount\":30},{\"type\":\"heal\",\"amount\":10}]",1,"G023-front.webp","",false,false,41,"",0],
+  ["G023","サンタアッパー","rock","SSR","30ダメージ＋10回復","[{\"type\":\"damage\",\"amount\":30},{\"type\":\"heal\",\"amount\":10}]",1,"G023-front.webp","",false,false,41,"",0],
 ];
 const GC_INITIAL_CARDS = ['G001', 'G002', 'C008', 'P001'];
 const GC_TRAINING_POLICY_VERSION = '2026-11-10-v1';

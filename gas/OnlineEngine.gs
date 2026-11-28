@@ -714,7 +714,7 @@ var GC_ONLINE_ENGINE = (() => {
     },
     {
       cardId: "G023",
-      name: "\u30B5\u30F3\u30BF\u30D1\u30F3\u30C1",
+      name: "\u30B5\u30F3\u30BF\u30A2\u30C3\u30D1\u30FC",
       type: "rock",
       rarity: "SSR",
       trainingMultiplier: 1,
